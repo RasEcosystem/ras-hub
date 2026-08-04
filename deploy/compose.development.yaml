@@ -1,0 +1,45 @@
+name: rashub-development
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${RASHUB_DEV_DB:-rashub_dev}
+      POSTGRES_USER: ${RASHUB_DEV_DB_USER:-rashub}
+      POSTGRES_PASSWORD: ${RASHUB_DEV_DB_PASSWORD:-rashub}
+    ports:
+      - "127.0.0.1:${RASHUB_DEV_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-development:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  rashub:
+    image: rashub:development
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    init: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${RASHUB_DEV_DB:-rashub_dev};Username=${RASHUB_DEV_DB_USER:-rashub};Password=${RASHUB_DEV_DB_PASSWORD:-rashub}
+      Database__ApplyMigrations: "true"
+      RasHub__ApiKey: ${RASHUB_DEV_API_KEY:-development-api-key}
+    ports:
+      - "127.0.0.1:${RASHUB_DEV_PORT:-5076}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  postgres-development:

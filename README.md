@@ -24,10 +24,19 @@ Update submodules to their latest configured revisions:
 make submodules-update
 ```
 
-Publish an executable project as a self-contained Linux x64 single file:
+Publish RasHub.Web as a self-contained Linux x64 single file:
 
 ```bash
-make publish PUBLISH_PROJECT=src/path/to/RasHub.csproj
+make publish
 ```
 
 Run `make help` to see all available commands.
+
+## Deployment
+
+Docker, Compose, database migration, development environment, and production
+operations live in [`deploy`](deploy/README.md).
+
+```bash
+make -C deploy help
+```

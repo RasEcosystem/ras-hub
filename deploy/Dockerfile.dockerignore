@@ -1,0 +1,13 @@
+**/.env
+**/.env.*
+**/.idea
+**/.vs
+**/.vscode
+**/artifacts
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/*.suo
+deploy/Dockerfile*
+deploy/compose*.yaml

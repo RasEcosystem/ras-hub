@@ -265,3 +265,5 @@ Packages.props
 
 #
 .env
+.env.*
+!.env.*.example

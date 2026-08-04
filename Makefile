@@ -4,25 +4,26 @@ DOTNET ?= dotnet
 SOLUTION ?= RasHub.sln
 CONFIGURATION ?= Release
 RID ?= linux-x64
-PUBLISH_PROJECT ?=
+PUBLISH_PROJECT ?= src/RasHub.Web/RasHub.Web.csproj
 PUBLISH_DIR ?= artifacts/publish/$(RID)
 
 .DEFAULT_GOAL := release
 
-.PHONY: all help submodules submodules-update restore build debug release publish clean
-
-all: release
+.PHONY: help submodules submodules-update restore build debug release publish clean dev-up dev-stack-up dev-down
 
 help:
 	@echo "Targets:"
 	@echo "  make submodules         Initialize missing git submodules"
-	@echo "  make submodules-update  Pull the configured remote branch for every submodule"
-	@echo "  make build              Build the solution (CONFIGURATION=Release by default)"
-	@echo "  make debug              Build the solution in Debug mode"
-	@echo "  make release            Build the solution in Release mode"
-	@echo "  make publish PUBLISH_PROJECT=src/path/App.csproj [RID=linux-x64]"
-	@echo "                           Publish a self-contained single-file executable"
-	@echo "  make clean              Clean solution build outputs"
+	@echo "  make submodules-update  Update all git submodules"
+	@echo "  make build              Build the solution"
+	@echo "  make debug              Build in Debug mode"
+	@echo "  make release            Build in Release mode"
+	@echo "  make publish            Publish RasHub.Web for RID=$(RID)"
+	@echo "  make clean              Clean build outputs"
+	@echo "  make dev-up             Start PostgreSQL for IDE development"
+	@echo "  make dev-stack-up       Start PostgreSQL and RasHub in containers"
+	@echo "  make dev-down           Stop the development stack"
+	@echo "  make -C deploy help     Show database and deployment commands"
 
 submodules:
 	git submodule update --init --recursive
@@ -34,7 +35,9 @@ restore: submodules
 	$(DOTNET) restore "$(SOLUTION)"
 
 build: restore
-	$(DOTNET) build "$(SOLUTION)" --configuration "$(CONFIGURATION)" --no-restore
+	$(DOTNET) build "$(SOLUTION)" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
 
 debug: CONFIGURATION := Debug
 debug: build
@@ -43,11 +46,6 @@ release: CONFIGURATION := Release
 release: build
 
 publish: submodules
-	@test -n "$(PUBLISH_PROJECT)" || { \
-		echo "PUBLISH_PROJECT is required and must point to an executable .NET project." >&2; \
-		echo "Example: make publish PUBLISH_PROJECT=src/RasHub.App/RasHub.App.csproj RID=$(RID)" >&2; \
-		exit 2; \
-	}
 	$(DOTNET) publish "$(PUBLISH_PROJECT)" \
 		--configuration Release \
 		--runtime "$(RID)" \
@@ -62,3 +60,6 @@ publish: submodules
 
 clean:
 	$(DOTNET) clean "$(SOLUTION)"
+
+dev-up dev-stack-up dev-down:
+	$(MAKE) -C deploy $@

@@ -1,0 +1,8 @@
+<Project>
+    <ItemGroup>
+        <PackageReference Include="Nerdbank.GitVersioning"
+                          Condition="'$(MSBuildProjectName)' != 'RasHub.Contracts'"
+                          Version="3.10.91"
+                          PrivateAssets="all"/>
+    </ItemGroup>
+</Project>

@@ -1,0 +1,77 @@
+name: rashub
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rashub}
+      POSTGRES_USER: ${POSTGRES_USER:-rashub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-production:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  migrate:
+    image: ${RASHUB_IMAGE:-rashub:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    init: true
+    command:
+      - --mode=migrate
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      Database__ApplyMigrations: "false"
+      RasHub__ApiKey: ${RASHUB_API_KEY:?RASHUB_API_KEY is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  rashub:
+    image: ${RASHUB_IMAGE:-rashub:latest}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    init: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      Database__ApplyMigrations: "false"
+      RasHub__ApiKey: ${RASHUB_API_KEY:?RASHUB_API_KEY is required}
+    ports:
+      - "${RASHUB_BIND_ADDRESS:-127.0.0.1}:${RASHUB_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+volumes:
+  postgres-production:
