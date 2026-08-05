@@ -33,6 +33,7 @@ services:
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${RASHUB_DEV_DB:-rashub_dev};Username=${RASHUB_DEV_DB_USER:-rashub};Password=${RASHUB_DEV_DB_PASSWORD:-rashub}
       Database__ApplyMigrations: "true"
       RasHub__ApiKey: ${RASHUB_DEV_API_KEY:-development-api-key}
+      ReverseProxy__KnownProxies__0: ${RASHUB_DEV_TRUSTED_PROXY:-127.0.0.1}
     ports:
       - "${RASHUB_DEV_BIND_ADDRESS:-127.0.0.1}:${RASHUB_DEV_PORT:-5076}:8080"
     depends_on:
