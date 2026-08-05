@@ -25,6 +25,10 @@ development environment contains local-only defaults. To override them, copy
 `deploy/environments/.env.development.example` to an ignored file and pass it
 as `DEV_ENV_FILE`.
 
+For a development server behind a reverse proxy, set
+`RASHUB_DEV_BIND_ADDRESS` in that ignored environment file to the server's
+private network address. Keep PostgreSQL bound to localhost.
+
 ```bash
 make dev-down
 ```

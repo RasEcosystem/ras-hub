@@ -1,0 +1,121 @@
+#!/bin/sh
+
+set -eu
+
+compose_file=/opt/rashub-dev/compose.development.yaml
+environment_file=/opt/rashub-dev/.env.development
+image_prefix=ghcr.io/zmaxb/ras-hub:dev-
+
+image=${1:-}
+registry_user=${2:-}
+
+if [ ! -f "$compose_file" ]; then
+    echo "Compose file not found: $compose_file" >&2
+    exit 1
+fi
+
+if [ ! -f "$environment_file" ]; then
+    echo "Environment file not found: $environment_file" >&2
+    exit 1
+fi
+
+case "$image" in
+    "$image_prefix"*)
+        revision=${image#"$image_prefix"}
+        ;;
+    *)
+        echo "Unexpected image reference: $image" >&2
+        exit 2
+        ;;
+esac
+
+if [ "${#revision}" -ne 40 ]; then
+    echo "Image revision must be a 40-character commit SHA." >&2
+    exit 2
+fi
+
+case "$revision" in
+    *[!0-9a-f]*)
+        echo "Image revision must contain lowercase hexadecimal characters only." >&2
+        exit 2
+        ;;
+esac
+
+case "$registry_user" in
+    ""|*[!A-Za-z0-9_-]*)
+        echo "Invalid registry user." >&2
+        exit 2
+        ;;
+esac
+
+registry_token=$(cat)
+
+if [ -z "$registry_token" ]; then
+    echo "Registry token is required on standard input." >&2
+    exit 2
+fi
+
+docker_config=$(mktemp -d /tmp/rashub-deploy.XXXXXX)
+trap 'rm -rf -- "$docker_config"' EXIT HUP INT TERM
+export DOCKER_CONFIG="$docker_config"
+
+printf '%s' "$registry_token" |
+    docker login ghcr.io --username "$registry_user" --password-stdin
+unset registry_token
+
+run_compose()
+{
+    deployment_image=$1
+    shift
+
+    RASHUB_IMAGE="$deployment_image" docker compose \
+        --env-file "$environment_file" \
+        --file "$compose_file" \
+        "$@"
+}
+
+previous_container=$(run_compose "$image" ps --quiet rashub)
+previous_image=
+
+if [ -n "$previous_container" ]; then
+    previous_image=$(docker inspect --format '{{.Config.Image}}' "$previous_container")
+fi
+
+docker pull "$image"
+run_compose "$image" up --detach --no-build --remove-orphans
+
+container=$(run_compose "$image" ps --quiet rashub)
+
+if [ -z "$container" ]; then
+    echo "RasHub container was not created." >&2
+    exit 1
+fi
+
+attempt=1
+
+while [ "$attempt" -le 30 ]; do
+    status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+        "$container")
+
+    if [ "$status" = healthy ]; then
+        echo "RasHub $revision deployed successfully."
+        exit 0
+    fi
+
+    if [ "$status" = unhealthy ]; then
+        break
+    fi
+
+    sleep 2
+    attempt=$((attempt + 1))
+done
+
+echo "RasHub failed its health check." >&2
+docker logs --tail 100 "$container" >&2
+
+if [ -n "$previous_image" ] && [ "$previous_image" != "$image" ]; then
+    echo "Rolling back to $previous_image." >&2
+    run_compose "$previous_image" up --detach --no-build rashub
+fi
+
+exit 1

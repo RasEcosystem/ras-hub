@@ -1,0 +1,57 @@
+name: Deploy development
+
+on:
+  workflow_run:
+    workflows:
+      - Build development image
+    types:
+      - completed
+    branches:
+      - "feature/**"
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full 40-character commit SHA to deploy
+        required: true
+        type: string
+
+concurrency:
+  group: rashub-development
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - rashub-dev
+    environment: development
+
+    env:
+      REVISION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.revision }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Validate revision
+        shell: bash
+        run: |
+          if [[ ! "$REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid revision: $REVISION" >&2
+            exit 2
+          fi
+
+      - name: Deploy image
+        shell: bash
+        run: |
+          printf '%s' "$GHCR_TOKEN" |
+            sudo /usr/local/sbin/rashub-dev-deploy \
+              "ghcr.io/${{ github.repository }}:dev-$REVISION" \
+              "${{ github.repository_owner }}"

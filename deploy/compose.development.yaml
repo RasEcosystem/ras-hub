@@ -22,7 +22,7 @@ services:
       start_period: 10s
 
   rashub:
-    image: rashub:development
+    image: ${RASHUB_IMAGE:-rashub:development}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -34,7 +34,7 @@ services:
       Database__ApplyMigrations: "true"
       RasHub__ApiKey: ${RASHUB_DEV_API_KEY:-development-api-key}
     ports:
-      - "127.0.0.1:${RASHUB_DEV_PORT:-5076}:8080"
+      - "${RASHUB_DEV_BIND_ADDRESS:-127.0.0.1}:${RASHUB_DEV_PORT:-5076}:8080"
     depends_on:
       postgres:
         condition: service_healthy

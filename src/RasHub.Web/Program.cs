@@ -1,6 +1,8 @@
 using System.Net;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using RasHub.Contracts.Common;
@@ -11,6 +13,7 @@ using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Authentication;
 using RasHub.Web.Middlewares;
+using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 
@@ -71,6 +74,7 @@ public class Program
 
         app.ConfigureLogging();
         app.ConfigurePipeline();
+        app.ConfigureLifecycleLogging();
 
         await app.RunAsync();
     }
@@ -154,7 +158,28 @@ internal static class ApplicationConfigurationExtensions
         app.UseApiExceptionHandling();
 
         if (app.Environment.IsDevelopment())
+        {
             app.MapOpenApi();
+            app.MapScalarApiReference("/swagger", options =>
+            {
+                options.EnabledTargets =
+                [
+                    ScalarTarget.Shell,
+                    ScalarTarget.Php,
+                    ScalarTarget.Python
+                ];
+
+                options
+                    .WithTitle("RasHub API")
+                    .WithTheme(ScalarTheme.DeepSpace)
+                    .ForceDarkMode()
+                    .AddPreferredSecuritySchemes(ApiKeyAuthenticationDefaults.Scheme)
+                    .WithDefaultHttpClient(ScalarTarget.Shell, ScalarClient.Curl)
+                    .HideDeveloperTools()
+                    .DisableMcp()
+                    .DisableAgent();
+            });
+        }
 
         app.UseAuthentication();
         app.UseAuthorization();
@@ -172,5 +197,34 @@ internal static class ApplicationConfigurationExtensions
                 Predicate = registration => registration.Tags.Contains("ready")
             })
             .AllowAnonymous();
+    }
+
+    public static void ConfigureLifecycleLogging(this WebApplication app)
+    {
+        app.Lifetime.ApplicationStarted.Register(() =>
+        {
+            var addresses = app.Services
+                .GetRequiredService<IServer>()
+                .Features
+                .Get<IServerAddressesFeature>()?
+                .Addresses ?? app.Urls;
+
+            app.Logger.LogInformation(
+                "RasHub started successfully and is listening on {Addresses}",
+                string.Join(", ", addresses));
+
+            if (app.Environment.IsDevelopment())
+            {
+                var apiReferenceUrls = addresses.Select(address =>
+                    $"{address.TrimEnd('/')}/swagger/");
+
+                app.Logger.LogInformation(
+                    "Scalar API reference is available at {ApiReferenceUrls}",
+                    string.Join(", ", apiReferenceUrls));
+            }
+        });
+
+        app.Lifetime.ApplicationStopped.Register(() =>
+            app.Logger.LogInformation("RasHub stopped successfully"));
     }
 }
