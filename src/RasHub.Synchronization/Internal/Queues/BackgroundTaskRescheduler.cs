@@ -1,5 +1,10 @@
-namespace RasHub.Synchronization.Internal;
+using RasHub.Synchronization.Internal.Execution;
 
+namespace RasHub.Synchronization.Internal.Queues;
+
+/// <summary>
+///     Holds delayed executions and returns them to their target queue when their due time arrives.
+/// </summary>
 internal sealed class BackgroundTaskRescheduler
 {
     private static readonly TimeSpan QueueRetryDelay =
@@ -23,6 +28,19 @@ internal sealed class BackgroundTaskRescheduler
     {
         _queue = queue;
         _timeProvider = timeProvider;
+    }
+
+    /// <summary>Number of non-terminal executions waiting for a future enqueue time.</summary>
+    public int DelayedExecutionCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _scheduled.UnorderedItems.Count(item =>
+                    !item.Element.IsTerminal);
+            }
+        }
     }
 
     public void Schedule(

@@ -1,5 +1,11 @@
-namespace RasHub.Synchronization.Internal;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Models;
 
+namespace RasHub.Synchronization.Internal.Execution;
+
+/// <summary>
+///     Thread-safe mutable state machine for one task execution, including attempts, cancellation, and completion.
+/// </summary>
 internal sealed class BackgroundTaskExecution
 {
     private readonly CancellationTokenSource _cancellation = new();

@@ -1,8 +1,18 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Configuration;
+using RasHub.Synchronization.Exceptions;
+using RasHub.Synchronization.Internal.Diagnostics;
+using RasHub.Synchronization.Internal.Execution;
+using RasHub.Synchronization.Internal.Queues;
+using RasHub.Synchronization.Models;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Engine;
 
+/// <summary>
+///     Coordinates task registration, deduplication, enqueueing, cancellation, snapshots, and retention.
+/// </summary>
 internal sealed class SynchronizationEngine : ISynchronizationEngine
 {
     private readonly ConcurrentDictionary<string, BackgroundTaskExecution> _deduplicated =

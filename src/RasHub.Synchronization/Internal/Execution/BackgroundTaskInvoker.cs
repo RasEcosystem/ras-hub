@@ -1,7 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Exceptions;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Execution;
 
+/// <summary>
+///     Bridges a runtime task object to its strongly typed <see cref="IBackgroundTaskHandler{TTask}" />.
+/// </summary>
 internal sealed class BackgroundTaskInvoker<TTask>
     : IBackgroundTaskInvoker
     where TTask : IBackgroundTask

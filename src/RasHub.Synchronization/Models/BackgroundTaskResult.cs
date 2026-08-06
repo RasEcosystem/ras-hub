@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Models;
 
+/// <summary>
+///     Terminal execution information delivered through <see cref="BackgroundTaskHandle" />.
+/// </summary>
 public sealed class BackgroundTaskResult
 {
     internal BackgroundTaskResult(

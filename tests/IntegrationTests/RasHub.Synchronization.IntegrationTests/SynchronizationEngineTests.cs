@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Configuration;
+using RasHub.Synchronization.Models;
 
 namespace RasHub.Synchronization.IntegrationTests;
 
@@ -70,22 +73,14 @@ public sealed class SynchronizationEngineTests
 internal sealed record TestBackgroundTask(Guid Value)
     : IBackgroundTask;
 
-internal sealed class TestBackgroundTaskHandler
+internal sealed class TestBackgroundTaskHandler(ExecutionProbe probe)
     : IBackgroundTaskHandler<TestBackgroundTask>
 {
-    private readonly ExecutionProbe _probe;
-
-    public TestBackgroundTaskHandler(
-        ExecutionProbe probe)
-    {
-        _probe = probe;
-    }
-
     public Task ExecuteAsync(
         TestBackgroundTask task,
         CancellationToken cancellationToken)
     {
-        _probe.Record(task.Value);
+        probe.Record(task.Value);
 
         return Task.CompletedTask;
     }

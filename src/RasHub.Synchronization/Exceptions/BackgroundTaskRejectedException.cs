@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Exceptions;
 
+/// <summary>
+///     Indicates that the Engine could not accept a task because a configured in-memory limit was reached.
+/// </summary>
 public sealed class BackgroundTaskRejectedException
     : InvalidOperationException
 {

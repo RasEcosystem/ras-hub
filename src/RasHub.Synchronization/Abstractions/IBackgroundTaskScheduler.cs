@@ -1,5 +1,10 @@
-namespace RasHub.Synchronization;
+using RasHub.Synchronization.Models;
 
+namespace RasHub.Synchronization.Abstractions;
+
+/// <summary>
+///     Registers and removes in-process periodic task schedules.
+/// </summary>
 public interface IBackgroundTaskScheduler
 {
     BackgroundTaskScheduleHandle Schedule<TTask>(

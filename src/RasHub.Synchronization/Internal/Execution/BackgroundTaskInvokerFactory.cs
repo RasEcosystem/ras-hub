@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Execution;
 
+/// <summary>
+///     Creates and caches the generic invoker required for each runtime task type.
+/// </summary>
 internal static class BackgroundTaskInvokerFactory
 {
     private static readonly ConcurrentDictionary<Type, IBackgroundTaskInvoker> Cache =

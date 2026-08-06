@@ -1,8 +1,15 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Exceptions;
+using RasHub.Synchronization.Internal.Execution;
+using RasHub.Synchronization.Models;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Scheduling;
 
+/// <summary>
+///     Maintains in-memory periodic registrations and enqueues one task whenever a schedule becomes due.
+/// </summary>
 internal sealed class PeriodicBackgroundTaskScheduler
     : IBackgroundTaskScheduler
 {
@@ -197,6 +204,7 @@ internal sealed class PeriodicBackgroundTaskScheduler
         _changed.Release();
     }
 
+    /// <summary>Stores one active schedule and its atomically updated next-run timestamp.</summary>
     private sealed class ScheduleRegistration(
         string id,
         Type taskType,

@@ -1,5 +1,10 @@
-namespace RasHub.Synchronization.Internal;
+using RasHub.Synchronization.Models;
 
+namespace RasHub.Synchronization.Internal.Execution;
+
+/// <summary>
+///     Rejects invalid task policies before an execution enters the registry or a queue.
+/// </summary>
 internal static class BackgroundTaskOptionsValidator
 {
     public static void Validate(BackgroundTaskOptions options)

@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Models;
 
+/// <summary>
+///     Thread-safe read-only view of an execution's current state and policy.
+/// </summary>
 public sealed record BackgroundTaskSnapshot(
     Guid Id,
     Type TaskType,

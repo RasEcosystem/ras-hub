@@ -1,7 +1,15 @@
 using Microsoft.Extensions.Logging;
+using RasHub.Synchronization.Exceptions;
+using RasHub.Synchronization.Internal.Diagnostics;
+using RasHub.Synchronization.Internal.Execution;
+using RasHub.Synchronization.Internal.Queues;
+using RasHub.Synchronization.Models;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Processing;
 
+/// <summary>
+///     Continuously consumes one queue lane and owns timeout, retry, cancellation, and terminal transitions.
+/// </summary>
 internal sealed class BackgroundTaskWorker
 {
     private static readonly TimeSpan ConcurrencyRetryDelay =

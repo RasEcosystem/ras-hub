@@ -1,8 +1,13 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Configuration;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Diagnostics;
 
+/// <summary>
+///     Reports readiness from task-registry and queue saturation, degrading at eighty percent capacity.
+/// </summary>
 internal sealed class SynchronizationHealthCheck : IHealthCheck
 {
     private const double DegradedThreshold = 0.8;

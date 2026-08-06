@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Models;
 
+/// <summary>
+///     Identifies one execution and lets a caller wait for its terminal result without owning the work itself.
+/// </summary>
 public sealed class BackgroundTaskHandle
 {
     private readonly Task<BackgroundTaskResult> _completion;

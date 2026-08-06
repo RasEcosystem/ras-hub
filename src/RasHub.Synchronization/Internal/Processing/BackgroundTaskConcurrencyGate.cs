@@ -1,11 +1,17 @@
 using System.Collections.Concurrent;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Processing;
 
+/// <summary>
+///     Provides a process-wide exclusive lease for each non-null concurrency key.
+/// </summary>
 internal sealed class BackgroundTaskConcurrencyGate
 {
     private readonly ConcurrentDictionary<string, byte> _active =
         new(StringComparer.Ordinal);
+
+    /// <summary>Number of concurrency keys currently held by running attempts.</summary>
+    public int ActiveKeyCount => _active.Count;
 
     public bool TryAcquire(
         string? key,
@@ -27,6 +33,7 @@ internal sealed class BackgroundTaskConcurrencyGate
         return true;
     }
 
+    /// <summary>Releases the concurrency key exactly once when an attempt leaves its critical section.</summary>
     private sealed class Lease(
         ConcurrentDictionary<string, byte> active,
         string key) : IDisposable

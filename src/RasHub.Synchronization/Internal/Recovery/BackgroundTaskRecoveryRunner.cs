@@ -1,8 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using RasHub.Synchronization.Abstractions;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Recovery;
 
+/// <summary>
+///     Runs every registered recovery source at startup so durable incomplete work can be re-enqueued.
+/// </summary>
 internal sealed class BackgroundTaskRecoveryRunner
 {
     private readonly ISynchronizationEngine _engine;

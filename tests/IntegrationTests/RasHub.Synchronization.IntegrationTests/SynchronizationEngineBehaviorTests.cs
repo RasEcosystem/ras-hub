@@ -3,6 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Configuration;
+using RasHub.Synchronization.Exceptions;
+using RasHub.Synchronization.Models;
 
 namespace RasHub.Synchronization.IntegrationTests;
 
@@ -484,6 +488,123 @@ public sealed class SynchronizationEngineBehaviorTests
         Assert.Equal(
             BackgroundTaskOutcome.Canceled,
             (await Await(pending, cancellationToken)).Outcome);
+    }
+
+    [Fact]
+    public async Task Monitor_reports_running_delayed_and_scheduled_work()
+    {
+        using var host = CreateHost(services =>
+        {
+            services.AddSingleton<BlockingProbe>();
+            services.AddScoped<
+                IBackgroundTaskHandler<BlockingTask>,
+                BlockingTaskHandler>();
+        });
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var engine = GetEngine(host);
+            var scheduler = host.Services
+                .GetRequiredService<IBackgroundTaskScheduler>();
+            var monitor = host.Services
+                .GetRequiredService<ISynchronizationMonitor>();
+
+            using var schedule = scheduler.Schedule(
+                "monitor-schedule",
+                () => new RecordedTask(7),
+                TimeSpan.FromHours(1));
+
+            var running = engine.Enqueue(
+                new BlockingTask(),
+                new BackgroundTaskOptions
+                {
+                    ConcurrencyKey = "gate:monitor"
+                });
+
+            var probe = host.Services
+                .GetRequiredService<BlockingProbe>();
+
+            await probe.Started.Task.WaitAsync(
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
+
+            var delayed = engine.Enqueue(
+                new RecordedTask(8),
+                new BackgroundTaskOptions
+                {
+                    NotBefore = DateTimeOffset.UtcNow.AddHours(1)
+                });
+
+            var snapshot = monitor.GetSnapshot();
+
+            Assert.Equal(2, snapshot.Statistics.TrackedTasks);
+            Assert.Equal(1, snapshot.TasksByState[BackgroundTaskState.Running]);
+            Assert.Equal(1, snapshot.TasksByState[BackgroundTaskState.Pending]);
+            Assert.Equal(1, snapshot.DelayedTaskCount);
+            Assert.Equal(1, snapshot.ActiveConcurrencyKeyCount);
+            Assert.Equal(2, snapshot.Settings.SynchronizationWorkerCount);
+            Assert.Equal("monitor-schedule", Assert.Single(snapshot.Schedules).Id);
+            Assert.Equal(running.Id, Assert.Single(snapshot.RunningTasks).Id);
+            Assert.Equal(
+                delayed.Id,
+                Assert.Single(monitor.GetTasks(
+                    BackgroundTaskState.Pending,
+                    BackgroundTaskQueue.Synchronization,
+                    10)).Id);
+
+            probe.Release.TrySetResult();
+            Assert.True((await Await(running, cancellationToken)).IsSucceeded);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task Monitor_exposes_recent_failures_and_bounded_queries()
+    {
+        using var host = CreateHost(services =>
+            services.AddScoped<
+                IBackgroundTaskHandler<FailingTask>,
+                FailingTaskHandler>());
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var handle = GetEngine(host).Enqueue(
+                new FailingTask(),
+                new BackgroundTaskOptions { MaxAttempts = 1 });
+
+            var result = await Await(handle, cancellationToken);
+            Assert.Equal(BackgroundTaskOutcome.Failed, result.Outcome);
+
+            var monitor = host.Services
+                .GetRequiredService<ISynchronizationMonitor>();
+
+            Assert.Equal(handle.Id, monitor.GetTask(handle.Id)?.Id);
+            Assert.Equal(
+                handle.Id,
+                Assert.Single(monitor.GetTasks(
+                    BackgroundTaskState.Failed,
+                    limit: 1)).Id);
+            Assert.Equal(
+                handle.Id,
+                Assert.Single(monitor.GetSnapshot().RecentFailures).Id);
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                monitor.GetTasks(limit: 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                monitor.GetTasks(limit: 1_001));
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
     }
 
     [Fact]

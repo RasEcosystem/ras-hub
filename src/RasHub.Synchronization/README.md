@@ -131,3 +131,7 @@ The module logs task type and ID, never task payload. The meter name is
 `RasHub.Synchronization` and exposes counters for enqueue, deduplication, rejection, start, retry, success, failure, and
 cancellation, plus attempt duration. The `synchronization` readiness check becomes degraded at 80% capacity and
 unhealthy when a queue or the task registry is full.
+
+`ISynchronizationMonitor` exposes a bounded, read-only diagnostic view of queue lengths, task states, delayed work,
+active concurrency keys, schedules, running tasks, and recent failures. In the Development environment, RasHub.Web maps
+authenticated endpoints under `/api/dev/synchronization`; task payloads and exception objects are never exposed.

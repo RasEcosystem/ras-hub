@@ -1,8 +1,17 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using RasHub.Synchronization.Configuration;
+using RasHub.Synchronization.Internal.Engine;
+using RasHub.Synchronization.Internal.Queues;
+using RasHub.Synchronization.Internal.Recovery;
+using RasHub.Synchronization.Internal.Scheduling;
+using RasHub.Synchronization.Models;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Processing;
 
+/// <summary>
+///     Starts all Engine loops with the host and requests cancellation of tracked work during shutdown.
+/// </summary>
 internal sealed class SynchronizationHostedService : BackgroundService
 {
     private readonly SynchronizationEngine _engine;

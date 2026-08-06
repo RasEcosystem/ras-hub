@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Models;
 
+/// <summary>
+///     Owns a periodic schedule registration; disposing the handle removes that schedule.
+/// </summary>
 public sealed class BackgroundTaskScheduleHandle : IDisposable
 {
     private readonly Func<string, bool> _remove;

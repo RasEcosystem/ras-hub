@@ -1,5 +1,8 @@
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Exceptions;
 
+/// <summary>
+///     Marks a permanent handler failure that must bypass the configured retry policy.
+/// </summary>
 public class NonRetryableBackgroundTaskException : Exception
 {
     public NonRetryableBackgroundTaskException(string message)

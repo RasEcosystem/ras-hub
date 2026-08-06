@@ -1,8 +1,12 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using RasHub.Synchronization.Internal.Execution;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Diagnostics;
 
+/// <summary>
+///     Publishes low-cardinality counters and attempt-duration metrics for Engine activity.
+/// </summary>
 internal sealed class BackgroundTaskMetrics : IDisposable
 {
     private readonly Histogram<double> _attemptDuration;

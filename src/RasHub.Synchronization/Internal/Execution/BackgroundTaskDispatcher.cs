@@ -1,7 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace RasHub.Synchronization.Internal;
+namespace RasHub.Synchronization.Internal.Execution;
 
+/// <summary>
+///     Creates a fresh DI scope for an attempt and dispatches the task to its typed handler.
+/// </summary>
 internal sealed class BackgroundTaskDispatcher
 {
     private readonly IServiceScopeFactory _scopeFactory;

@@ -1,10 +1,20 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using RasHub.Synchronization.Internal;
+using RasHub.Synchronization.Abstractions;
+using RasHub.Synchronization.Internal.Diagnostics;
+using RasHub.Synchronization.Internal.Engine;
+using RasHub.Synchronization.Internal.Execution;
+using RasHub.Synchronization.Internal.Processing;
+using RasHub.Synchronization.Internal.Queues;
+using RasHub.Synchronization.Internal.Recovery;
+using RasHub.Synchronization.Internal.Scheduling;
 
-namespace RasHub.Synchronization;
+namespace RasHub.Synchronization.Configuration;
 
+/// <summary>
+///     Registers the Engine, queues, workers, scheduler, metrics, and readiness check in dependency injection.
+/// </summary>
 public static class SynchronizationServiceCollectionExtensions
 {
     public static IServiceCollection AddRasHubSynchronization(
@@ -62,6 +72,9 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskMetrics>();
         services.AddSingleton<BackgroundTaskRescheduler>();
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
+        services.AddSingleton<SynchronizationMonitor>();
+        services.AddSingleton<ISynchronizationMonitor>(serviceProvider =>
+            serviceProvider.GetRequiredService<SynchronizationMonitor>());
         services.AddSingleton<BackgroundTaskRecoveryRunner>();
         services.AddSingleton<BackgroundTaskWorker>();
 

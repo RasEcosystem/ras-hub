@@ -17,11 +17,20 @@ namespace RasHub.Web.IntegrationTests.Infrastructure;
 public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string ApiKey = "integration-test-api-key";
+    public const string ApiDocumentationUsername = "swagger-test";
+    public const string ApiDocumentationPassword = "swagger-test-password";
 
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
+    private readonly string _environment;
 
     public RasHubWebApplicationFactory()
+        : this("Testing")
     {
+    }
+
+    internal RasHubWebApplicationFactory(string environment)
+    {
+        _environment = environment;
         _connection.Open();
     }
 
@@ -75,10 +84,16 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(_environment);
         builder.UseSetting("ConnectionStrings:RasHub", "Host=unused");
         builder.UseSetting("Database:ApplyMigrations", "false");
         builder.UseSetting("RasHub:ApiKey", ApiKey);
+        builder.UseSetting(
+            "ApiDocumentation:Username",
+            ApiDocumentationUsername);
+        builder.UseSetting(
+            "ApiDocumentation:Password",
+            ApiDocumentationPassword);
 
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
@@ -86,7 +101,9 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:RasHub"] = "Host=unused",
                 ["Database:ApplyMigrations"] = "false",
-                ["RasHub:ApiKey"] = ApiKey
+                ["RasHub:ApiKey"] = ApiKey,
+                ["ApiDocumentation:Username"] = ApiDocumentationUsername,
+                ["ApiDocumentation:Password"] = ApiDocumentationPassword
             });
         });
 
