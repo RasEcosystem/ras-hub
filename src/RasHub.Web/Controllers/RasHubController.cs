@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Responses;
@@ -5,7 +6,8 @@ using RasHub.Contracts.RasHub.Responses;
 namespace RasHub.Web.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("api/v1/ras-hub")]
+[Authorize]
 public sealed class RasHubController : ControllerBase
 {
     [HttpGet("status")]
