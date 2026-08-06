@@ -9,7 +9,7 @@ PUBLISH_DIR ?= artifacts/publish/$(RID)
 
 .DEFAULT_GOAL := release
 
-.PHONY: help submodules submodules-update restore build debug release publish clean dev-up dev-stack-up dev-down
+.PHONY: help submodules submodules-update restore build debug release test test-unit test-integration publish clean dev-up dev-stack-up dev-down
 
 help:
 	@echo "Targets:"
@@ -18,6 +18,9 @@ help:
 	@echo "  make build              Build the solution"
 	@echo "  make debug              Build in Debug mode"
 	@echo "  make release            Build in Release mode"
+	@echo "  make test               Run all tests"
+	@echo "  make test-unit          Run unit tests"
+	@echo "  make test-integration   Run integration tests"
 	@echo "  make publish            Publish RasHub.Web for RID=$(RID)"
 	@echo "  make clean              Clean build outputs"
 	@echo "  make dev-up             Start PostgreSQL for IDE development"
@@ -44,6 +47,27 @@ debug: build
 
 release: CONFIGURATION := Release
 release: build
+
+test: restore
+	$(DOTNET) test "$(SOLUTION)" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
+
+test-unit: restore
+	$(DOTNET) test "tests/UnitTests/RasHub.Contracts.UnitTests/RasHub.Contracts.UnitTests.csproj" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
+	$(DOTNET) test "tests/UnitTests/RasHub.Infrastructure.UnitTests/RasHub.Infrastructure.UnitTests.csproj" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
+
+test-integration: restore
+	$(DOTNET) test "tests/IntegrationTests/RasHub.Infrastructure.IntegrationTests/RasHub.Infrastructure.IntegrationTests.csproj" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
+	$(DOTNET) test "tests/IntegrationTests/RasHub.Web.IntegrationTests/RasHub.Web.IntegrationTests.csproj" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
 
 publish: submodules
 	$(DOTNET) publish "$(PUBLISH_PROJECT)" \

@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\RasHub.Infrastructure\RasHub.Infrastructure.csproj"/>
+    </ItemGroup>
+</Project>

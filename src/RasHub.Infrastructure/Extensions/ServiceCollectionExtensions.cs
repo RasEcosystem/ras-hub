@@ -4,8 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using RasHub.Application.Interfaces;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
+using RasHub.Infrastructure.Database.Queries;
 
-namespace RasHub.Infrastructure;
+namespace RasHub.Infrastructure.Extensions;
 
 public static class ServiceCollectionExtensions
 {
@@ -33,6 +34,8 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        services.AddScoped<RasGateQueries>();
+
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<RasHubDbContext>());
 

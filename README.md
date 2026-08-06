@@ -35,6 +35,18 @@ make publish
 
 Run `make help` to see all available commands.
 
+## Tests
+
+Run the complete test suite:
+
+```bash
+make test
+```
+
+Unit and integration suites can also be run independently with `make test-unit`
+and `make test-integration`. See [`tests/README.md`](tests/README.md) for the test
+project layout and conventions.
+
 ## Deployment
 
 Docker, Compose, database migration, development environment, and production

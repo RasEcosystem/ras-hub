@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using RasHub.Contracts.Common;
 using RasHub.Infrastructure;
 using RasHub.Infrastructure.Database;
+using RasHub.Infrastructure.Extensions;
 using RasHub.Synchronization;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
@@ -23,7 +24,29 @@ namespace RasHub.Web;
 
 public class Program
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console()
+            .CreateBootstrapLogger();
+
+        try
+        {
+            await RunAsync(args);
+            return 0;
+        }
+        catch (Exception exception) when (exception is not HostAbortedException)
+        {
+            Log.Fatal(exception, "RasHub terminated unexpectedly");
+            return 1;
+        }
+        finally
+        {
+            await Log.CloseAndFlushAsync();
+        }
+    }
+
+    private static async Task RunAsync(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -196,6 +219,7 @@ internal static class ApplicationConfigurationExtensions
     public static void ConfigurePipeline(this WebApplication app)
     {
         app.UseApiExceptionHandling();
+        app.UseApiStatusCodePages();
 
         if (app.Environment.IsDevelopment())
         {
