@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using RasHub.Contracts.Common;
 using RasHub.Infrastructure;
 using RasHub.Infrastructure.Database;
+using RasHub.Synchronization;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
@@ -57,6 +58,13 @@ public class Program
         });
 
         builder.Services.AddRasHubInfrastructure(builder.Configuration);
+
+        builder.Services.AddRasHubSynchronization(options =>
+        {
+            builder.Configuration
+                .GetSection(SynchronizationEngineOptions.SectionName)
+                .Bind(options);
+        });
 
         builder.Services
             .AddHealthChecks()

@@ -10,6 +10,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Domain", "src\RasHub
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Application", "src\RasHub.Application\RasHub.Application.csproj", "{51DA0F70-4A9C-4544-B760-7F9D969F8E3B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization", "src\RasHub.Synchronization\RasHub.Synchronization.csproj", "{A70215CF-FC06-488A-85B5-66A7603A6023}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-00C04F79EFBC}") = "tests", "tests", "{E9B867E9-59BB-435D-990D-15E4B565AD1D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-00C04F79EFBC}") = "IntegrationTests", "IntegrationTests", "{A247595B-73A1-4812-9377-14B8D68D0211}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization.IntegrationTests", "tests\IntegrationTests\RasHub.Synchronization.IntegrationTests\RasHub.Synchronization.IntegrationTests.csproj", "{E6B9F099-ECDA-4A33-8940-1F793166D8A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -80,8 +88,36 @@ Global
 		{51DA0F70-4A9C-4544-B760-7F9D969F8E3B}.Release|x64.Build.0 = Release|Any CPU
 		{51DA0F70-4A9C-4544-B760-7F9D969F8E3B}.Release|x86.ActiveCfg = Release|Any CPU
 		{51DA0F70-4A9C-4544-B760-7F9D969F8E3B}.Release|x86.Build.0 = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|x64.Build.0 = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Debug|x86.Build.0 = Debug|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|x64.ActiveCfg = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|x64.Build.0 = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|x86.ActiveCfg = Release|Any CPU
+		{A70215CF-FC06-488A-85B5-66A7603A6023}.Release|x86.Build.0 = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|x64.Build.0 = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Debug|x86.Build.0 = Debug|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|x64.ActiveCfg = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|x64.Build.0 = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|x86.ActiveCfg = Release|Any CPU
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A247595B-73A1-4812-9377-14B8D68D0211} = {E9B867E9-59BB-435D-990D-15E4B565AD1D}
+		{E6B9F099-ECDA-4A33-8940-1F793166D8A7} = {A247595B-73A1-4812-9377-14B8D68D0211}
 	EndGlobalSection
 EndGlobal
