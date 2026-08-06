@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using RasHub.Contracts.Common;
 using RasHub.Infrastructure;
 using RasHub.Infrastructure.Database;
+using RasHub.Infrastructure.Extensions;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
@@ -21,7 +23,29 @@ namespace RasHub.Web;
 
 public class Program
 {
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console()
+            .CreateBootstrapLogger();
+
+        try
+        {
+            await RunAsync(args);
+            return 0;
+        }
+        catch (Exception exception) when (exception is not HostAbortedException)
+        {
+            Log.Fatal(exception, "RasHub terminated unexpectedly");
+            return 1;
+        }
+        finally
+        {
+            await Log.CloseAndFlushAsync();
+        }
+    }
+
+    private static async Task RunAsync(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
 
@@ -47,6 +71,7 @@ public class Program
                 "RasHub:ApiKey is required.")
             .ValidateOnStart();
 
+        builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.ConfigureApi();
         builder.Services.AddOpenApi(options =>
         {
@@ -72,6 +97,7 @@ public class Program
         if (migrateOnly)
             return;
 
+        app.UseForwardedHeaders();
         app.ConfigureLogging();
         app.ConfigurePipeline();
         app.ConfigureLifecycleLogging();
@@ -82,6 +108,35 @@ public class Program
 
 internal static class ApplicationConfigurationExtensions
 {
+    public static void ConfigureReverseProxy(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders =
+                ForwardedHeaders.XForwardedFor |
+                ForwardedHeaders.XForwardedHost |
+                ForwardedHeaders.XForwardedProto;
+
+            foreach (var proxy in configuration
+                         .GetSection("ReverseProxy:KnownProxies")
+                         .GetChildren())
+            {
+                if (!IPAddress.TryParse(proxy.Value, out var address))
+                    throw new InvalidOperationException(
+                        $"Invalid trusted reverse proxy address: {proxy.Value}");
+
+                options.KnownProxies.Add(address);
+
+                var mappedAddress = address.MapToIPv6();
+
+                if (!mappedAddress.Equals(address))
+                    options.KnownProxies.Add(mappedAddress);
+            }
+        });
+    }
+
     public static void ConfigureApi(this IServiceCollection services)
     {
         services.ConfigureHttpJsonOptions(options =>
@@ -156,6 +211,7 @@ internal static class ApplicationConfigurationExtensions
     public static void ConfigurePipeline(this WebApplication app)
     {
         app.UseApiExceptionHandling();
+        app.UseApiStatusCodePages();
 
         if (app.Environment.IsDevelopment())
         {
