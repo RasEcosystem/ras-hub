@@ -35,8 +35,8 @@
 
         <MudGrid Spacing="3">
             <MudItem xs="12" sm="6" lg="3">
-                <MetricCard Title="Tracked executions" Value="@TrackedLabel"
-                            Detail="@($"{RegistryPercent:0.#}% of registry")"
+                <MetricCard Title="Active executions" Value="@ActiveLabel"
+                            Detail="@($"History {Statistics.CompletedTaskHistory:N0} / {Options.MaxCompletedTaskHistory:N0}")"
                             Icon="@Icons.Material.Outlined.Inventory2" Color="@UtilizationColor(RegistryPercent)"
                             Progress="@RegistryPercent"/>
             </MudItem>
@@ -46,11 +46,13 @@
                             Icon="@Icons.Material.Outlined.Memory" Color="Color.Info" Progress="@WorkerPercent"/>
             </MudItem>
             <MudItem xs="12" sm="6" lg="3">
-                <MetricCard Title="Average wait" Value="@FormatDuration(Statistics.OverallTiming.AverageWait)" Detail="since engine start"
+                <MetricCard Title="Average wait" Value="@FormatDuration(Statistics.OverallTiming.AverageWait)"
+                            Detail="since engine start"
                             Icon="@Icons.Material.Outlined.HourglassTop" Color="Color.Warning"/>
             </MudItem>
             <MudItem xs="12" sm="6" lg="3">
-                <MetricCard Title="Average runtime" Value="@FormatDuration(Statistics.OverallTiming.AverageRuntime)" Detail="since engine start"
+                <MetricCard Title="Average runtime" Value="@FormatDuration(Statistics.OverallTiming.AverageRuntime)"
+                            Detail="since engine start"
                             Icon="@Icons.Material.Outlined.Timer" Color="Color.Success"/>
             </MudItem>
         </MudGrid>
@@ -105,66 +107,66 @@
         </MudGrid>
 
         <MudPaper Class="pa-3 executions-card" Elevation="1">
-                    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2 executions-header">
-                        <div>
-                            <MudText Typo="Typo.h6">Executions</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Active first, followed by recently
-                                completed tasks
-                            </MudText>
-                        </div>
-                        <MudStack Row Spacing="1" Class="state-summary">
-                            @foreach (var state in StateSummary)
-                            {
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                         Color="@StateColor(state.Key)">
-                                    @state.Key @state.Value
-                                </MudChip>
-                            }
-                        </MudStack>
-                    </MudStack>
+            <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2 executions-header">
+                <div>
+                    <MudText Typo="Typo.h6">Executions</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Active first, followed by recently
+                        completed tasks
+                    </MudText>
+                </div>
+                <MudStack Row Spacing="1" Class="state-summary">
+                    @foreach (var state in StateSummary)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Color="@StateColor(state.Key)">
+                            @state.Key @state.Value
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudStack>
 
-                    <MudTable Items="@VisibleTasks" Dense Hover FixedHeader Height="460px"
-                              Breakpoint="Breakpoint.Md" Class="executions-table">
-                        <HeaderContent>
-                            <MudTh>Task</MudTh>
-                            <MudTh>Lane</MudTh>
-                            <MudTh>State</MudTh>
-                            <MudTh>Priority</MudTh>
-                            <MudTh>Attempt</MudTh>
-                            <MudTh>Age</MudTh>
-                            <MudTh>Runtime / wait</MudTh>
-                            <MudTh>Deduplication</MudTh>
-                            <MudTh>Concurrency</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Task">
-                                <MudText Typo="Typo.body2">@FriendlyTypeName(context.TaskType)</MudText>
-                                <MudText Typo="Typo.caption"
-                                         Color="Color.Secondary">@context.Id.ToString()[..8]</MudText>
-                            </MudTd>
-                            <MudTd DataLabel="Lane">@context.Queue</MudTd>
-                            <MudTd DataLabel="State">
-                                <MudChip T="string" Size="Size.Small"
-                                         Color="@StateColor(context.State)">@context.State</MudChip>
-                            </MudTd>
-                            <MudTd DataLabel="Priority">@context.Priority</MudTd>
-                            <MudTd DataLabel="Attempt">@context.AttemptCount / @context.MaxAttempts</MudTd>
-                            <MudTd DataLabel="Age">@FormatDuration(Now - context.CreatedAt)</MudTd>
-                            <MudTd DataLabel="Runtime / wait">@FormatTaskTiming(context)</MudTd>
-                            <MudTd DataLabel="Deduplication"><span
-                                    class="task-key">@(context.DeduplicationKey ?? "—")</span>
-                            </MudTd>
-                            <MudTd DataLabel="Concurrency"><span
-                                    class="task-key">@(context.ConcurrencyKey ?? "—")</span>
-                            </MudTd>
-                        </RowTemplate>
-                        <NoRecordsContent>
-                            <MudText Class="pa-4" Color="Color.Secondary">No tracked executions</MudText>
-                        </NoRecordsContent>
-                        <PagerContent>
-                            <MudTablePager PageSizeOptions="@(new[] { 10, 25, 50 })"/>
-                        </PagerContent>
-                    </MudTable>
+            <MudTable Items="@VisibleTasks" Dense Hover FixedHeader Height="460px"
+                      Breakpoint="Breakpoint.Md" Class="executions-table">
+                <HeaderContent>
+                    <MudTh>Task</MudTh>
+                    <MudTh>Lane</MudTh>
+                    <MudTh>State</MudTh>
+                    <MudTh>Priority</MudTh>
+                    <MudTh>Attempt</MudTh>
+                    <MudTh>Age</MudTh>
+                    <MudTh>Runtime / wait</MudTh>
+                    <MudTh>Deduplication</MudTh>
+                    <MudTh>Concurrency</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Task">
+                        <MudText Typo="Typo.body2">@FriendlyTypeName(context.TaskType)</MudText>
+                        <MudText Typo="Typo.caption"
+                                 Color="Color.Secondary">@context.Id.ToString()[..8]</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Lane">@context.Queue</MudTd>
+                    <MudTd DataLabel="State">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@StateColor(context.State)">@context.State</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Priority">@context.Priority</MudTd>
+                    <MudTd DataLabel="Attempt">@context.AttemptCount / @context.MaxAttempts</MudTd>
+                    <MudTd DataLabel="Age">@FormatDuration(Now - context.CreatedAt)</MudTd>
+                    <MudTd DataLabel="Runtime / wait">@FormatTaskTiming(context)</MudTd>
+                    <MudTd DataLabel="Deduplication"><span
+                            class="task-key">@(context.DeduplicationKey ?? "—")</span>
+                    </MudTd>
+                    <MudTd DataLabel="Concurrency"><span
+                            class="task-key">@(context.ConcurrencyKey ?? "—")</span>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4" Color="Color.Secondary">No tracked executions</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="@(new[] { 10, 25, 50 })"/>
+                </PagerContent>
+            </MudTable>
         </MudPaper>
     </MudStack>
 </MudContainer>
@@ -184,10 +186,11 @@
 
     private int RunningCount => Tasks.Count(task => task.State == BackgroundTaskState.Running);
     private int TotalWorkers => Options.InteractiveWorkerCount + Options.WorkerCount + Options.MaintenanceWorkerCount;
-    private double RegistryPercent => Percent(Tasks.Count, Options.MaxTrackedTasks);
+    private double RegistryPercent => Percent(Statistics.ActiveTasks, Options.MaxActiveTasks);
     private double WorkerPercent => Percent(RunningCount, TotalWorkers);
     private TimeSpan Uptime => Now - Statistics.StartedAt;
-    private string TrackedLabel => $"{Tasks.Count:N0} / {Options.MaxTrackedTasks:N0}";
+    private string ActiveLabel => $"{Statistics.ActiveTasks:N0} / {Options.MaxActiveTasks:N0}";
+
     private IEnumerable<KeyValuePair<BackgroundTaskState, int>> StateSummary => Enum.GetValues<BackgroundTaskState>()
         .Select(state => KeyValuePair.Create(state, Tasks.Count(task => task.State == state))).Where(x => x.Value > 0);
 

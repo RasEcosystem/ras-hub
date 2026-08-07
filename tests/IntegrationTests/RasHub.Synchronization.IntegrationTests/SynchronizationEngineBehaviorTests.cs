@@ -549,6 +549,47 @@ public sealed class SynchronizationEngineBehaviorTests
         }
     }
 
+    [Fact]
+    public async Task Completed_history_evicts_old_entries_without_rejecting_new_work()
+    {
+        using var host = CreateHost(configure: options =>
+        {
+            options.MaxActiveTasks = 1;
+            options.MaxCompletedTaskHistory = 1;
+            options.CompletedTaskRetention = TimeSpan.FromHours(1);
+        });
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var engine = GetEngine(host);
+
+            for (var value = 1; value <= 3; value++)
+            {
+                await Await(engine.Enqueue(new RecordedTask(value)), cancellationToken);
+
+                while (engine.GetStatistics().ActiveTasks != 0)
+                    await Task.Delay(10, cancellationToken);
+            }
+
+            while (engine.GetStatistics().SynchronizationCompletedTasks < 3)
+                await Task.Delay(10, cancellationToken);
+
+            var statistics = engine.GetStatistics();
+
+            Assert.Equal(0, statistics.ActiveTasks);
+            Assert.Equal(1, statistics.CompletedTaskHistory);
+            Assert.Equal(3, statistics.SynchronizationCompletedTasks);
+            Assert.Single(engine.GetTasks());
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
+    }
+
     private static IHost CreateHost(
         Action<IServiceCollection>? register = null,
         Action<SynchronizationEngineOptions>? configure = null)

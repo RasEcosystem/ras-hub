@@ -13,24 +13,30 @@ namespace RasHub.Synchronization.Internal.Engine;
 
 internal sealed class SynchronizationEngine : ISynchronizationEngine
 {
+    private readonly Queue<Guid> _completedHistory = new();
+    private readonly object _completedHistorySync = new();
+
     private readonly ConcurrentDictionary<string, BackgroundTaskExecution> _deduplicated =
         new(StringComparer.Ordinal);
 
-    private readonly ILogger<SynchronizationEngine> _logger;
-    private readonly BackgroundTaskMetrics _metrics;
-    private readonly IBackgroundTaskQueue _queue;
     private readonly SynchronizationEngineOptions _engineOptions;
+    private readonly TimingAccumulator _interactiveTiming = new();
+
+    private readonly ILogger<SynchronizationEngine> _logger;
+    private readonly TimingAccumulator _maintenanceTiming = new();
+    private readonly BackgroundTaskMetrics _metrics;
+    private readonly TimingAccumulator _overallTiming = new();
+    private readonly IBackgroundTaskQueue _queue;
     private readonly BackgroundTaskRescheduler _rescheduler;
     private readonly DateTimeOffset _startedAt;
+    private readonly TimingAccumulator _synchronizationTiming = new();
 
     private readonly ConcurrentDictionary<Guid, BackgroundTaskExecution> _tasks =
         new();
 
     private readonly TimeProvider _timeProvider;
-    private readonly TimingAccumulator _overallTiming = new();
-    private readonly TimingAccumulator _interactiveTiming = new();
-    private readonly TimingAccumulator _synchronizationTiming = new();
-    private readonly TimingAccumulator _maintenanceTiming = new();
+    private int _activeTasks;
+    private int _completedHistoryCount;
     private long _interactiveCompletedTasks;
     private long _maintenanceCompletedTasks;
     private long _synchronizationCompletedTasks;
@@ -86,17 +92,17 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
                 continue;
             }
 
-            if (_tasks.Count >= _engineOptions.MaxTrackedTasks)
+            if (!TryReserveActiveTask())
             {
                 _metrics.Rejected(taskType);
                 _logger.LogWarning(
-                    "Rejected background task {TaskType}: task registry reached " +
-                    "its limit of {MaxTrackedTasks}",
+                    "Rejected background task {TaskType}: active task count reached " +
+                    "its limit of {MaxActiveTasks}",
                     taskType.FullName,
-                    _engineOptions.MaxTrackedTasks);
+                    _engineOptions.MaxActiveTasks);
                 throw new BackgroundTaskRejectedException(
                     taskType,
-                    "the task registry reached its configured limit");
+                    "the active task count reached its configured limit");
             }
 
             var now = _timeProvider.GetUtcNow();
@@ -108,10 +114,14 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
 
             if (deduplicationKey is not null &&
                 !_deduplicated.TryAdd(deduplicationKey, execution))
+            {
+                ReleaseActiveTask();
                 continue;
+            }
 
             if (!_tasks.TryAdd(execution.Id, execution))
             {
+                ReleaseActiveTask();
                 RemoveDeduplication(deduplicationKey, execution);
                 continue;
             }
@@ -127,6 +137,7 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
             if (!accepted)
             {
                 _tasks.TryRemove(execution.Id, out _);
+                ReleaseActiveTask();
                 RemoveDeduplication(deduplicationKey, execution);
                 _metrics.Rejected(taskType);
                 _logger.LogWarning(
@@ -185,7 +196,8 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
     public SynchronizationEngineStatistics GetStatistics()
     {
         return new SynchronizationEngineStatistics(
-            _tasks.Count,
+            Volatile.Read(ref _activeTasks),
+            Volatile.Read(ref _completedHistoryCount),
             _queue.GetCount(BackgroundTaskQueue.Interactive),
             _queue.GetCount(BackgroundTaskQueue.Synchronization),
             _queue.GetCount(BackgroundTaskQueue.Maintenance),
@@ -204,6 +216,9 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
 
     private void RecordCompletedExecution(BackgroundTaskExecution execution)
     {
+        ReleaseActiveTask();
+        RecordCompletedHistory(execution.Id);
+
         TimingAccumulator laneTiming;
         switch (execution.Options.Queue)
         {
@@ -234,6 +249,84 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
 
         laneTiming.Record(wait, runtime, total);
         _overallTiming.Record(wait, runtime, total);
+    }
+
+    private bool TryReserveActiveTask()
+    {
+        while (true)
+        {
+            var current = Volatile.Read(ref _activeTasks);
+            if (current >= _engineOptions.MaxActiveTasks)
+                return false;
+
+            if (Interlocked.CompareExchange(ref _activeTasks, current + 1, current) == current)
+                return true;
+        }
+    }
+
+    private void ReleaseActiveTask()
+    {
+        Interlocked.Decrement(ref _activeTasks);
+    }
+
+    private void RecordCompletedHistory(Guid taskId)
+    {
+        lock (_completedHistorySync)
+        {
+            _completedHistory.Enqueue(taskId);
+            _completedHistoryCount++;
+
+            while (_completedHistoryCount > _engineOptions.MaxCompletedTaskHistory &&
+                   _completedHistory.TryDequeue(out var expiredTaskId))
+                if (_tasks.TryRemove(expiredTaskId, out _))
+                    _completedHistoryCount--;
+        }
+    }
+
+    internal void CancelAll()
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        foreach (var execution in _tasks.Values)
+            if (execution.RequestCancellation(now) &&
+                execution.State == BackgroundTaskState.Canceled)
+                _metrics.Canceled(execution);
+    }
+
+    internal void CleanupCompletedTasks()
+    {
+        var cutoff = _timeProvider.GetUtcNow() - _engineOptions.CompletedTaskRetention;
+
+        lock (_completedHistorySync)
+        {
+            foreach (var pair in _tasks)
+            {
+                var snapshot = pair.Value.CreateSnapshot();
+
+                if (snapshot.CompletedAt is { } completedAt &&
+                    completedAt <= cutoff &&
+                    _tasks.TryRemove(
+                        new KeyValuePair<Guid, BackgroundTaskExecution>(
+                            pair.Key,
+                            pair.Value)))
+                    _completedHistoryCount--;
+            }
+
+            while (_completedHistory.TryPeek(out var taskId) &&
+                   !_tasks.ContainsKey(taskId))
+                _completedHistory.Dequeue();
+        }
+    }
+
+    private void RemoveDeduplication(
+        string? key,
+        BackgroundTaskExecution execution)
+    {
+        if (key is null)
+            return;
+
+        _deduplicated.TryRemove(
+            new KeyValuePair<string, BackgroundTaskExecution>(key, execution));
     }
 
     private sealed class TimingAccumulator
@@ -269,43 +362,5 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
                     TimeSpan.FromTicks(_totalTicks / _count));
             }
         }
-    }
-
-    internal void CancelAll()
-    {
-        var now = _timeProvider.GetUtcNow();
-
-        foreach (var execution in _tasks.Values)
-            if (execution.RequestCancellation(now) &&
-                execution.State == BackgroundTaskState.Canceled)
-                _metrics.Canceled(execution);
-    }
-
-    internal void CleanupCompletedTasks()
-    {
-        var cutoff = _timeProvider.GetUtcNow() - _engineOptions.CompletedTaskRetention;
-
-        foreach (var pair in _tasks)
-        {
-            var snapshot = pair.Value.CreateSnapshot();
-
-            if (snapshot.CompletedAt is { } completedAt &&
-                completedAt <= cutoff)
-                _tasks.TryRemove(
-                    new KeyValuePair<Guid, BackgroundTaskExecution>(
-                        pair.Key,
-                        pair.Value));
-        }
-    }
-
-    private void RemoveDeduplication(
-        string? key,
-        BackgroundTaskExecution execution)
-    {
-        if (key is null)
-            return;
-
-        _deduplicated.TryRemove(
-            new KeyValuePair<string, BackgroundTaskExecution>(key, execution));
     }
 }

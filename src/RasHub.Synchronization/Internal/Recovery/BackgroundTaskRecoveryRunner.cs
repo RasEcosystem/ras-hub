@@ -33,7 +33,6 @@ internal sealed class BackgroundTaskRecoveryRunner
             sources.Length);
 
         foreach (var source in sources)
-        {
             try
             {
                 await source.RecoverAsync(_engine, cancellationToken);
@@ -54,7 +53,6 @@ internal sealed class BackgroundTaskRecoveryRunner
                     "Background task recovery source {RecoverySource} failed",
                     source.GetType().FullName);
             }
-        }
 
         _logger.LogInformation("Background task recovery completed");
     }

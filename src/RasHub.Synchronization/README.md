@@ -120,9 +120,11 @@ The `Synchronization` section controls:
 - capacity and worker count for each queue;
 - priority fairness interval;
 - completed-task retention and cleanup interval;
-- maximum number of tracked tasks.
+- maximum number of active tasks;
+- maximum number of retained completed executions.
 
-Completed snapshots remain queryable until retention expires. The maximum tracked-task limit also bounds delayed and
+Completed snapshots remain queryable until retention expires or the completed-history limit evicts the oldest entry.
+History pressure never rejects new work. The active-task limit independently bounds pending, running, delayed, and
 scheduled executions in memory.
 
 ## Observability
@@ -130,4 +132,4 @@ scheduled executions in memory.
 The module logs task type and ID, never task payload. The meter name is
 `RasHub.Synchronization` and exposes counters for enqueue, deduplication, rejection, start, retry, success, failure, and
 cancellation, plus attempt duration. The `synchronization` readiness check becomes degraded at 80% capacity and
-unhealthy when a queue or the task registry is full.
+unhealthy when a queue or the active-task limit is full.

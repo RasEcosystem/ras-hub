@@ -1,10 +1,11 @@
 namespace RasHub.Synchronization.Models;
 
 /// <summary>
-///     Current registry size and waiting-task count for each queue lane.
+///     Current active work, retained history, and queue statistics.
 /// </summary>
 public sealed record SynchronizationEngineStatistics(
-    int TrackedTasks,
+    int ActiveTasks,
+    int CompletedTaskHistory,
     int InteractiveQueueLength,
     int SynchronizationQueueLength,
     int MaintenanceQueueLength,

@@ -41,6 +41,9 @@ public sealed class SynchronizationEngineOptions
     public TimeSpan RegistryCleanupInterval { get; set; } =
         TimeSpan.FromMinutes(1);
 
-    /// <summary>Maximum number of pending, running, delayed, and retained executions tracked in memory.</summary>
-    public int MaxTrackedTasks { get; set; } = 10_000;
+    /// <summary>Maximum number of pending, running, and delayed executions.</summary>
+    public int MaxActiveTasks { get; set; } = 10_000;
+
+    /// <summary>Maximum number of terminal execution snapshots retained for observation.</summary>
+    public int MaxCompletedTaskHistory { get; set; } = 1_000;
 }

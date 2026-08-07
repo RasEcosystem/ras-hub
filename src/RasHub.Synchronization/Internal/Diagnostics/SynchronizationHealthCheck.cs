@@ -27,8 +27,10 @@ internal sealed class SynchronizationHealthCheck : IHealthCheck
         var statistics = _engine.GetStatistics();
         var data = new Dictionary<string, object>
         {
-            ["trackedTasks"] = statistics.TrackedTasks,
-            ["maxTrackedTasks"] = _options.MaxTrackedTasks,
+            ["activeTasks"] = statistics.ActiveTasks,
+            ["maxActiveTasks"] = _options.MaxActiveTasks,
+            ["completedTaskHistory"] = statistics.CompletedTaskHistory,
+            ["maxCompletedTaskHistory"] = _options.MaxCompletedTaskHistory,
             ["interactiveQueueLength"] = statistics.InteractiveQueueLength,
             ["interactiveQueueCapacity"] = _options.InteractiveQueueCapacity,
             ["synchronizationQueueLength"] = statistics.SynchronizationQueueLength,
@@ -37,7 +39,7 @@ internal sealed class SynchronizationHealthCheck : IHealthCheck
             ["maintenanceQueueCapacity"] = _options.MaintenanceQueueCapacity
         };
 
-        var saturated = statistics.TrackedTasks >= _options.MaxTrackedTasks ||
+        var saturated = statistics.ActiveTasks >= _options.MaxActiveTasks ||
                         statistics.InteractiveQueueLength >= _options.InteractiveQueueCapacity ||
                         statistics.SynchronizationQueueLength >= _options.QueueCapacity ||
                         statistics.MaintenanceQueueLength >= _options.MaintenanceQueueCapacity;
@@ -47,16 +49,16 @@ internal sealed class SynchronizationHealthCheck : IHealthCheck
                 "Synchronization Engine capacity is exhausted.",
                 data: data));
 
-        var degraded = IsAboveThreshold(statistics.TrackedTasks, _options.MaxTrackedTasks) ||
+        var degraded = IsAboveThreshold(statistics.ActiveTasks, _options.MaxActiveTasks) ||
                        IsAboveThreshold(
-                statistics.InteractiveQueueLength,
-                _options.InteractiveQueueCapacity) ||
+                           statistics.InteractiveQueueLength,
+                           _options.InteractiveQueueCapacity) ||
                        IsAboveThreshold(
-                statistics.SynchronizationQueueLength,
-                _options.QueueCapacity) ||
+                           statistics.SynchronizationQueueLength,
+                           _options.QueueCapacity) ||
                        IsAboveThreshold(
-                statistics.MaintenanceQueueLength,
-                _options.MaintenanceQueueCapacity);
+                           statistics.MaintenanceQueueLength,
+                           _options.MaintenanceQueueCapacity);
 
         return Task.FromResult(degraded
             ? HealthCheckResult.Degraded(

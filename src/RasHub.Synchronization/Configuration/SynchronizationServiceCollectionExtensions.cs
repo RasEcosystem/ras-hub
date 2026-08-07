@@ -50,8 +50,9 @@ public static class SynchronizationServiceCollectionExtensions
                            options.RegistryCleanupInterval > TimeSpan.Zero,
                 "Task retention cannot be negative and cleanup interval must be positive.")
             .Validate(
-                options => options.MaxTrackedTasks > 0,
-                "Maximum tracked tasks must be greater than zero.")
+                options => options.MaxActiveTasks > 0 &&
+                           options.MaxCompletedTaskHistory > 0,
+                "Active task and completed task history limits must be greater than zero.")
             .ValidateOnStart();
 
         services.TryAddSingleton(TimeProvider.System);

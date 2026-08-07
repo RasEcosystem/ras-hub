@@ -32,14 +32,12 @@ public sealed class UserAdministrationService(
         var result = new List<UserAdministrationItem>(users.Count);
 
         foreach (var user in users)
-        {
             result.Add(new UserAdministrationItem(
                 user.Id,
                 user.Email ?? user.UserName ?? user.Id,
                 await userManager.IsInRoleAsync(user, AppRoles.Admin),
                 user.Id == currentUserId,
                 user.ApiKey));
-        }
 
         return result;
     }
