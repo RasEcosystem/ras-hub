@@ -1,6 +1,31 @@
 name: rashub-development
 
 services:
+  seq:
+    image: datalust/seq:2026.1
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_API_CANONICALURI: ${SEQ_DEV_PUBLIC_URL:-http://localhost:5341}
+      SEQ_FIRSTRUN_ADMINUSERNAME: ${SEQ_DEV_ADMIN_USERNAME:-admin}
+      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_DEV_ADMIN_PASSWORD:-rashub}
+    volumes:
+      - seq-development:/data
+    ports:
+      - "${SEQ_DEV_BIND_ADDRESS:-127.0.0.1}:${SEQ_DEV_PORT:-5341}:80"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   postgres:
     image: postgres:18.4-alpine
     restart: unless-stopped
@@ -33,13 +58,18 @@ services:
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${RASHUB_DEV_DB:-rashub_dev};Username=${RASHUB_DEV_DB_USER:-rashub};Password=${RASHUB_DEV_DB_PASSWORD:-rashub}
       Database__ApplyMigrations: "true"
       ReverseProxy__KnownProxies__0: ${RASHUB_DEV_TRUSTED_PROXY:-127.0.0.1}
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      Seq__UiUrl: ${SEQ_DEV_PUBLIC_URL:-http://localhost:5341}
     ports:
       - "${RASHUB_DEV_BIND_ADDRESS:-127.0.0.1}:${RASHUB_DEV_PORT:-5076}:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      seq:
         condition: service_healthy
     restart: unless-stopped
     stop_grace_period: 30s
 
 volumes:
   postgres-development:
+  seq-development:

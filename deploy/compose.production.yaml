@@ -1,6 +1,31 @@
 name: rashub
 
 services:
+  seq:
+    image: datalust/seq:2026.1
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_API_CANONICALURI: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
+      SEQ_FIRSTRUN_ADMINUSERNAME: ${SEQ_ADMIN_USERNAME:-admin}
+      SEQ_FIRSTRUN_ADMINPASSWORDHASH: ${SEQ_ADMIN_PASSWORD_HASH:?SEQ_ADMIN_PASSWORD_HASH is required}
+    volumes:
+      - seq-production:/data
+    ports:
+      - "${SEQ_BIND_ADDRESS:-127.0.0.1}:${SEQ_PORT:-5341}:80"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   postgres:
     image: postgres:18.4-alpine
     restart: unless-stopped
@@ -31,8 +56,12 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       Database__ApplyMigrations: "false"
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      Seq__UiUrl: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
     depends_on:
       postgres:
+        condition: service_healthy
+      seq:
         condition: service_healthy
     restart: "no"
     read_only: true
@@ -55,6 +84,8 @@ services:
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       Database__ApplyMigrations: "false"
       ReverseProxy__KnownProxies__0: ${RASHUB_TRUSTED_PROXY:-127.0.0.1}
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      Seq__UiUrl: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
     ports:
       - "${RASHUB_BIND_ADDRESS:-127.0.0.1}:${RASHUB_PORT:-8080}:8080"
     depends_on:
@@ -62,6 +93,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      seq:
+        condition: service_healthy
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -74,3 +107,4 @@ services:
 
 volumes:
   postgres-production:
+  seq-production:

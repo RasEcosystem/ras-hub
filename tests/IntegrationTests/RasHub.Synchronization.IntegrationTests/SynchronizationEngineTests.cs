@@ -60,6 +60,19 @@ public sealed class SynchronizationEngineTests
             Assert.Equal(1, result.AttemptCount);
             Assert.Null(result.Exception);
 
+            SynchronizationEngineStatistics statistics;
+            do
+            {
+                statistics = engine.GetStatistics();
+                if (statistics.SynchronizationCompletedTasks == 0)
+                    await Task.Delay(10, cancellationToken);
+            }
+            while (statistics.SynchronizationCompletedTasks == 0);
+
+            Assert.Equal(1, statistics.SynchronizationCompletedTasks);
+            Assert.True(statistics.SynchronizationQueueHighWaterMark >= 1);
+            Assert.True(statistics.StartedAt <= DateTimeOffset.UtcNow);
+
             Assert.Equal(1, probe.InvocationCount);
             Assert.Equal(expectedValue, probe.LastValue);
         }

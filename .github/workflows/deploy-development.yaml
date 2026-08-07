@@ -7,7 +7,7 @@ on:
     types:
       - completed
     branches:
-      - "feature/**"
+      - dev
   workflow_dispatch:
     inputs:
       revision:

@@ -1,6 +1,7 @@
 ﻿@using RasHub.Web.Infrastructure.Authorization
 @implements IDisposable
 @inject NavigationManager NavigationManager
+@inject IConfiguration Configuration
 
 <div style="
     height: 100%;
@@ -64,6 +65,24 @@
                         Variant="Variant.Text"/>
 
                 </MudTooltip>
+
+                @if (!string.IsNullOrWhiteSpace(SeqUiUrl))
+                {
+                    <MudTooltip Text="Logs (Seq)"
+                                Placement="Placement.Right"
+                                Arrow="true">
+
+                        <MudIconButton
+                            Icon="@Icons.Material.Filled.ManageSearch"
+                            Href="@SeqUiUrl"
+                            Target="_blank"
+                            Color="Color.Default"
+                            Size="Size.Medium"
+                            Variant="Variant.Text"
+                            aria-label="Open Seq logs"/>
+
+                    </MudTooltip>
+                }
             </Authorized>
         </AuthorizeView>
 
@@ -113,6 +132,7 @@
 
 @code {
     private string _currentUrl = string.Empty;
+    private string? SeqUiUrl => Configuration["Seq:UiUrl"];
 
     private string ReturnUrl =>
         string.IsNullOrEmpty(_currentUrl)

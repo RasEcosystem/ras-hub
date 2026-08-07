@@ -3,11 +3,11 @@ name: Build development image
 on:
   push:
     branches:
-      - "feature/**"
+      - dev
   workflow_dispatch:
 
 concurrency:
-  group: build-development-${{ github.ref }}
+  group: build-development
   cancel-in-progress: true
 
 permissions:

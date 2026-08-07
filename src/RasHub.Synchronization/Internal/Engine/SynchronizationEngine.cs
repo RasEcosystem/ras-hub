@@ -28,6 +28,10 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
         new();
 
     private readonly TimeProvider _timeProvider;
+    private readonly DateTimeOffset _startedAt;
+    private long _interactiveCompletedTasks;
+    private long _synchronizationCompletedTasks;
+    private long _maintenanceCompletedTasks;
 
     public SynchronizationEngine(
         IBackgroundTaskQueue queue,
@@ -41,6 +45,7 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
         _timeProvider = timeProvider;
         _engineOptions = engineOptions.Value;
         _metrics = metrics;
+        _startedAt = timeProvider.GetUtcNow();
     }
 
     public BackgroundTaskHandle Enqueue<TTask>(
@@ -125,6 +130,12 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
                     TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default);
 
+            _ = execution.Completion.ContinueWith(
+                _ => RecordCompletedExecution(execution.Options.Queue),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
             _metrics.Enqueued(execution);
             return execution.CreateHandle();
         }
@@ -163,7 +174,32 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
             _tasks.Count,
             _queue.GetCount(BackgroundTaskQueue.Interactive),
             _queue.GetCount(BackgroundTaskQueue.Synchronization),
-            _queue.GetCount(BackgroundTaskQueue.Maintenance));
+            _queue.GetCount(BackgroundTaskQueue.Maintenance),
+            Interlocked.Read(ref _interactiveCompletedTasks),
+            Interlocked.Read(ref _synchronizationCompletedTasks),
+            Interlocked.Read(ref _maintenanceCompletedTasks),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Interactive),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Synchronization),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Maintenance),
+            _startedAt);
+    }
+
+    private void RecordCompletedExecution(BackgroundTaskQueue queue)
+    {
+        switch (queue)
+        {
+            case BackgroundTaskQueue.Interactive:
+                Interlocked.Increment(ref _interactiveCompletedTasks);
+                break;
+            case BackgroundTaskQueue.Synchronization:
+                Interlocked.Increment(ref _synchronizationCompletedTasks);
+                break;
+            case BackgroundTaskQueue.Maintenance:
+                Interlocked.Increment(ref _maintenanceCompletedTasks);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(queue));
+        }
     }
 
     internal void CancelAll()

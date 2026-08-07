@@ -68,7 +68,10 @@ public class Program
             configuration
                 .ReadFrom.Configuration(context.Configuration)
                 .ReadFrom.Services(services)
-                .Enrich.FromLogContext();
+                .Enrich.FromLogContext()
+                .Enrich.WithProperty(
+                    "Environment",
+                    context.HostingEnvironment.EnvironmentName);
         });
 
         builder.Services

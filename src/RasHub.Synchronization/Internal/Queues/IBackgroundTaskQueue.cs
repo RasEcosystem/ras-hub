@@ -15,4 +15,6 @@ internal interface IBackgroundTaskQueue
         CancellationToken cancellationToken);
 
     int GetCount(BackgroundTaskQueue queue);
+
+    int GetHighWaterMark(BackgroundTaskQueue queue);
 }

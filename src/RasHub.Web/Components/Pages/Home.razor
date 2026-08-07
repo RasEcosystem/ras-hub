@@ -21,6 +21,9 @@
                 </MudText>
             </div>
             <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudChip T="string" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.Schedule">
+                    Uptime @FormatDuration(Uptime)
+                </MudChip>
                 <MudChip T="string" Color="@HealthColor" Variant="Variant.Outlined" Icon="@HealthIcon">
                     @HealthLabel
                 </MudChip>
@@ -75,6 +78,8 @@
                                 <MudItem xs="4"><LaneValue Label="Queued" Value="@($"{lane.Queued} / {lane.Capacity}")"/></MudItem>
                                 <MudItem xs="4"><LaneValue Label="Running" Value="@($"{lane.Running} / {lane.Workers}")"/></MudItem>
                                 <MudItem xs="4"><LaneValue Label="Oldest wait" Value="@FormatDuration(lane.OldestWait)"/></MudItem>
+                                <MudItem xs="6"><LaneValue Label="Completed since start" Value="@lane.Completed.ToString("N0")"/></MudItem>
+                                <MudItem xs="6"><LaneValue Label="Peak queue depth" Value="@($"{lane.HighWaterMark} / {lane.Capacity}")"/></MudItem>
                             </MudGrid>
                         </MudStack>
                     </MudPaper>
@@ -170,6 +175,7 @@
     private IReadOnlyList<BackgroundTaskSnapshot> Tasks { get; set; } = [];
     private IReadOnlyList<BackgroundTaskScheduleSnapshot> Schedules { get; set; } = [];
     private IReadOnlyList<LaneSnapshot> Lanes { get; set; } = [];
+    private SynchronizationEngineStatistics Statistics { get; set; } = default!;
     private DateTimeOffset LastUpdated { get; set; }
     private DateTimeOffset Now { get; set; }
 
@@ -180,6 +186,7 @@
     private int TotalWorkers => Options.InteractiveWorkerCount + Options.WorkerCount + Options.MaintenanceWorkerCount;
     private double RegistryPercent => Percent(Tasks.Count, Options.MaxTrackedTasks);
     private double WorkerPercent => Percent(RunningCount, TotalWorkers);
+    private TimeSpan Uptime => Now - Statistics.StartedAt;
     private string TrackedLabel => $"{Tasks.Count:N0} / {Options.MaxTrackedTasks:N0}";
     private TimeSpan? AverageWait => Average(Tasks.Where(x => x.StartedAt.HasValue).Select(x => x.StartedAt!.Value - x.CreatedAt));
     private TimeSpan? AverageRuntime => Average(Tasks.Where(x => x.StartedAt.HasValue && x.CompletedAt.HasValue).Select(x => x.CompletedAt!.Value - x.StartedAt!.Value));
@@ -203,23 +210,23 @@
         Now = TimeProvider.GetUtcNow();
         Tasks = Engine.GetTasks();
         Schedules = Scheduler.GetSchedules();
-        var statistics = Engine.GetStatistics();
+        Statistics = Engine.GetStatistics();
         Lanes =
         [
-            CreateLane(BackgroundTaskQueue.Interactive, "Interactive", "User-facing work", Icons.Material.Outlined.Bolt, Color.Info, statistics.InteractiveQueueLength, Options.InteractiveQueueCapacity, Options.InteractiveWorkerCount),
-            CreateLane(BackgroundTaskQueue.Synchronization, "Synchronization", "Regular background work", Icons.Material.Outlined.Sync, Color.Primary, statistics.SynchronizationQueueLength, Options.QueueCapacity, Options.WorkerCount),
-            CreateLane(BackgroundTaskQueue.Maintenance, "Maintenance", "Cleanup and low-priority work", Icons.Material.Outlined.Build, Color.Secondary, statistics.MaintenanceQueueLength, Options.MaintenanceQueueCapacity, Options.MaintenanceWorkerCount)
+            CreateLane(BackgroundTaskQueue.Interactive, "Interactive", "User-facing work", Icons.Material.Outlined.Bolt, Color.Info, Statistics.InteractiveQueueLength, Options.InteractiveQueueCapacity, Options.InteractiveWorkerCount, Statistics.InteractiveCompletedTasks, Statistics.InteractiveQueueHighWaterMark),
+            CreateLane(BackgroundTaskQueue.Synchronization, "Synchronization", "Regular background work", Icons.Material.Outlined.Sync, Color.Primary, Statistics.SynchronizationQueueLength, Options.QueueCapacity, Options.WorkerCount, Statistics.SynchronizationCompletedTasks, Statistics.SynchronizationQueueHighWaterMark),
+            CreateLane(BackgroundTaskQueue.Maintenance, "Maintenance", "Cleanup and low-priority work", Icons.Material.Outlined.Build, Color.Secondary, Statistics.MaintenanceQueueLength, Options.MaintenanceQueueCapacity, Options.MaintenanceWorkerCount, Statistics.MaintenanceCompletedTasks, Statistics.MaintenanceQueueHighWaterMark)
         ];
         LastUpdated = Now;
     }
 
-    private LaneSnapshot CreateLane(BackgroundTaskQueue queue, string name, string description, string icon, Color color, int queued, int capacity, int workers)
+    private LaneSnapshot CreateLane(BackgroundTaskQueue queue, string name, string description, string icon, Color color, int queued, int capacity, int workers, long completed, int highWaterMark)
     {
         var laneTasks = Tasks.Where(task => task.Queue == queue).ToArray();
         var oldest = laneTasks.Where(task => task.State == BackgroundTaskState.Pending)
             .Select(task => (TimeSpan?)(Now - task.CreatedAt)).OrderDescending().FirstOrDefault();
         return new(queue, name, description, icon, color, queued, capacity, workers,
-            laneTasks.Count(task => task.State == BackgroundTaskState.Running), oldest);
+            laneTasks.Count(task => task.State == BackgroundTaskState.Running), oldest, completed, highWaterMark);
     }
 
     private async Task PollAsync()
@@ -265,7 +272,7 @@
     private static Color UtilizationColor(double percent) => percent >= 100 ? Color.Error : percent >= 80 ? Color.Warning : Color.Success;
 
     private sealed record LaneSnapshot(BackgroundTaskQueue Queue, string Name, string Description, string Icon, Color Color,
-        int Queued, int Capacity, int Workers, int Running, TimeSpan? OldestWait)
+        int Queued, int Capacity, int Workers, int Running, TimeSpan? OldestWait, long Completed, int HighWaterMark)
     {
         public double QueuePercent => Percent(Queued, Capacity);
     }

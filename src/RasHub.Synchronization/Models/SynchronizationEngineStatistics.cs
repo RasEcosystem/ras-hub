@@ -7,4 +7,11 @@ public sealed record SynchronizationEngineStatistics(
     int TrackedTasks,
     int InteractiveQueueLength,
     int SynchronizationQueueLength,
-    int MaintenanceQueueLength);
+    int MaintenanceQueueLength,
+    long InteractiveCompletedTasks,
+    long SynchronizationCompletedTasks,
+    long MaintenanceCompletedTasks,
+    int InteractiveQueueHighWaterMark,
+    int SynchronizationQueueHighWaterMark,
+    int MaintenanceQueueHighWaterMark,
+    DateTimeOffset StartedAt);

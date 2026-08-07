@@ -49,6 +49,11 @@ internal sealed class InMemoryBackgroundTaskQueue : IBackgroundTaskQueue
         return GetLane(queue).Count;
     }
 
+    public int GetHighWaterMark(BackgroundTaskQueue queue)
+    {
+        return GetLane(queue).HighWaterMark;
+    }
+
     private PriorityLane GetLane(BackgroundTaskQueue queue)
     {
         return _lanes.TryGetValue(queue, out var lane)
@@ -71,6 +76,8 @@ internal sealed class InMemoryBackgroundTaskQueue : IBackgroundTaskQueue
 
         private readonly object _sync = new();
         private long _dequeueCount;
+
+        private int _highWaterMark;
 
         private long _sequence;
 
@@ -97,6 +104,17 @@ internal sealed class InMemoryBackgroundTaskQueue : IBackgroundTaskQueue
             }
         }
 
+        public int HighWaterMark
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _highWaterMark;
+                }
+            }
+        }
+
         public bool TryEnqueue(BackgroundTaskExecution execution)
         {
             lock (_sync)
@@ -108,6 +126,7 @@ internal sealed class InMemoryBackgroundTaskQueue : IBackgroundTaskQueue
                 var entry = new QueueEntry(sequence, execution);
 
                 _available.Add(sequence, entry);
+                _highWaterMark = Math.Max(_highWaterMark, _available.Count);
                 _fifo.Enqueue(entry);
                 _priority.Enqueue(
                     entry,
