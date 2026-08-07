@@ -1,0 +1,233 @@
+﻿@page "/Account/LoginWith2fa"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using RasHub.Web.Data
+
+@attribute [AllowAnonymous]
+@layout LoginLayout
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+@inject ILogger<LoginWith2fa> Logger
+
+<AppPageTitle Title="Two-factor authentication"/>
+
+<MudStack Spacing="4">
+
+    <MudStack Spacing="1"
+              AlignItems="AlignItems.Center">
+
+        <MudAvatar Color="Color.Primary"
+                   Size="Size.Large">
+
+            <MudIcon Icon="@Icons.Material.Outlined.Security"
+                     Size="Size.Large"/>
+
+        </MudAvatar>
+
+        <MudText Typo="Typo.h3"
+                 Align="Align.Center">
+            Two-factor authentication
+        </MudText>
+
+        <MudText Typo="Typo.body1"
+                 Color="Color.Secondary"
+                 Align="Align.Center">
+            Enter the code from your authenticator app
+        </MudText>
+
+    </MudStack>
+
+    <StatusMessage Message="@message"/>
+
+    <MudPaper Class="pa-6"
+              Elevation="1">
+
+        <MudStack Spacing="4">
+
+            <MudStack Spacing="1">
+
+                <MudText Typo="Typo.h5">
+                    Authenticator code
+                </MudText>
+
+                <MudText Typo="Typo.body2"
+                         Color="Color.Secondary">
+                    Your account is protected with two-factor authentication.
+                </MudText>
+
+            </MudStack>
+
+            <EditForm Model="Input"
+                      FormName="login-with-2fa"
+                      OnValidSubmit="OnValidSubmitAsync"
+                      method="post">
+
+                <input type="hidden"
+                       name="ReturnUrl"
+                       value="@ReturnUrl"/>
+
+                <input type="hidden"
+                       name="RememberMe"
+                       value="@RememberMe"/>
+
+                <DataAnnotationsValidator/>
+
+                <ValidationSummary class="mud-error-text"
+                                   role="alert"/>
+
+                <MudStack Spacing="3">
+
+                    <MudStaticTextField For="@(() => Input.TwoFactorCode)"
+                                        @bind-Value="Input.TwoFactorCode"
+                                        Label="Authenticator code"
+                                        Placeholder="123456"
+                                        Variant="Variant.Outlined"
+                                        FullWidth="true"
+                                        Adornment="Adornment.Start"
+                                        AdornmentIcon="@Icons.Material.Outlined.Pin"
+                                        UserAttributes="@AuthenticatorCodeAttributes"/>
+
+                    <MudStaticCheckBox For="@(() => Input.RememberMachine)"
+                                       @bind-Value="Input.RememberMachine"
+                                       Color="Color.Primary">
+                        Remember this machine
+                    </MudStaticCheckBox>
+
+                    <MudStaticButton Variant="Variant.Filled"
+                                     Color="Color.Primary"
+                                     FullWidth="true"
+                                     FormAction="FormAction.Submit">
+                        Log in
+                    </MudStaticButton>
+
+                </MudStack>
+
+            </EditForm>
+
+            <MudDivider/>
+
+            <MudStack Spacing="2"
+                      AlignItems="AlignItems.Center">
+
+                <MudText Typo="Typo.body2"
+                         Color="Color.Secondary"
+                         Align="Align.Center">
+                    Don’t have access to your authenticator device?
+                </MudText>
+
+                <MudLink Href="@RecoveryCodeUrl"
+                         Typo="Typo.body2">
+                    Log in with a recovery code
+                </MudLink>
+
+            </MudStack>
+
+        </MudStack>
+
+    </MudPaper>
+
+</MudStack>
+
+@code {
+    private string? message;
+
+    private ApplicationUser user = default!;
+
+    [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery] private bool RememberMe { get; set; }
+
+    private static readonly Dictionary<string, object> AuthenticatorCodeAttributes =
+        new()
+        {
+            ["autocomplete"] = "one-time-code",
+            ["inputmode"] = "numeric",
+            ["aria-required"] = "true"
+        };
+
+    private string RecoveryCodeUrl =>
+        NavigationManager.GetUriWithQueryParameters(
+            "Account/LoginWithRecoveryCode",
+            new Dictionary<string, object?>
+            {
+                ["ReturnUrl"] = ReturnUrl
+            });
+
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new InputModel();
+
+        user =
+            await SignInManager.GetTwoFactorAuthenticationUserAsync()
+            ?? throw new InvalidOperationException(
+                "Unable to load two-factor authentication user.");
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        var authenticatorCode =
+            Input.TwoFactorCode!
+                .Replace(" ", string.Empty)
+                .Replace("-", string.Empty);
+
+        var result =
+            await SignInManager.TwoFactorAuthenticatorSignInAsync(
+                authenticatorCode,
+                RememberMe,
+                Input.RememberMachine);
+
+        var userId =
+            await UserManager.GetUserIdAsync(user);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation(
+                "User with ID '{UserId}' logged in with 2fa.",
+                userId);
+
+            RedirectManager.RedirectTo(
+                ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning(
+                "User with ID '{UserId}' account locked out.",
+                userId);
+
+            RedirectManager.RedirectTo(
+                "Account/Lockout");
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Invalid authenticator code entered for user with ID '{UserId}'.",
+                userId);
+
+            message =
+                "Error: Invalid authenticator code.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [StringLength(
+            7,
+            ErrorMessage =
+                "The {0} must be at least {2} and at max {1} characters long.",
+            MinimumLength = 6)]
+        [DataType(DataType.Text)]
+        [Display(Name = "Authenticator code")]
+        public string? TwoFactorCode { get; set; }
+
+        [Display(Name = "Remember this machine")]
+        public bool RememberMachine { get; set; }
+    }
+
+}

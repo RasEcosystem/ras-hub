@@ -1,0 +1,104 @@
+<script type="module"
+        src="@Assets["Components/Layout/ReconnectModal.razor.js"]">
+</script>
+
+<dialog id="components-reconnect-modal"
+        data-nosnippet>
+
+    <div class="components-reconnect-backdrop">
+
+        <section class="components-reconnect-surface"
+                 aria-live="assertive"
+                 aria-atomic="true">
+
+            <header class="components-reconnect-header">
+
+                <span class="components-reconnect-icon"
+                      aria-hidden="true">
+
+                    <svg viewBox="0 0 24 24"
+                         focusable="false">
+
+                        <path d="M12 3a9 9 0 0 0-8.49 6H1l3.5 3.5L8 9H5.57A7 7 0 1 1 5 14.8l-1.73 1A9 9 0 1 0 12 3Z"/>
+
+                    </svg>
+
+                </span>
+
+                <div>
+                    <h2>Connection interrupted</h2>
+
+                    <p class="components-reconnect-eyebrow">
+                        RasHub
+                    </p>
+                </div>
+
+            </header>
+
+            <p class="components-reconnect-supporting">
+                Your current session is still open.
+                We’ll keep trying to restore the connection.
+            </p>
+
+            <div class="components-rejoin-loader
+                        components-reconnect-first-attempt-visible
+                        components-reconnect-repeated-attempt-visible"
+                 aria-hidden="true">
+
+                <div></div>
+                <div></div>
+                <div></div>
+
+            </div>
+
+            <p class="components-reconnect-first-attempt-visible
+                      components-reconnect-message">
+                Rejoining the server…
+            </p>
+
+            <p class="components-reconnect-repeated-attempt-visible
+                      components-reconnect-message">
+                Rejoin failed. Trying again in
+                <span id="components-seconds-to-next-attempt"></span>s.
+            </p>
+
+            <p class="components-reconnect-failed-visible
+                      components-reconnect-message
+                      components-reconnect-danger">
+                Failed to rejoin. Retry now or reload the page.
+            </p>
+
+            <p class="components-pause-visible
+                      components-reconnect-message">
+                The session has been paused by the server.
+            </p>
+
+            <p class="components-resume-failed-visible
+                      components-reconnect-message
+                      components-reconnect-danger">
+                Failed to resume the session.
+                Retry now or reload the page.
+            </p>
+
+            <div class="components-reconnect-actions">
+
+                <button id="components-reconnect-button"
+                        class="components-reconnect-failed-visible"
+                        type="button">
+                    Retry
+                </button>
+
+                <button id="components-resume-button"
+                        class="components-pause-visible
+                               components-resume-failed-visible"
+                        type="button">
+                    Resume
+                </button>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</dialog>

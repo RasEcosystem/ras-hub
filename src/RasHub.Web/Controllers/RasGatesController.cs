@@ -9,12 +9,13 @@ using RasHub.Contracts.RasHub.Requests;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Authentication;
 
 namespace RasHub.Web.Controllers;
 
 [ApiController]
 [Route("api/v1/ras-gates")]
-[Authorize]
+[Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [ControllerDescription(
     "Manage RasGate gateways registered in RasHub.")]
 public sealed class RasGatesController : ControllerBase

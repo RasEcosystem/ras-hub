@@ -1,0 +1,23 @@
+<MudPaper Class="pa-5 metric-card" Elevation="1">
+    <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+        <div>
+            <MudText Typo="Typo.overline" Color="Color.Secondary">@Title</MudText>
+            <MudText Typo="Typo.h4" Class="mt-1">@Value</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@Detail</MudText>
+        </div>
+        <MudAvatar Color="@Color" Variant="Variant.Outlined"><MudIcon Icon="@Icon"/></MudAvatar>
+    </MudStack>
+    @if (Progress.HasValue)
+    {
+        <MudProgressLinear Value="@Progress.Value" Color="@Color" Class="mt-4" Rounded/>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public string Detail { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter] public Color Color { get; set; }
+    [Parameter] public double? Progress { get; set; }
+}

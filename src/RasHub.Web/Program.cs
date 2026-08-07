@@ -1,13 +1,18 @@
 using System.Net;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
+using Nava.Settings.Abstractions;
+using Nava.Settings.Extensions;
 using RasHub.Contracts.Common;
-using RasHub.Infrastructure;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Extensions;
 using RasHub.Synchronization.Configuration;
@@ -15,8 +20,15 @@ using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Authentication;
-using RasHub.Web.Endpoints;
+using RasHub.Web.Components;
+using RasHub.Web.Components.Account;
+using RasHub.Web.Data;
+using RasHub.Web.Infrastructure;
+using RasHub.Web.Infrastructure.Authorization;
+using RasHub.Web.Infrastructure.Settings;
+using RasHub.Web.Infrastructure.Themes.Providers;
 using RasHub.Web.Middlewares;
+using RasHub.Web.Settings;
 using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
@@ -60,57 +72,80 @@ public class Program
         });
 
         builder.Services
-            .AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
+            .AddAuthentication(options =>
+            {
+                options.DefaultScheme = IdentityConstants.ApplicationScheme;
+                options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+            })
+            .AddIdentityCookies();
+
+        builder.Services
+            .AddAuthentication()
             .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,
-                _ => { })
-            .AddCookie(
-                ApiDocumentationAuthenticationDefaults.Scheme,
-                options =>
-                {
-                    options.Cookie.Name = "RasHub.ApiDocumentation";
-                    options.Cookie.HttpOnly = true;
-                    options.Cookie.SameSite = SameSiteMode.Strict;
-                    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-                    options.LoginPath =
-                        ApiDocumentationAuthenticationDefaults.LoginPath;
-                    options.AccessDeniedPath =
-                        ApiDocumentationAuthenticationDefaults.LoginPath;
-                    options.ExpireTimeSpan = TimeSpan.FromHours(8);
-                    options.SlidingExpiration = false;
-                });
+                _ => { });
 
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy(
                 ApiDocumentationAuthenticationDefaults.Policy,
-                policy =>
-                {
-                    policy.AddAuthenticationSchemes(
-                        ApiDocumentationAuthenticationDefaults.Scheme);
-                    policy.RequireAuthenticatedUser();
-                });
+                policy => policy.RequireAuthenticatedUser());
+            options.AddPolicy(
+                AppPolicies.ManageGlobalSettings,
+                policy => policy.RequireRole(AppRoles.Admin));
         });
 
+        builder.Services.AddMudServices();
         builder.Services
-            .AddOptions<RasHubOptions>()
-            .BindConfiguration(RasHubOptions.SectionName)
-            .Validate(
-                options => !string.IsNullOrWhiteSpace(options.ApiKey),
-                "RasHub:ApiKey is required.")
-            .ValidateOnStart();
+            .AddRazorComponents()
+            .AddInteractiveServerComponents();
+        builder.Services.AddCascadingAuthenticationState();
+        builder.Services.AddScoped<IdentityRedirectManager>();
+        builder.Services.AddScoped<AuthenticationStateProvider,
+            IdentityRevalidatingAuthenticationStateProvider>();
 
-        if (builder.Environment.IsDevelopment())
-            builder.Services
-                .AddOptions<ApiDocumentationOptions>()
-                .BindConfiguration(ApiDocumentationOptions.SectionName)
-                .Validate(
-                    options => !string.IsNullOrWhiteSpace(options.Username),
-                    "ApiDocumentation:Username is required in Development.")
-                .Validate(
-                    options => !string.IsNullOrWhiteSpace(options.Password),
-                    "ApiDocumentation:Password is required in Development.")
-                .ValidateOnStart();
+        var rasHubConnectionString = builder.Configuration
+            .GetConnectionString(RasHubDbContext.ConnectionStringName);
+
+        if (string.IsNullOrWhiteSpace(rasHubConnectionString))
+            throw new InvalidOperationException(
+                $"Connection string 'ConnectionStrings:{RasHubDbContext.ConnectionStringName}' is required.");
+
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseNpgsql(rasHubConnectionString, npgsql =>
+            {
+                npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
+                npgsql.MigrationsHistoryTable("__IdentityMigrationsHistory");
+            }));
+        builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+        builder.Services
+            .AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.SignIn.RequireConfirmedAccount = false;
+                options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = false;
+                options.Password.RequireLowercase = false;
+                options.Password.RequireUppercase = false;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Password.RequiredUniqueChars = 1;
+            })
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>()
+            .AddSignInManager()
+            .AddDefaultTokenProviders();
+        builder.Services.AddSingleton<IEmailSender<ApplicationUser>,
+            IdentityNoOpEmailSender>();
+
+        builder.Services.AddScoped<ISettingsStore, PostgreSqlSettingsStore>();
+        builder.Services.AddRuntimeSettings<ApplicationSettings>();
+        builder.Services.AddScopedSettings<UserSettings>();
+        builder.Services.AddSingleton<ThemeProvider>();
+        builder.Services.AddScoped<CurrentUserAccessor>();
+        builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
+        builder.Services.AddScoped<UserAdministrationService>();
+        builder.Services.AddScoped<FirstUserAdminService>();
+        builder.Services.AddScoped<UserApiKeyService>();
 
         builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.ConfigureApi();
@@ -141,10 +176,19 @@ public class Program
         var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrations");
 
         if (migrateOnly || applyMigrations)
+        {
             await app.Services.MigrateRasHubDatabaseAsync();
+            await app.Services.MigrateIdentityDatabaseAsync();
+        }
 
         if (migrateOnly)
             return;
+
+        if (!applyMigrations)
+            await app.Services.MigrateIdentityDatabaseAsync();
+        if (app.Configuration.GetValue("Settings:InitializeOnStart", true))
+            await app.Services.InitializeRasHubSettingsAsync();
+        await app.Services.InitializeAdminRoleAsync(app.Configuration);
 
         app.UseForwardedHeaders();
         app.ConfigureLogging();
@@ -197,11 +241,7 @@ internal static class ApplicationConfigurationExtensions
             options.LowercaseQueryStrings = true;
         });
 
-        services.Configure<MvcOptions>(options =>
-        {
-            options.Filters.Add(new ConsumesAttribute("application/json"));
-            options.Filters.Add(new ProducesAttribute("application/json"));
-        });
+        services.Configure<MvcOptions>(options => { options.Filters.Add(new ProducesAttribute("application/json")); });
 
         services
             .AddControllers(options => { options.Filters.Add<ApiResponseResultFilter>(); })
@@ -264,8 +304,21 @@ internal static class ApplicationConfigurationExtensions
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapApiDocumentationAuthentication();
+            app.UseMigrationsEndPoint();
+        }
+        else
+        {
+            app.UseExceptionHandler("/Error", true);
+            app.UseHsts();
+        }
 
+        app.UseWhen(
+            context => !context.Request.Path.StartsWithSegments("/api"),
+            branch => branch.UseStatusCodePagesWithReExecute(
+                "/not-found",
+                createScopeForStatusCodePages: true));
+        if (app.Environment.IsDevelopment())
+        {
             app.MapOpenApi()
                 .RequireAuthorization(
                     ApiDocumentationAuthenticationDefaults.Policy);
@@ -293,13 +346,17 @@ internal static class ApplicationConfigurationExtensions
                 ApiDocumentationAuthenticationDefaults.Policy);
         }
 
+        app.UseStaticFiles();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseAntiforgery();
 
         app.MapControllers();
 
-        if (app.Environment.IsDevelopment())
-            app.MapSynchronizationDiagnostics();
+        app.MapStaticAssets();
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode();
+        app.MapAdditionalIdentityEndpoints();
 
         app.MapHealthChecks("/health/live", new HealthCheckOptions
             {
@@ -312,6 +369,20 @@ internal static class ApplicationConfigurationExtensions
                 Predicate = registration => registration.Tags.Contains("ready")
             })
             .AllowAnonymous();
+    }
+
+    public static async Task MigrateIdentityDatabaseAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+
+        if (dbContext.Database.IsNpgsql())
+            await dbContext.Database.MigrateAsync(cancellationToken);
+        else
+            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
     public static void ConfigureLifecycleLogging(this WebApplication app)

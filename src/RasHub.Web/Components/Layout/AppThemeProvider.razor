@@ -1,0 +1,148 @@
+@using RasHub.Web.Infrastructure.Themes.Providers
+@implements IDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUserSettingsProvider UserSettingsProvider
+@inject ISettingsProvider<ApplicationSettings> ApplicationSettingsProvider
+
+<MudThemeProvider Theme="@_theme"
+                  IsDarkMode="@_isDarkMode"/>
+
+@code {
+    private MudTheme _theme = new();
+    private bool _isDarkMode;
+    private bool _isAuthenticated;
+    private AppTheme? _userTheme;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Apply the application theme before the first asynchronous operation.
+        // Blazor may render the synchronous part of OnInitializedAsync while
+        // authentication and user settings are still loading.
+        ApplyTheme(ApplicationSettingsProvider.Settings.Theme);
+
+        ApplicationSettingsProvider.SettingsChanged +=
+            OnApplicationSettingsChanged;
+
+        UserSettingsProvider.SettingsChanged +=
+            OnUserSettingsChanged;
+
+        AuthenticationStateProvider.AuthenticationStateChanged +=
+            OnAuthenticationStateChanged;
+
+        var authenticationState =
+            await AuthenticationStateProvider
+                .GetAuthenticationStateAsync();
+
+        await ApplyThemeForAsync(authenticationState);
+    }
+
+    private async Task ApplyThemeForAsync(
+        AuthenticationState authenticationState)
+    {
+        _isAuthenticated =
+            authenticationState.User.Identity?.IsAuthenticated == true;
+
+        if (_isAuthenticated)
+        {
+            var userSettings =
+                await UserSettingsProvider.GetAsync();
+
+            _userTheme = userSettings.Theme;
+        }
+        else
+        {
+            _userTheme = null;
+        }
+
+        ApplyEffectiveTheme();
+    }
+
+    private void ApplyEffectiveTheme()
+    {
+        var theme =
+            _userTheme
+            ?? ApplicationSettingsProvider.Settings.Theme;
+
+        ApplyTheme(theme);
+    }
+
+    private void ApplyTheme(AppTheme theme)
+    {
+        var definition =
+            ThemeProvider.GetTheme(theme);
+
+        _isDarkMode =
+            definition.MudTheme.IsDarkMode;
+
+        _theme = new MudTheme
+        {
+            Shadows = definition.MudTheme.Shadows
+        };
+
+        if (_isDarkMode)
+        {
+            _theme.PaletteDark =
+                (PaletteDark)definition
+                    .MudTheme
+                    .Palette;
+        }
+        else
+        {
+            _theme.PaletteLight =
+                (PaletteLight)definition
+                    .MudTheme
+                    .Palette;
+        }
+    }
+
+    private Task OnApplicationSettingsChanged(
+        ApplicationSettings settings)
+    {
+        if (!_isAuthenticated || _userTheme is null)
+        {
+            ApplyTheme(settings.Theme);
+            return InvokeAsync(StateHasChanged);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void OnUserSettingsChanged(
+        UserSettings settings)
+    {
+        if (!_isAuthenticated)
+        {
+            return;
+        }
+
+        _userTheme = settings.Theme;
+        ApplyEffectiveTheme();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnAuthenticationStateChanged(
+        Task<AuthenticationState> authenticationStateTask)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            var authenticationState =
+                await authenticationStateTask;
+
+            await ApplyThemeForAsync(authenticationState);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        ApplicationSettingsProvider.SettingsChanged -=
+            OnApplicationSettingsChanged;
+
+        UserSettingsProvider.SettingsChanged -=
+            OnUserSettingsChanged;
+
+        AuthenticationStateProvider.AuthenticationStateChanged -=
+            OnAuthenticationStateChanged;
+    }
+
+}

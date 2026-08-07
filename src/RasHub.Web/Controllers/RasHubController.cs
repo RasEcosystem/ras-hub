@@ -3,12 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Responses;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Authentication;
 
 namespace RasHub.Web.Controllers;
 
 [ApiController]
 [Route("api/v1/ras-hub")]
-[Authorize]
+[Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [ControllerDescription(
     "Inspect the running RasHub service.")]
 public sealed class RasHubController : ControllerBase

@@ -1,0 +1,80 @@
+﻿@page "/Account/Lockout"
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [AllowAnonymous]
+@layout LoginLayout
+
+<AppPageTitle Title="Locked out"/>
+
+<MudStack Spacing="4">
+
+    <MudStack Spacing="1"
+              AlignItems="AlignItems.Center">
+
+        <MudAvatar Color="Color.Error"
+                   Size="Size.Large">
+
+            <MudIcon Icon="@Icons.Material.Outlined.LockClock"
+                     Size="Size.Large"/>
+
+        </MudAvatar>
+
+        <MudText Typo="Typo.h3"
+                 Align="Align.Center">
+            Account locked
+        </MudText>
+
+        <MudText Typo="Typo.body1"
+                 Color="Color.Secondary"
+                 Align="Align.Center">
+            Sign-in has been temporarily disabled
+        </MudText>
+
+    </MudStack>
+
+    <MudPaper Class="pa-6"
+              Elevation="1"
+              role="alert">
+
+        <MudStack Spacing="4"
+                  AlignItems="AlignItems.Center">
+
+            <MudAlert Severity="Severity.Error"
+                      Variant="Variant.Outlined"
+                      Dense="true">
+
+                This account has been locked due to multiple unsuccessful
+                sign-in attempts.
+
+            </MudAlert>
+
+            <MudStack Spacing="1"
+                      AlignItems="AlignItems.Center">
+
+                <MudText Typo="Typo.h5"
+                         Align="Align.Center">
+                    Please try again later
+                </MudText>
+
+                <MudText Typo="Typo.body2"
+                         Color="Color.Secondary"
+                         Align="Align.Center">
+                    Wait for the lockout period to expire before attempting
+                    to sign in again.
+                </MudText>
+
+            </MudStack>
+
+            <MudButton Href="Account/Login"
+                       Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       StartIcon="@Icons.Material.Outlined.ArrowBack">
+                Return to login
+            </MudButton>
+
+        </MudStack>
+
+    </MudPaper>
+
+</MudStack>

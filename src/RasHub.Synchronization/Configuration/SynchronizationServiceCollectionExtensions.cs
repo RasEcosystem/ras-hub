@@ -72,9 +72,6 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskMetrics>();
         services.AddSingleton<BackgroundTaskRescheduler>();
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
-        services.AddSingleton<SynchronizationMonitor>();
-        services.AddSingleton<ISynchronizationMonitor>(serviceProvider =>
-            serviceProvider.GetRequiredService<SynchronizationMonitor>());
         services.AddSingleton<BackgroundTaskRecoveryRunner>();
         services.AddSingleton<BackgroundTaskWorker>();
 

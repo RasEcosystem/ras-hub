@@ -4,10 +4,16 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10"/>
+        <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.10"/>
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10"/>
+        <PackageReference Include="Microsoft.AspNetCore.App.Internal.Assets"
+                          Version="10.0.10"
+                          PrivateAssets="all"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design"
                           Version="10.0.10">
             <PrivateAssets>all</PrivateAssets>
@@ -16,6 +22,9 @@
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
                           Version="10.0.10"/>
         <PackageReference Include="Microsoft.OpenApi" Version="2.3.0"/>
+        <PackageReference Include="MudBlazor" Version="9.*"/>
+        <PackageReference Include="Extensions.MudBlazor.StaticInput" Version="4.*"/>
+        <PackageReference Include="Nava.Settings" Version="0.2.0"/>
         <PackageReference Include="Scalar.AspNetCore" Version="2.16.17"/>
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
         <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>

@@ -1,0 +1,72 @@
+@page "/not-found"
+@layout MainLayout
+
+<AppPageTitle Title="Page not found"/>
+
+<MudContainer MaxWidth="MaxWidth.Medium"
+              Class="py-12">
+
+    <MudPaper Class="pa-8"
+              Elevation="1">
+
+        <MudStack Spacing="4"
+                  AlignItems="AlignItems.Center">
+
+            <MudAvatar Color="Color.Primary"
+                       Size="Size.Large">
+
+                <MudIcon Icon="@Icons.Material.Outlined.SearchOff"
+                         Size="Size.Large"/>
+
+            </MudAvatar>
+
+            <MudStack Spacing="1"
+                      AlignItems="AlignItems.Center">
+
+                <MudText Typo="Typo.h2"
+                         Align="Align.Center">
+                    404
+                </MudText>
+
+                <MudText Typo="Typo.h4"
+                         Align="Align.Center">
+                    Page not found
+                </MudText>
+
+                <MudText Typo="Typo.body1"
+                         Color="Color.Secondary"
+                         Align="Align.Center">
+                    The page you are looking for does not exist or may have been moved.
+                </MudText>
+
+            </MudStack>
+
+            <MudDivider Class="my-2"
+                        Style="width: 100%;"/>
+
+            <MudStack Row
+                      Wrap="Wrap.Wrap"
+                      Justify="Justify.Center"
+                      Spacing="2">
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Href="/"
+                           StartIcon="@Icons.Material.Outlined.Home">
+                    Go to home
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           Href="javascript:history.back()"
+                           StartIcon="@Icons.Material.Outlined.ArrowBack">
+                    Go back
+                </MudButton>
+
+            </MudStack>
+
+        </MudStack>
+
+    </MudPaper>
+
+</MudContainer>

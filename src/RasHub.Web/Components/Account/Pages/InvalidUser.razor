@@ -1,0 +1,68 @@
+﻿@page "/Account/InvalidUser"
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [AllowAnonymous]
+@layout LoginLayout
+
+<AppPageTitle Title="Invalid user"/>
+
+<MudStack Spacing="4">
+
+    <MudStack Spacing="1"
+              AlignItems="AlignItems.Center">
+
+        <MudAvatar Color="Color.Error"
+                   Size="Size.Large">
+
+            <MudIcon Icon="@Icons.Material.Outlined.PersonOff"
+                     Size="Size.Large"/>
+
+        </MudAvatar>
+
+        <MudText Typo="Typo.h3"
+                 Align="Align.Center">
+            Invalid user
+        </MudText>
+
+        <MudText Typo="Typo.body1"
+                 Color="Color.Secondary"
+                 Align="Align.Center">
+            We could not identify the requested account
+        </MudText>
+
+    </MudStack>
+
+    <StatusMessage/>
+
+    <MudPaper Class="pa-6"
+              Elevation="1"
+              role="alert">
+
+        <MudStack Spacing="4"
+                  AlignItems="AlignItems.Center">
+
+            <MudAlert Severity="Severity.Error"
+                      Variant="Variant.Outlined"
+                      Dense="true">
+                The user account is invalid or no longer available.
+            </MudAlert>
+
+            <MudText Typo="Typo.body2"
+                     Color="Color.Secondary"
+                     Align="Align.Center">
+                Return to the login page and try again with another account.
+            </MudText>
+
+            <MudButton Href="Account/Login"
+                       Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       StartIcon="@Icons.Material.Outlined.ArrowBack">
+                Return to login
+            </MudButton>
+
+        </MudStack>
+
+    </MudPaper>
+
+</MudStack>

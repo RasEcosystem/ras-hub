@@ -1,0 +1,71 @@
+﻿<StatusMessage Message="@StatusMessage"/>
+
+<MudStack Spacing="4">
+
+    <MudStack Spacing="1">
+
+        <MudText Typo="Typo.h4">
+            Recovery codes
+        </MudText>
+
+        <MudText Typo="Typo.body2"
+                 Color="Color.Secondary">
+            Store these codes somewhere secure and accessible.
+        </MudText>
+
+    </MudStack>
+
+    <MudAlert Severity="Severity.Warning"
+              Variant="Variant.Outlined"
+              role="alert">
+
+        <MudStack Spacing="1">
+
+            <MudText Typo="Typo.subtitle2">
+                Put these codes in a safe place.
+            </MudText>
+
+            <MudText Typo="Typo.body2">
+                If you lose access to your authenticator device and do not have
+                these recovery codes, you may lose access to your account.
+            </MudText>
+
+        </MudStack>
+
+    </MudAlert>
+
+    <MudPaper Class="pa-4"
+              Elevation="0"
+              Outlined="true">
+
+        <MudGrid Spacing="2">
+
+            @foreach (var recoveryCode in RecoveryCodes)
+            {
+                <MudItem xs="12"
+                         sm="6">
+
+                    <MudPaper Class="pa-3"
+                              Elevation="0"
+                              Outlined="true">
+
+                        <MudText Typo="Typo.body1">
+                            <code>@recoveryCode</code>
+                        </MudText>
+
+                    </MudPaper>
+
+                </MudItem>
+            }
+
+        </MudGrid>
+
+    </MudPaper>
+
+</MudStack>
+
+@code {
+    [Parameter] public string[] RecoveryCodes { get; set; } = [];
+
+    [Parameter] public string? StatusMessage { get; set; }
+}

@@ -1,0 +1,99 @@
+.cosmic-brand-mark {
+    width: 36px;
+    height: 36px;
+    position: relative;
+    display: inline-block;
+    flex: 0 0 36px;
+}
+
+.cosmic-brand-core {
+    width: 14px;
+    height: 14px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 1px solid var(--mud-palette-primary);
+    border-radius: 50%;
+    background: var(--mud-palette-background-gray);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mud-palette-primary) 7%, transparent),
+    0 0 10px color-mix(in srgb, var(--mud-palette-primary) 55%, transparent);
+}
+
+.cosmic-brand-orbit {
+    width: 32px;
+    height: 15px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border: 1px solid color-mix(in srgb, var(--mud-palette-primary) 72%, transparent);
+    border-radius: 50%;
+}
+
+.cosmic-brand-orbit i {
+    width: 3px;
+    height: 3px;
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    border-radius: 50%;
+    background: var(--mud-palette-primary);
+    box-shadow: 0 0 6px var(--mud-palette-primary);
+}
+
+.cosmic-brand-orbit-one {
+    animation: cosmic-brand-one 12s linear infinite;
+}
+
+.cosmic-brand-orbit-two {
+    animation: cosmic-brand-two 16s linear infinite reverse;
+}
+
+.cosmic-brand-orbit-three {
+    animation: cosmic-brand-three 20s linear infinite;
+}
+
+@keyframes cosmic-brand-one {
+    from {
+        transform: translate(-50%, -50%) rotate(12deg);
+    }
+    to {
+        transform: translate(-50%, -50%) rotate(372deg);
+    }
+}
+
+@keyframes cosmic-brand-two {
+    from {
+        transform: translate(-50%, -50%) rotate(72deg);
+    }
+    to {
+        transform: translate(-50%, -50%) rotate(432deg);
+    }
+}
+
+@keyframes cosmic-brand-three {
+    from {
+        transform: translate(-50%, -50%) rotate(132deg);
+    }
+    to {
+        transform: translate(-50%, -50%) rotate(492deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cosmic-brand-orbit {
+        animation: none;
+    }
+
+    .cosmic-brand-orbit-one {
+        transform: translate(-50%, -50%) rotate(12deg);
+    }
+
+    .cosmic-brand-orbit-two {
+        transform: translate(-50%, -50%) rotate(72deg);
+    }
+
+    .cosmic-brand-orbit-three {
+        transform: translate(-50%, -50%) rotate(132deg);
+    }
+}

@@ -76,6 +76,28 @@ namespace RasHub.Infrastructure.Database.Migrations
                             t.HasCheckConstraint("ck_ras_gates_port", "port BETWEEN 1 AND 65535");
                         });
                 });
+
+            modelBuilder.Entity("RasHub.Infrastructure.Database.SettingEntry", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("value");
+
+                    b.HasKey("Key")
+                        .HasName("pk_settings");
+
+                    b.ToTable("settings", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

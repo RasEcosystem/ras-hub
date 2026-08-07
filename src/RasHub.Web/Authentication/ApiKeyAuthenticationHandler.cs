@@ -1,54 +1,63 @@
 using System.Net;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RasHub.Contracts.Common;
-using RasHub.Infrastructure;
 using RasHub.Web.Api;
+using RasHub.Web.Data;
 
 namespace RasHub.Web.Authentication;
 
 public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
 {
-    private readonly IOptionsMonitor<RasHubOptions> _rasHubOptions;
+    private readonly ApplicationDbContext _dbContext;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IOptionsMonitor<RasHubOptions> rasHubOptions)
+        ApplicationDbContext dbContext)
         : base(options, logger, encoder)
     {
-        _rasHubOptions = rasHubOptions;
+        _dbContext = dbContext;
     }
 
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.TryGetValue(ApiKeyAuthenticationDefaults.HeaderName, out var headerValues))
-            return Task.FromResult(AuthenticateResult.NoResult());
+            return AuthenticateResult.NoResult();
 
         if (headerValues.Count != 1)
-            return Task.FromResult(AuthenticateResult.Fail("A single API key must be provided."));
+            return AuthenticateResult.Fail("A single API key must be provided.");
 
-        var providedApiKey = headerValues[0];
-        var expectedApiKey = _rasHubOptions.CurrentValue.ApiKey;
+        var providedApiKey = headerValues.ToString();
 
-        if (string.IsNullOrEmpty(providedApiKey) ||
-            string.IsNullOrEmpty(expectedApiKey) ||
-            !ApiKeysEqual(expectedApiKey, providedApiKey))
-            return Task.FromResult(AuthenticateResult.Fail("The provided API key is invalid."));
+        if (string.IsNullOrWhiteSpace(providedApiKey) ||
+            providedApiKey.Length > ApplicationUser.ApiKeyMaxLength)
+            return AuthenticateResult.Fail("The provided API key is invalid.");
+
+        var user = await _dbContext.Users
+            .AsNoTracking()
+            .Where(item => item.ApiKey == providedApiKey)
+            .Select(item => new { item.Id, item.UserName, item.Email })
+            .SingleOrDefaultAsync(Context.RequestAborted);
+
+        if (user is null)
+            return AuthenticateResult.Fail("The provided API key is invalid.");
 
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, ApiKeyAuthenticationDefaults.Scheme)],
+            [
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? user.Id)
+            ],
             Scheme.Name);
 
         var principal = new ClaimsPrincipal(identity);
         var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
-        return Task.FromResult(AuthenticateResult.Success(ticket));
+        return AuthenticateResult.Success(ticket);
     }
 
     protected override async Task HandleChallengeAsync(
@@ -65,16 +74,5 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
         await Response.WriteAsJsonAsync(
             response,
             Context.RequestAborted);
-    }
-
-    private static bool ApiKeysEqual(
-        string expectedApiKey,
-        string providedApiKey)
-    {
-        var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expectedApiKey));
-
-        var providedHash = SHA256.HashData(Encoding.UTF8.GetBytes(providedApiKey));
-
-        return CryptographicOperations.FixedTimeEquals(expectedHash, providedHash);
     }
 }

@@ -1,0 +1,173 @@
+﻿@using RasHub.Web.Infrastructure.Authorization
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+<div style="
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    overflow: hidden;
+    padding: 8px 0;">
+
+    <MudStack AlignItems="AlignItems.Center"
+              Spacing="1">
+
+        <MudTooltip Text="Home"
+                    Placement="Placement.Right"
+                    Arrow="true">
+
+            <MudIconButton
+                Icon="@Icons.Material.Filled.Home"
+                Href="/"
+                Color="@GetRouteColor(string.Empty)"
+                Size="Size.Medium"
+                Variant="Variant.Text"
+                aria-label="Home"/>
+
+        </MudTooltip>
+
+    </MudStack>
+
+    <MudStack AlignItems="AlignItems.Center"
+              Spacing="1"
+              Style="width: 100%;">
+
+        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+
+        <MudTooltip Text="User Settings"
+                    Placement="Placement.Right"
+                    Arrow="true">
+
+            <MudIconButton
+                Icon="@Icons.Material.Filled.ManageAccounts"
+                Href="/user-settings"
+                Color="@GetRouteColor("user-settings")"
+                Size="Size.Medium"
+                Variant="Variant.Text"/>
+
+        </MudTooltip>
+
+        <AuthorizeView Policy="@AppPolicies.ManageGlobalSettings">
+            <Authorized>
+                <MudTooltip Text="Settings"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.Settings"
+                        Href="/settings"
+                        Color="@GetRouteColor("settings")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
+        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+
+        <MudTooltip
+            Text="User"
+            Placement="Placement.Right"
+            Arrow="true">
+
+            <MudIconButton
+                Icon="@Icons.Material.Filled.AccountCircle"
+                Href="/Account/Manage"
+                Color="@GetRouteColor("Account/Manage")"
+                Size="Size.Medium"
+                Variant="Variant.Text"/>
+
+        </MudTooltip>
+
+        <form action="/Account/Logout"
+              method="post"
+              style="margin: 0; padding: 0;">
+
+            <AntiforgeryToken/>
+
+            <input type="hidden"
+                   name="ReturnUrl"
+                   value=""/>
+
+            <MudTooltip Text="Logout"
+                        Placement="Placement.Right"
+                        Arrow="true">
+
+                <MudIconButton
+                    ButtonType="ButtonType.Submit"
+                    Icon="@Icons.Material.Filled.ExitToApp"
+                    Color="Color.Default"
+                    Size="Size.Medium"
+                    Variant="Variant.Text"/>
+
+            </MudTooltip>
+
+        </form>
+
+    </MudStack>
+</div>
+
+@code {
+    private string _currentUrl = string.Empty;
+
+    private string ReturnUrl =>
+        string.IsNullOrEmpty(_currentUrl)
+            ? "/"
+            : $"/{_currentUrl}";
+
+    protected override void OnInitialized()
+    {
+        UpdateCurrentUrl(NavigationManager.Uri);
+
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private Color GetRouteColor(string route)
+    {
+        return IsRouteActive(route)
+            ? Color.Primary
+            : Color.Default;
+    }
+
+    private bool IsRouteActive(string route)
+    {
+        if (string.IsNullOrEmpty(route))
+        {
+            return string.IsNullOrEmpty(_currentUrl);
+        }
+
+        return _currentUrl.Equals(
+                   route,
+                   StringComparison.OrdinalIgnoreCase)
+               || _currentUrl.StartsWith(
+                   $"{route}/",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnLocationChanged(
+        object? sender,
+        LocationChangedEventArgs args)
+    {
+        UpdateCurrentUrl(args.Location);
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateCurrentUrl(string location)
+    {
+        _currentUrl = NavigationManager
+            .ToBaseRelativePath(location)
+            .Split('?', '#')[0]
+            .Trim('/');
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+
+}

@@ -1,0 +1,66 @@
+﻿@inherits LayoutComponentBase
+
+<AppThemeProvider/>
+
+<MudPopoverProvider/>
+<MudDialogProvider/>
+<MudSnackbarProvider/>
+
+<MudLayout>
+
+    <MudAppBar Elevation="1">
+
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Spacing="2">
+
+            <MudIcon Icon="@Icons.Material.Filled.AccountCircle"
+                     Size="Size.Large"
+                     Color="Color.Primary"/>
+
+            <MudText Typo="Typo.h5">
+                Account
+            </MudText>
+
+        </MudStack>
+
+        <MudSpacer/>
+
+        <MudButton Href="/"
+                   Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.ArrowBack">
+            Back to application
+        </MudButton>
+
+    </MudAppBar>
+
+    <MudMainContent Class="pt-16 pa-4">
+
+        <MudContainer MaxWidth="MaxWidth.False"
+                      Style="max-width: 1600px;"
+                      Class="py-8">
+
+            @Body
+
+        </MudContainer>
+
+    </MudMainContent>
+
+</MudLayout>
+
+<div id="blazor-error-ui"
+     data-nosnippet>
+
+    An unhandled error has occurred.
+
+    <a href="."
+       class="reload">
+        Reload
+    </a>
+
+    <span class="dismiss">
+        🗙
+    </span>
+
+</div>

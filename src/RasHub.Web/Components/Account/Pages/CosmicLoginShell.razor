@@ -1,0 +1,63 @@
+@using RasHub.Web.Infrastructure.Themes.Providers
+<div class="documentation-login" style="@ThemeVariables">
+    <div class="cosmos" aria-hidden="true">
+        <span class="world-orbit world-orbit-one"></span>
+        <span class="world-orbit world-orbit-two"></span>
+        <span class="world-orbit world-orbit-three"></span>
+    </div>
+
+    <main class="login-shell">
+        <section class="login-content">
+            <div class="brand-mark" aria-hidden="true">
+                <span class="brand-orbit brand-orbit-one"><i></i></span>
+                <span class="brand-orbit brand-orbit-two"><i></i></span>
+                <span class="brand-orbit brand-orbit-three"><i></i></span>
+                <span class="brand-core"></span>
+            </div>
+
+            <MudText Typo="Typo.h1"
+                     HtmlTag="div"
+                     Class="brand-title">
+                RasHub
+            </MudText>
+            <MudText Typo="Typo.h6" Class="subtitle">
+                @Subtitle
+            </MudText>
+
+            <div class="motto" aria-hidden="true">
+                <span></span>
+                <MudText Typo="Typo.overline">v@(ThisAssembly.AssemblyFileVersion)</MudText>
+                <span></span>
+            </div>
+
+            <div class="login-card">
+                @ChildContent
+            </div>
+        </section>
+    </main>
+</div>
+
+@code {
+    [Parameter][EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    [Parameter][EditorRequired] public string Subtitle { get; set; } = string.Empty;
+
+    private string ThemeVariables
+    {
+        get
+        {
+            var definition = ThemeProvider.GetTheme(SettingsProvider.Settings.Theme);
+            var palette = definition.MudTheme.Palette;
+
+            return $"--login-primary:{palette.Primary};" +
+                   $"--login-background:{palette.Background};" +
+                   $"--login-background-alt:{palette.BackgroundGray};" +
+                   $"--login-surface:{palette.Surface};" +
+                   $"--login-text:{palette.TextPrimary};" +
+                   $"--login-text-secondary:{palette.TextSecondary};" +
+                   $"--login-lines:{palette.LinesDefault};" +
+                   $"--login-error:{palette.Error};";
+        }
+    }
+
+}

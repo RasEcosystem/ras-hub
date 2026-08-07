@@ -1,0 +1,62 @@
+﻿@inherits LayoutComponentBase
+
+<AppThemeProvider/>
+
+<MudPopoverProvider/>
+<MudDialogProvider/>
+<MudSnackbarProvider/>
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+
+        <div class="brand">
+
+            <CosmicBrandMark/>
+
+            <div>
+
+                <MudStack Row="true"
+                          Spacing="1"
+                          AlignItems="AlignItems.Center">
+
+                    <MudText Typo="Typo.h6">
+                        RasHub
+                    </MudText>
+
+                    <MudText Typo="Typo.overline"
+                             Color="Color.Primary">
+                        @SolutionVersion
+                    </MudText>
+
+                </MudStack>
+
+            </div>
+
+        </div>
+
+    </MudAppBar>
+
+    <MudDrawer id="nav-drawer"
+               Variant="DrawerVariant.Mini"
+               Breakpoint="Breakpoint.None"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="2">
+
+        <NavMenu/>
+
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 pa-4">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private const string SolutionVersion = ThisAssembly.AssemblyFileVersion;
+}

@@ -1,0 +1,316 @@
+#components-reconnect-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+#components-reconnect-modal::backdrop {
+    background: transparent;
+}
+
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal[open],
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-repeated-attempt,
+#components-reconnect-modal.components-reconnect-paused,
+#components-reconnect-modal.components-reconnect-resume-failed,
+#components-reconnect-modal.components-pause,
+#components-reconnect-modal.components-resume-failed {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.components-reconnect-backdrop {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: radial-gradient(
+            90% 60% at 80% 0%,
+            color-mix(
+                    in srgb,
+                    var(--mud-palette-primary, #5d8fcf) 14%,
+                    transparent
+            ),
+            transparent 62%
+    ),
+    radial-gradient(
+            80% 55% at 0% 100%,
+            color-mix(
+                    in srgb,
+                    var(--mud-palette-info, #4e8fc5) 16%,
+                    transparent
+            ),
+            transparent 64%
+    ),
+    rgba(10, 14, 20, 0.68);
+    backdrop-filter: blur(6px);
+}
+
+.components-reconnect-surface {
+    width: min(460px, 100%);
+    padding: 24px;
+    border: 1px solid color-mix(
+            in srgb,
+            var(--mud-palette-lines-default, #ced6df) 76%,
+            transparent
+    );
+    border-radius: var(--mud-default-borderradius, 8px);
+    background: var(--mud-palette-surface, #ffffff);
+    color: var(--mud-palette-text-primary, #2f3945);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28),
+    0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.components-reconnect-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.components-reconnect-header h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.components-reconnect-eyebrow {
+    margin: 3px 0 0;
+    color: var(--mud-palette-primary, #5d8fcf);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.components-reconnect-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    border-radius: 50%;
+    background: color-mix(
+            in srgb,
+            var(--mud-palette-primary, #5d8fcf) 18%,
+            transparent
+    );
+    color: var(--mud-palette-primary, #5d8fcf);
+}
+
+.components-reconnect-icon svg {
+    width: 25px;
+    height: 25px;
+    fill: currentColor;
+}
+
+.components-reconnect-supporting,
+.components-reconnect-message {
+    margin: 0;
+    line-height: 1.5;
+    font-size: 0.95rem;
+}
+
+.components-reconnect-supporting {
+    margin-bottom: 18px;
+    color: var(--mud-palette-text-secondary, #667487);
+}
+
+.components-reconnect-message {
+    color: var(--mud-palette-text-primary, #2f3945);
+    font-weight: 500;
+    text-align: center;
+}
+
+.components-reconnect-danger {
+    color: var(--mud-palette-error, #c65d69);
+}
+
+.components-reconnect-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.components-reconnect-first-attempt-visible,
+.components-reconnect-repeated-attempt-visible,
+.components-reconnect-failed-visible,
+.components-pause-visible,
+.components-resume-failed-visible {
+    display: none;
+}
+
+dialog[open].components-reconnect-show
+.components-reconnect-first-attempt-visible {
+    display: block;
+}
+
+dialog[open].components-reconnect-show
+.components-rejoin-loader {
+    display: inline-flex;
+}
+
+dialog[open].components-reconnect-failed
+.components-reconnect-failed-visible {
+    display: block;
+}
+
+dialog[open].components-reconnect-failed
+#components-reconnect-button {
+    display: block;
+}
+
+dialog[open].components-reconnect-repeated-attempt
+.components-reconnect-repeated-attempt-visible {
+    display: block;
+}
+
+dialog[open].components-reconnect-repeated-attempt
+.components-rejoin-loader {
+    display: inline-flex;
+}
+
+dialog[open].components-reconnect-paused
+.components-pause-visible,
+dialog[open].components-pause
+.components-pause-visible {
+    display: block;
+}
+
+dialog[open].components-reconnect-paused
+#components-resume-button,
+dialog[open].components-pause
+#components-resume-button,
+dialog[open].components-reconnect-resume-failed
+#components-resume-button,
+dialog[open].components-resume-failed
+#components-resume-button {
+    display: block;
+}
+
+dialog[open].components-reconnect-resume-failed
+.components-resume-failed-visible,
+dialog[open].components-resume-failed
+.components-resume-failed-visible {
+    display: block;
+}
+
+.components-rejoin-loader {
+    display: none;
+    justify-content: center;
+    gap: 8px;
+    margin: 2px 0 12px;
+}
+
+.components-rejoin-loader div {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--mud-palette-primary, #5d8fcf);
+    animation: reconnect-pulse 1.2s infinite ease-in-out both;
+}
+
+.components-rejoin-loader div:nth-child(1) {
+    animation-delay: -0.24s;
+}
+
+.components-rejoin-loader div:nth-child(2) {
+    animation-delay: -0.12s;
+}
+
+@keyframes reconnect-pulse {
+    0%,
+    80%,
+    100% {
+        opacity: 0.35;
+        transform: scale(0.72);
+    }
+
+    40% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+#components-reconnect-button,
+#components-resume-button {
+    display: none;
+    min-width: 104px;
+    min-height: 40px;
+    padding: 8px 18px;
+    border: 1px solid transparent;
+    border-radius: var(--mud-default-borderradius, 6px);
+    background: var(--mud-palette-primary, #5d8fcf);
+    color: var(--mud-palette-primary-text, #ffffff);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: filter 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+#components-reconnect-button:hover,
+#components-resume-button:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 12px color-mix(
+            in srgb,
+            var(--mud-palette-primary, #5d8fcf) 28%,
+            transparent
+    );
+}
+
+#components-reconnect-button:active,
+#components-resume-button:active {
+    transform: translateY(1px);
+}
+
+#components-reconnect-button:focus-visible,
+#components-resume-button:focus-visible {
+    outline: 3px solid color-mix(
+            in srgb,
+            var(--mud-palette-primary, #5d8fcf) 32%,
+            transparent
+    );
+    outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+    .components-reconnect-backdrop {
+        padding: 14px;
+    }
+
+    .components-reconnect-surface {
+        padding: 20px;
+    }
+
+    .components-reconnect-header {
+        align-items: flex-start;
+    }
+
+    .components-reconnect-actions {
+        flex-direction: column;
+    }
+
+    #components-reconnect-button,
+    #components-resume-button {
+        width: 100%;
+    }
+}

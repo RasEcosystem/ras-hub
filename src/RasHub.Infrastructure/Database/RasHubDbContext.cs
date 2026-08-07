@@ -11,6 +11,8 @@ public sealed class RasHubDbContext(DbContextOptions<RasHubDbContext> options)
 
     public DbSet<RasGate> RasGates => Set<RasGate>();
 
+    public DbSet<SettingEntry> Settings => Set<SettingEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
