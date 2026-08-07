@@ -8,8 +8,7 @@ public sealed class CurrentUserAccessor(
 {
     public async Task<string> GetUserIdAsync()
     {
-        var authenticationState =
-            await authenticationStateProvider.GetAuthenticationStateAsync();
+        var authenticationState = await authenticationStateProvider.GetAuthenticationStateAsync();
 
         var user = authenticationState.User;
 
@@ -17,8 +16,8 @@ public sealed class CurrentUserAccessor(
             throw new InvalidOperationException(
                 "The current user is not authenticated.");
 
-        return user.FindFirstValue(ClaimTypes.NameIdentifier)
-               ?? throw new InvalidOperationException(
+        return user.FindFirstValue(ClaimTypes.NameIdentifier) ??
+               throw new InvalidOperationException(
                    "The authenticated user does not contain a user identifier.");
     }
 }

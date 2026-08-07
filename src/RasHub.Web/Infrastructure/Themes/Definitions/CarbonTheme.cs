@@ -6,14 +6,7 @@ public static class CarbonTheme
 {
     public static AppThemeDefinition Create()
     {
-        var mudTheme =
-            GetMudThemeDefinition();
-
-        var themeDefinition =
-            new AppThemeDefinition(
-                mudTheme);
-
-        return themeDefinition;
+        return new AppThemeDefinition(GetMudThemeDefinition());
     }
 
     private static MudThemeDefinition GetMudThemeDefinition()

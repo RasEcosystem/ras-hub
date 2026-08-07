@@ -6,14 +6,7 @@ public static class SlateTheme
 {
     public static AppThemeDefinition Create()
     {
-        var mudTheme =
-            GetMudThemeDefinition();
-
-        var themeDefinition =
-            new AppThemeDefinition(
-                mudTheme);
-
-        return themeDefinition;
+        return new AppThemeDefinition(GetMudThemeDefinition());
     }
 
     private static MudThemeDefinition GetMudThemeDefinition()
@@ -53,8 +46,7 @@ public static class SlateTheme
 
                 DrawerBackground = "#13171B",
 
-                AppbarBackground =
-                    "rgba(12,14,16,.93)",
+                AppbarBackground = "rgba(12,14,16,.93)",
 
                 AppbarText = "#E4E8ED",
 
@@ -72,8 +64,7 @@ public static class SlateTheme
 
                 ActionDisabled = "#59616B",
 
-                ActionDisabledBackground =
-                    "#2A313844",
+                ActionDisabledBackground = "#2A313844",
 
                 LinesDefault = "#272E35",
 
@@ -89,8 +80,7 @@ public static class SlateTheme
 
                 Skeleton = "#20252B",
 
-                OverlayLight =
-                    "#11161B88"
+                OverlayLight = "#11161B88"
             }
         };
     }

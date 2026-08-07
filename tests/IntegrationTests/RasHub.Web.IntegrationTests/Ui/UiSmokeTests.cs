@@ -1,8 +1,8 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Abstractions;
-using RasHub.Web.Settings;
 using RasHub.Web.IntegrationTests.Infrastructure;
+using RasHub.Web.Settings;
 
 namespace RasHub.Web.IntegrationTests.Ui;
 

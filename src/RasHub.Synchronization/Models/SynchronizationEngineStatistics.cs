@@ -14,4 +14,8 @@ public sealed record SynchronizationEngineStatistics(
     int InteractiveQueueHighWaterMark,
     int SynchronizationQueueHighWaterMark,
     int MaintenanceQueueHighWaterMark,
+    BackgroundTaskTimingStatistics OverallTiming,
+    BackgroundTaskTimingStatistics InteractiveTiming,
+    BackgroundTaskTimingStatistics SynchronizationTiming,
+    BackgroundTaskTimingStatistics MaintenanceTiming,
     DateTimeOffset StartedAt);

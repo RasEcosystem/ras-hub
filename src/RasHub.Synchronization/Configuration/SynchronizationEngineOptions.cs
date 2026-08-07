@@ -8,7 +8,7 @@ public sealed class SynchronizationEngineOptions
     public const string SectionName = "Synchronization";
 
     public const int DefaultQueueCapacity = 1_024;
-    public const int DefaultWorkerCount = 4;
+    public const int DefaultWorkerCount = 16;
 
     /// <summary>Maximum number of waiting interactive tasks.</summary>
     public int InteractiveQueueCapacity { get; set; } = 256;
@@ -21,14 +21,14 @@ public sealed class SynchronizationEngineOptions
     public int MaintenanceQueueCapacity { get; set; } = 256;
 
     /// <summary>Workers reserved for user-facing interactive work.</summary>
-    public int InteractiveWorkerCount { get; set; } = 2;
+    public int InteractiveWorkerCount { get; set; } = 8;
 
     /// <summary>Workers reserved for regular synchronization work.</summary>
     public int WorkerCount { get; set; } =
         DefaultWorkerCount;
 
     /// <summary>Workers reserved for low-priority maintenance work.</summary>
-    public int MaintenanceWorkerCount { get; set; } = 1;
+    public int MaintenanceWorkerCount { get; set; } = 2;
 
     /// <summary>How often a lane selects its oldest task instead of its highest-priority task.</summary>
     public int PriorityFairnessInterval { get; set; } = 16;

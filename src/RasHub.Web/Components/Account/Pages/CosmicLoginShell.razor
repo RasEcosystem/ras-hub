@@ -38,9 +38,9 @@
 </div>
 
 @code {
-    [Parameter][EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+    [Parameter] [EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
 
-    [Parameter][EditorRequired] public string Subtitle { get; set; } = string.Empty;
+    [Parameter] [EditorRequired] public string Subtitle { get; set; } = string.Empty;
 
     private string ThemeVariables
     {

@@ -21,7 +21,7 @@
         </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
                           Version="10.0.10"/>
-        <PackageReference Include="Microsoft.OpenApi" Version="2.3.0"/>
+        <PackageReference Include="Microsoft.OpenApi" Version="2.11.0"/>
         <PackageReference Include="MudBlazor" Version="9.*"/>
         <PackageReference Include="Extensions.MudBlazor.StaticInput" Version="4.*"/>
         <PackageReference Include="Nava.Settings" Version="0.2.0"/>

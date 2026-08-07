@@ -9,12 +9,11 @@ using RasHub.Synchronization.Internal.Processing;
 using RasHub.Synchronization.Internal.Queues;
 using RasHub.Synchronization.Internal.Recovery;
 using RasHub.Synchronization.Internal.Scheduling;
+using RasHub.Synchronization.Tasks;
 
 namespace RasHub.Synchronization.Configuration;
 
-/// <summary>
-///     Registers the Engine, queues, workers, scheduler, metrics, and readiness check in dependency injection.
-/// </summary>
+/// <summary>Registers synchronization services.</summary>
 public static class SynchronizationServiceCollectionExtensions
 {
     public static IServiceCollection AddRasHubSynchronization(
@@ -23,8 +22,7 @@ public static class SynchronizationServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var optionsBuilder =
-            services.AddOptions<SynchronizationEngineOptions>();
+        var optionsBuilder = services.AddOptions<SynchronizationEngineOptions>();
 
         if (configure is not null)
             optionsBuilder.Configure(configure);
@@ -61,8 +59,7 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<IBackgroundTaskQueue>(serviceProvider =>
         {
             var options = serviceProvider
-                .GetRequiredService<
-                    IOptions<SynchronizationEngineOptions>>()
+                .GetRequiredService<IOptions<SynchronizationEngineOptions>>()
                 .Value;
 
             return new InMemoryBackgroundTaskQueue(options);
@@ -74,6 +71,9 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
         services.AddSingleton<BackgroundTaskRecoveryRunner>();
         services.AddSingleton<BackgroundTaskWorker>();
+        services.TryAddTransient<
+            IBackgroundTaskHandler<TestBackgroundTask>,
+            TestBackgroundTaskHandler>();
 
         services.AddSingleton<SynchronizationEngine>();
         services.AddSingleton<ISynchronizationEngine>(serviceProvider =>
@@ -83,8 +83,7 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<IBackgroundTaskScheduler>(serviceProvider =>
             serviceProvider.GetRequiredService<PeriodicBackgroundTaskScheduler>());
 
-        services.AddHostedService<
-            SynchronizationHostedService>();
+        services.AddHostedService<SynchronizationHostedService>();
 
         services
             .AddHealthChecks()

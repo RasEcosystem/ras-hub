@@ -48,7 +48,9 @@ as `DEV_ENV_FILE`.
 
 For a development server behind a reverse proxy, set
 `RASHUB_DEV_BIND_ADDRESS` in that ignored environment file to the server's
-private network address. Keep PostgreSQL bound to localhost.
+private network address. Set `SEQ_DEV_PUBLIC_URL` to the browser-accessible
+Seq URL (preferably an HTTPS reverse-proxy address); Docker's internal `seq`
+hostname cannot be used by the browser. Keep PostgreSQL bound to localhost.
 
 ```bash
 make dev-down

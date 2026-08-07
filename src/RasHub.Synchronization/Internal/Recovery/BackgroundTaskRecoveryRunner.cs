@@ -4,9 +4,6 @@ using RasHub.Synchronization.Abstractions;
 
 namespace RasHub.Synchronization.Internal.Recovery;
 
-/// <summary>
-///     Runs every registered recovery source at startup so durable incomplete work can be re-enqueued.
-/// </summary>
 internal sealed class BackgroundTaskRecoveryRunner
 {
     private readonly ISynchronizationEngine _engine;
@@ -28,12 +25,22 @@ internal sealed class BackgroundTaskRecoveryRunner
         await using var scope = _scopeFactory.CreateAsyncScope();
 
         var sources = scope.ServiceProvider
-            .GetServices<IBackgroundTaskRecoverySource>();
+            .GetServices<IBackgroundTaskRecoverySource>()
+            .ToArray();
+
+        _logger.LogInformation(
+            "Background task recovery started with {RecoverySourceCount} sources",
+            sources.Length);
 
         foreach (var source in sources)
+        {
             try
             {
                 await source.RecoverAsync(_engine, cancellationToken);
+
+                _logger.LogInformation(
+                    "Background task recovery source {RecoverySource} completed",
+                    source.GetType().FullName);
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
@@ -47,5 +54,8 @@ internal sealed class BackgroundTaskRecoveryRunner
                     "Background task recovery source {RecoverySource} failed",
                     source.GetType().FullName);
             }
+        }
+
+        _logger.LogInformation("Background task recovery completed");
     }
 }

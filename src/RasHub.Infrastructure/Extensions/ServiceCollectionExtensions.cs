@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using RasHub.Application.Interfaces;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
@@ -49,7 +50,12 @@ public static class ServiceCollectionExtensions
         await using var scope = services.CreateAsyncScope();
 
         var dbContext = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(ServiceCollectionExtensions));
 
+        logger.LogInformation("Applying RasHub database migrations");
         await dbContext.Database.MigrateAsync(cancellationToken);
+        logger.LogInformation("RasHub database migrations completed");
     }
 }

@@ -5,9 +5,6 @@ using RasHub.Synchronization.Configuration;
 
 namespace RasHub.Synchronization.Internal.Diagnostics;
 
-/// <summary>
-///     Reports readiness from task-registry and queue saturation, degrading at eighty percent capacity.
-/// </summary>
 internal sealed class SynchronizationHealthCheck : IHealthCheck
 {
     private const double DegradedThreshold = 0.8;
@@ -40,26 +37,24 @@ internal sealed class SynchronizationHealthCheck : IHealthCheck
             ["maintenanceQueueCapacity"] = _options.MaintenanceQueueCapacity
         };
 
-        var saturated =
-            statistics.TrackedTasks >= _options.MaxTrackedTasks ||
-            statistics.InteractiveQueueLength >= _options.InteractiveQueueCapacity ||
-            statistics.SynchronizationQueueLength >= _options.QueueCapacity ||
-            statistics.MaintenanceQueueLength >= _options.MaintenanceQueueCapacity;
+        var saturated = statistics.TrackedTasks >= _options.MaxTrackedTasks ||
+                        statistics.InteractiveQueueLength >= _options.InteractiveQueueCapacity ||
+                        statistics.SynchronizationQueueLength >= _options.QueueCapacity ||
+                        statistics.MaintenanceQueueLength >= _options.MaintenanceQueueCapacity;
 
         if (saturated)
             return Task.FromResult(HealthCheckResult.Unhealthy(
                 "Synchronization Engine capacity is exhausted.",
                 data: data));
 
-        var degraded =
-            IsAboveThreshold(statistics.TrackedTasks, _options.MaxTrackedTasks) ||
-            IsAboveThreshold(
+        var degraded = IsAboveThreshold(statistics.TrackedTasks, _options.MaxTrackedTasks) ||
+                       IsAboveThreshold(
                 statistics.InteractiveQueueLength,
                 _options.InteractiveQueueCapacity) ||
-            IsAboveThreshold(
+                       IsAboveThreshold(
                 statistics.SynchronizationQueueLength,
                 _options.QueueCapacity) ||
-            IsAboveThreshold(
+                       IsAboveThreshold(
                 statistics.MaintenanceQueueLength,
                 _options.MaintenanceQueueCapacity);
 

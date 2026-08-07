@@ -1,4 +1,47 @@
-.monitor-page { min-height: calc(100vh - 64px); }
-.lane-card { height: 100%; border-top: 3px solid var(--mud-palette-primary); }
-.task-key { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; font-size: .75rem; }
-@media (max-width: 960px) { .monitor-page { padding-left: 0 !important; padding-right: 0 !important; } }
+.monitor-page {
+    min-height: calc(100vh - 64px);
+}
+
+.lane-card {
+    height: 100%;
+    border-top: 3px solid var(--mud-palette-primary);
+}
+
+.task-key {
+    display: block;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: .75rem;
+}
+
+.state-summary,
+.monitor-header-status {
+    flex-wrap: wrap;
+}
+
+.executions-card {
+    width: 100%;
+    min-width: 0;
+}
+
+.executions-table {
+    width: 100%;
+}
+
+@media (max-width: 600px) {
+    .monitor-header,
+    .executions-header {
+        align-items: flex-start !important;
+        flex-direction: column !important;
+    }
+}
+
+@media (max-width: 960px) {
+    .monitor-page {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+}

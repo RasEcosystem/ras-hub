@@ -5,7 +5,8 @@ using RasHub.Web.Data;
 namespace RasHub.Web.Infrastructure.Authorization;
 
 public sealed class FirstUserAdminService(
-    UserManager<ApplicationUser> userManager)
+    UserManager<ApplicationUser> userManager,
+    ILogger<FirstUserAdminService> logger)
 {
     private static readonly SemaphoreSlim AssignmentLock = new(1, 1);
 
@@ -19,9 +20,22 @@ public sealed class FirstUserAdminService(
             if (await userManager.Users.CountAsync() != 1)
                 return IdentityResult.Success;
 
-            return await userManager.AddToRoleAsync(
-                user,
-                AppRoles.Admin);
+            var result = await userManager.AddToRoleAsync(user, AppRoles.Admin);
+
+            if (result.Succeeded)
+                logger.LogInformation(
+                    "Assigned the {Role} role to the first registered user {UserId}",
+                    AppRoles.Admin,
+                    user.Id);
+            else
+                logger.LogWarning(
+                    "Failed to assign the {Role} role to the first registered " +
+                    "user {UserId}: {Errors}",
+                    AppRoles.Admin,
+                    user.Id,
+                    string.Join("; ", result.Errors.Select(error => error.Code)));
+
+            return result;
         }
         finally
         {

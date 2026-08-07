@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RasHub.Synchronization.Abstractions;
 using RasHub.Synchronization.Configuration;
@@ -10,41 +11,44 @@ using RasHub.Synchronization.Models;
 
 namespace RasHub.Synchronization.Internal.Engine;
 
-/// <summary>
-///     Coordinates task registration, deduplication, enqueueing, cancellation, snapshots, and retention.
-/// </summary>
 internal sealed class SynchronizationEngine : ISynchronizationEngine
 {
     private readonly ConcurrentDictionary<string, BackgroundTaskExecution> _deduplicated =
         new(StringComparer.Ordinal);
 
-    private readonly SynchronizationEngineOptions _engineOptions;
+    private readonly ILogger<SynchronizationEngine> _logger;
     private readonly BackgroundTaskMetrics _metrics;
-
     private readonly IBackgroundTaskQueue _queue;
+    private readonly SynchronizationEngineOptions _engineOptions;
     private readonly BackgroundTaskRescheduler _rescheduler;
+    private readonly DateTimeOffset _startedAt;
 
     private readonly ConcurrentDictionary<Guid, BackgroundTaskExecution> _tasks =
         new();
 
     private readonly TimeProvider _timeProvider;
-    private readonly DateTimeOffset _startedAt;
+    private readonly TimingAccumulator _overallTiming = new();
+    private readonly TimingAccumulator _interactiveTiming = new();
+    private readonly TimingAccumulator _synchronizationTiming = new();
+    private readonly TimingAccumulator _maintenanceTiming = new();
     private long _interactiveCompletedTasks;
-    private long _synchronizationCompletedTasks;
     private long _maintenanceCompletedTasks;
+    private long _synchronizationCompletedTasks;
 
     public SynchronizationEngine(
         IBackgroundTaskQueue queue,
         BackgroundTaskRescheduler rescheduler,
         TimeProvider timeProvider,
         IOptions<SynchronizationEngineOptions> engineOptions,
-        BackgroundTaskMetrics metrics)
+        BackgroundTaskMetrics metrics,
+        ILogger<SynchronizationEngine> logger)
     {
         _queue = queue;
         _rescheduler = rescheduler;
         _timeProvider = timeProvider;
         _engineOptions = engineOptions.Value;
         _metrics = metrics;
+        _logger = logger;
         _startedAt = timeProvider.GetUtcNow();
     }
 
@@ -85,6 +89,11 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
             if (_tasks.Count >= _engineOptions.MaxTrackedTasks)
             {
                 _metrics.Rejected(taskType);
+                _logger.LogWarning(
+                    "Rejected background task {TaskType}: task registry reached " +
+                    "its limit of {MaxTrackedTasks}",
+                    taskType.FullName,
+                    _engineOptions.MaxTrackedTasks);
                 throw new BackgroundTaskRejectedException(
                     taskType,
                     "the task registry reached its configured limit");
@@ -120,6 +129,11 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
                 _tasks.TryRemove(execution.Id, out _);
                 RemoveDeduplication(deduplicationKey, execution);
                 _metrics.Rejected(taskType);
+                _logger.LogWarning(
+                    "Rejected background task {TaskType} for queue {Queue}: " +
+                    "queue capacity is exhausted",
+                    taskType.FullName,
+                    options.Queue);
                 throw new BackgroundTaskRejectedException(taskType);
             }
 
@@ -131,7 +145,7 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
                     TaskScheduler.Default);
 
             _ = execution.Completion.ContinueWith(
-                _ => RecordCompletedExecution(execution.Options.Queue),
+                _ => RecordCompletedExecution(execution),
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
@@ -181,24 +195,79 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
             _queue.GetHighWaterMark(BackgroundTaskQueue.Interactive),
             _queue.GetHighWaterMark(BackgroundTaskQueue.Synchronization),
             _queue.GetHighWaterMark(BackgroundTaskQueue.Maintenance),
+            _overallTiming.CreateSnapshot(),
+            _interactiveTiming.CreateSnapshot(),
+            _synchronizationTiming.CreateSnapshot(),
+            _maintenanceTiming.CreateSnapshot(),
             _startedAt);
     }
 
-    private void RecordCompletedExecution(BackgroundTaskQueue queue)
+    private void RecordCompletedExecution(BackgroundTaskExecution execution)
     {
-        switch (queue)
+        TimingAccumulator laneTiming;
+        switch (execution.Options.Queue)
         {
             case BackgroundTaskQueue.Interactive:
                 Interlocked.Increment(ref _interactiveCompletedTasks);
+                laneTiming = _interactiveTiming;
                 break;
             case BackgroundTaskQueue.Synchronization:
                 Interlocked.Increment(ref _synchronizationCompletedTasks);
+                laneTiming = _synchronizationTiming;
                 break;
             case BackgroundTaskQueue.Maintenance:
                 Interlocked.Increment(ref _maintenanceCompletedTasks);
+                laneTiming = _maintenanceTiming;
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(queue));
+                throw new ArgumentOutOfRangeException(nameof(execution.Options.Queue));
+        }
+
+        var snapshot = execution.CreateSnapshot();
+        if (snapshot.StartedAt is not { } startedAt ||
+            snapshot.CompletedAt is not { } completedAt)
+            return;
+
+        var wait = startedAt - snapshot.CreatedAt;
+        var runtime = completedAt - startedAt;
+        var total = completedAt - snapshot.CreatedAt;
+
+        laneTiming.Record(wait, runtime, total);
+        _overallTiming.Record(wait, runtime, total);
+    }
+
+    private sealed class TimingAccumulator
+    {
+        private readonly object _sync = new();
+        private long _count;
+        private long _runtimeTicks;
+        private long _totalTicks;
+        private long _waitTicks;
+
+        public void Record(TimeSpan wait, TimeSpan runtime, TimeSpan total)
+        {
+            lock (_sync)
+            {
+                _waitTicks += wait.Ticks;
+                _runtimeTicks += runtime.Ticks;
+                _totalTicks += total.Ticks;
+                _count++;
+            }
+        }
+
+        public BackgroundTaskTimingStatistics CreateSnapshot()
+        {
+            lock (_sync)
+            {
+                if (_count == 0)
+                    return new BackgroundTaskTimingStatistics(0, null, null, null);
+
+                return new BackgroundTaskTimingStatistics(
+                    _count,
+                    TimeSpan.FromTicks(_waitTicks / _count),
+                    TimeSpan.FromTicks(_runtimeTicks / _count),
+                    TimeSpan.FromTicks(_totalTicks / _count));
+            }
         }
     }
 
@@ -214,8 +283,7 @@ internal sealed class SynchronizationEngine : ISynchronizationEngine
 
     internal void CleanupCompletedTasks()
     {
-        var cutoff = _timeProvider.GetUtcNow() -
-                     _engineOptions.CompletedTaskRetention;
+        var cutoff = _timeProvider.GetUtcNow() - _engineOptions.CompletedTaskRetention;
 
         foreach (var pair in _tasks)
         {

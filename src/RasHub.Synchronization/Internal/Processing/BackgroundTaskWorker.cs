@@ -191,9 +191,8 @@ internal sealed class BackgroundTaskWorker
         Exception exception)
     {
         var now = _timeProvider.GetUtcNow();
-        var canRetry =
-            exception is not NonRetryableBackgroundTaskException &&
-            execution.AttemptCount < execution.Options.MaxAttempts;
+        var canRetry = exception is not NonRetryableBackgroundTaskException &&
+                       execution.AttemptCount < execution.Options.MaxAttempts;
 
         if (canRetry)
         {

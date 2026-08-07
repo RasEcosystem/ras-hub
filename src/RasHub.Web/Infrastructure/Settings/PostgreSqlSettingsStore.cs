@@ -58,7 +58,10 @@ public sealed class PostgreSqlSettingsStore(
                 .SetProperty(entry => entry.UpdatedAt, updatedAt));
 
         if (updated > 0)
+        {
+            LogChanged<T>("updated", scope);
             return;
+        }
 
         dbContext.Settings.Add(new SettingEntry
         {
@@ -80,7 +83,12 @@ public sealed class PostgreSqlSettingsStore(
                 .ExecuteUpdateAsync(update => update
                     .SetProperty(entry => entry.Value, value)
                     .SetProperty(entry => entry.UpdatedAt, updatedAt));
+
+            LogChanged<T>("updated after a concurrent insert", scope);
+            return;
         }
+
+        LogChanged<T>("created", scope);
     }
 
     public async Task RemoveAsync<T>(string? scope = null)
@@ -88,8 +96,20 @@ public sealed class PostgreSqlSettingsStore(
     {
         var key = ConfigurationKey.For<T>(scope);
 
-        await dbContext.Settings
+        var removed = await dbContext.Settings
             .Where(entry => entry.Key == key)
             .ExecuteDeleteAsync();
+
+        if (removed > 0)
+            LogChanged<T>("removed", scope);
+    }
+
+    private void LogChanged<T>(string operation, string? scope)
+    {
+        logger.LogInformation(
+            "Settings {SettingsType} were {Operation}; scoped: {IsScoped}",
+            typeof(T).Name,
+            operation,
+            scope is not null);
     }
 }

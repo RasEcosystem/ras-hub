@@ -5,47 +5,33 @@ namespace RasHub.Web.Infrastructure.Authorization;
 
 public static class AdminRoleInitializer
 {
-    private const string BootstrapAdminEmailKey =
-        "Authorization:BootstrapAdminEmail";
+    private const string BootstrapAdminEmailKey = "Authorization:BootstrapAdminEmail";
 
     public static async Task InitializeAdminRoleAsync(
         this IServiceProvider services,
         IConfiguration configuration)
     {
-        await using var scope =
-            services.CreateAsyncScope();
-
-        var roleManager =
-            scope.ServiceProvider
-                .GetRequiredService<RoleManager<IdentityRole>>();
-
-        var userManager =
-            scope.ServiceProvider
-                .GetRequiredService<UserManager<ApplicationUser>>();
-
-        var logger =
-            scope.ServiceProvider
-                .GetRequiredService<ILoggerFactory>()
-                .CreateLogger(typeof(AdminRoleInitializer));
+        await using var scope = services.CreateAsyncScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var logger = scope.ServiceProvider
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(AdminRoleInitializer));
 
         if (!await roleManager.RoleExistsAsync(AppRoles.Admin))
         {
-            var createRoleResult =
-                await roleManager.CreateAsync(
-                    new IdentityRole(AppRoles.Admin));
+            var createRoleResult = await roleManager.CreateAsync(new IdentityRole(AppRoles.Admin));
 
             EnsureSucceeded(
                 createRoleResult,
                 $"Unable to create the '{AppRoles.Admin}' role.");
         }
 
-        var administrators =
-            await userManager.GetUsersInRoleAsync(AppRoles.Admin);
+        var administrators = await userManager.GetUsersInRoleAsync(AppRoles.Admin);
 
         if (administrators.Count > 0) return;
 
-        var bootstrapAdminEmail =
-            configuration[BootstrapAdminEmailKey];
+        var bootstrapAdminEmail = configuration[BootstrapAdminEmailKey];
 
         if (string.IsNullOrWhiteSpace(bootstrapAdminEmail))
         {
@@ -57,9 +43,7 @@ public static class AdminRoleInitializer
             return;
         }
 
-        var user =
-            await userManager.FindByEmailAsync(
-                bootstrapAdminEmail.Trim());
+        var user = await userManager.FindByEmailAsync(bootstrapAdminEmail.Trim());
 
         if (user is null)
         {
@@ -71,10 +55,7 @@ public static class AdminRoleInitializer
             return;
         }
 
-        var addToRoleResult =
-            await userManager.AddToRoleAsync(
-                user,
-                AppRoles.Admin);
+        var addToRoleResult = await userManager.AddToRoleAsync(user, AppRoles.Admin);
 
         EnsureSucceeded(
             addToRoleResult,
@@ -93,12 +74,8 @@ public static class AdminRoleInitializer
     {
         if (result.Succeeded) return;
 
-        var errors =
-            string.Join(
-                "; ",
-                result.Errors.Select(error => error.Description));
+        var errors = string.Join("; ", result.Errors.Select(error => error.Description));
 
-        throw new InvalidOperationException(
-            $"{message} {errors}");
+        throw new InvalidOperationException($"{message} {errors}");
     }
 }

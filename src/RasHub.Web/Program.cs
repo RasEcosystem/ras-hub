@@ -362,15 +362,15 @@ internal static class ApplicationConfigurationExtensions
         app.MapAdditionalIdentityEndpoints();
 
         app.MapHealthChecks("/health/live", new HealthCheckOptions
-            {
-                Predicate = _ => false
-            })
+        {
+            Predicate = _ => false
+        })
             .AllowAnonymous();
 
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
-            {
-                Predicate = registration => registration.Tags.Contains("ready")
-            })
+        {
+            Predicate = registration => registration.Tags.Contains("ready")
+        })
             .AllowAnonymous();
     }
 

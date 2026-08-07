@@ -507,6 +507,48 @@ public sealed class SynchronizationEngineBehaviorTests
         Assert.Equal(HealthStatus.Unhealthy, report.Status);
     }
 
+    [Fact]
+    public async Task Lifetime_timing_statistics_survive_execution_cleanup()
+    {
+        using var host = CreateHost(configure: options =>
+        {
+            options.CompletedTaskRetention = TimeSpan.Zero;
+            options.RegistryCleanupInterval = TimeSpan.FromMilliseconds(10);
+        });
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var engine = GetEngine(host);
+            var handle = engine.Enqueue(new RecordedTask(1));
+            await Await(handle, cancellationToken);
+
+            SynchronizationEngineStatistics statistics;
+            do
+            {
+                statistics = engine.GetStatistics();
+                if (statistics.OverallTiming.SampleCount == 0)
+                    await Task.Delay(10, cancellationToken);
+            } while (statistics.OverallTiming.SampleCount == 0);
+
+            var timingBeforeCleanup = statistics.OverallTiming;
+
+            while (engine.GetTask(handle.Id) is not null)
+                await Task.Delay(10, cancellationToken);
+
+            var timingAfterCleanup = engine.GetStatistics().OverallTiming;
+
+            Assert.Equal(1, timingBeforeCleanup.SampleCount);
+            Assert.Equal(timingBeforeCleanup, timingAfterCleanup);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
+    }
+
     private static IHost CreateHost(
         Action<IServiceCollection>? register = null,
         Action<SynchronizationEngineOptions>? configure = null)
