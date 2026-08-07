@@ -8,6 +8,7 @@ using RasHub.Web.IntegrationTests.Infrastructure;
 
 namespace RasHub.Web.IntegrationTests.Api;
 
+[Collection(WebApplicationCollection.Name)]
 public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory>
 {
     private const string RasGatesPath = "/api/v1/ras-gates";

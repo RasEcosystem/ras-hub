@@ -10,10 +10,12 @@ using RasHub.Contracts.Common;
 using RasHub.Infrastructure;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Extensions;
+using RasHub.Synchronization.Configuration;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Authentication;
+using RasHub.Web.Endpoints;
 using RasHub.Web.Middlewares;
 using Scalar.AspNetCore;
 using Serilog;
@@ -61,7 +63,34 @@ public class Program
             .AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
             .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,
-                _ => { });
+                _ => { })
+            .AddCookie(
+                ApiDocumentationAuthenticationDefaults.Scheme,
+                options =>
+                {
+                    options.Cookie.Name = "RasHub.ApiDocumentation";
+                    options.Cookie.HttpOnly = true;
+                    options.Cookie.SameSite = SameSiteMode.Strict;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                    options.LoginPath =
+                        ApiDocumentationAuthenticationDefaults.LoginPath;
+                    options.AccessDeniedPath =
+                        ApiDocumentationAuthenticationDefaults.LoginPath;
+                    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                    options.SlidingExpiration = false;
+                });
+
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(
+                ApiDocumentationAuthenticationDefaults.Policy,
+                policy =>
+                {
+                    policy.AddAuthenticationSchemes(
+                        ApiDocumentationAuthenticationDefaults.Scheme);
+                    policy.RequireAuthenticatedUser();
+                });
+        });
 
         builder.Services
             .AddOptions<RasHubOptions>()
@@ -71,15 +100,35 @@ public class Program
                 "RasHub:ApiKey is required.")
             .ValidateOnStart();
 
+        if (builder.Environment.IsDevelopment())
+            builder.Services
+                .AddOptions<ApiDocumentationOptions>()
+                .BindConfiguration(ApiDocumentationOptions.SectionName)
+                .Validate(
+                    options => !string.IsNullOrWhiteSpace(options.Username),
+                    "ApiDocumentation:Username is required in Development.")
+                .Validate(
+                    options => !string.IsNullOrWhiteSpace(options.Password),
+                    "ApiDocumentation:Password is required in Development.")
+                .ValidateOnStart();
+
         builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.ConfigureApi();
         builder.Services.AddOpenApi(options =>
         {
             options.AddDocumentTransformer<ApiKeySecurityTransformer>();
+            options.AddDocumentTransformer<ControllerDescriptionTransformer>();
             options.AddOperationTransformer<ApiKeySecurityTransformer>();
         });
 
         builder.Services.AddRasHubInfrastructure(builder.Configuration);
+
+        builder.Services.AddRasHubSynchronization(options =>
+        {
+            builder.Configuration
+                .GetSection(SynchronizationEngineOptions.SectionName)
+                .Bind(options);
+        });
 
         builder.Services
             .AddHealthChecks()
@@ -215,7 +264,12 @@ internal static class ApplicationConfigurationExtensions
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            app.MapApiDocumentationAuthentication();
+
+            app.MapOpenApi()
+                .RequireAuthorization(
+                    ApiDocumentationAuthenticationDefaults.Policy);
+
             app.MapScalarApiReference("/swagger", options =>
             {
                 options.EnabledTargets =
@@ -231,16 +285,21 @@ internal static class ApplicationConfigurationExtensions
                     .ForceDarkMode()
                     .AddPreferredSecuritySchemes(ApiKeyAuthenticationDefaults.Scheme)
                     .WithDefaultHttpClient(ScalarTarget.Shell, ScalarClient.Curl)
+                    .HideClientButton()
                     .HideDeveloperTools()
                     .DisableMcp()
                     .DisableAgent();
-            });
+            }).RequireAuthorization(
+                ApiDocumentationAuthenticationDefaults.Policy);
         }
 
         app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapControllers();
+
+        if (app.Environment.IsDevelopment())
+            app.MapSynchronizationDiagnostics();
 
         app.MapHealthChecks("/health/live", new HealthCheckOptions
             {

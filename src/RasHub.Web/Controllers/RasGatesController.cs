@@ -8,15 +8,21 @@ using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database.Queries;
+using RasHub.Web.Api.OpenApi;
 
 namespace RasHub.Web.Controllers;
 
 [ApiController]
 [Route("api/v1/ras-gates")]
 [Authorize]
+[ControllerDescription(
+    "Manage RasGate gateways registered in RasHub.")]
 public sealed class RasGatesController : ControllerBase
 {
     [HttpPost("get-paged")]
+    [EndpointSummary("List registered RasGates")]
+    [EndpointDescription(
+        "Returns a paginated collection of non-deleted RasGate gateways registered in RasHub.")]
     [ProducesResponseType(
         typeof(ApiResponse<PageResult<RasGateModel>>),
         StatusCodes.Status200OK)]
@@ -33,6 +39,9 @@ public sealed class RasGatesController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [EndpointSummary("Get a RasGate")]
+    [EndpointDescription(
+        "Returns connection metadata for a registered RasGate. The stored API key is never returned.")]
     [ProducesResponseType(
         typeof(ApiResponse<RasGateModel>),
         StatusCodes.Status200OK)]
@@ -55,6 +64,9 @@ public sealed class RasGatesController : ControllerBase
     }
 
     [HttpPost]
+    [EndpointSummary("Register a RasGate")]
+    [EndpointDescription(
+        "Persists a new RasGate connection and returns its public metadata.")]
     [ProducesResponseType(
         typeof(ApiResponse<RasGateModel>),
         StatusCodes.Status201Created)]
@@ -88,6 +100,9 @@ public sealed class RasGatesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [EndpointSummary("Update a RasGate")]
+    [EndpointDescription(
+        "Updates a registered RasGate. When the API key is omitted, the stored key is preserved.")]
     [ProducesResponseType(
         typeof(ApiResponse<RasGateModel>),
         StatusCodes.Status200OK)]
@@ -122,6 +137,9 @@ public sealed class RasGatesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [EndpointSummary("Delete a RasGate")]
+    [EndpointDescription(
+        "Soft-deletes a registered RasGate so it no longer appears in regular queries.")]
     [ProducesResponseType(
         typeof(ApiResponse<RasGateModel>),
         StatusCodes.Status200OK)]

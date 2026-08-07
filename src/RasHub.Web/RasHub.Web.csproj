@@ -15,8 +15,8 @@
         </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
                           Version="10.0.10"/>
-        <PackageReference Include="Microsoft.OpenApi" Version="2.7.5"/>
-        <PackageReference Include="Scalar.AspNetCore" Version="2.16.16"/>
+        <PackageReference Include="Microsoft.OpenApi" Version="2.3.0"/>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.16.17"/>
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
         <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>
     </ItemGroup>
@@ -24,6 +24,7 @@
     <ItemGroup>
         <ProjectReference Include="..\RasHub.Contracts\src\RasHub.Contracts\RasHub.Contracts.csproj"/>
         <ProjectReference Include="..\RasHub.Infrastructure\RasHub.Infrastructure.csproj"/>
+        <ProjectReference Include="..\RasHub.Synchronization\RasHub.Synchronization.csproj"/>
     </ItemGroup>
 
 </Project>

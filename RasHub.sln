@@ -24,6 +24,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Infrastructure.Integ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Web.IntegrationTests", "tests\IntegrationTests\RasHub.Web.IntegrationTests\RasHub.Web.IntegrationTests.csproj", "{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization", "src\RasHub.Synchronization\RasHub.Synchronization.csproj", "{C743543A-A031-4406-B863-B67ABE22935B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization.IntegrationTests", "tests\IntegrationTests\RasHub.Synchronization.IntegrationTests\RasHub.Synchronization.IntegrationTests.csproj", "{8999040F-FC94-4EFE-A2A0-41754335D482}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -142,6 +146,30 @@ Global
 		{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F}.Release|x64.Build.0 = Release|Any CPU
 		{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F}.Release|x86.ActiveCfg = Release|Any CPU
 		{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F}.Release|x86.Build.0 = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|x64.Build.0 = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Debug|x86.Build.0 = Debug|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|x64.ActiveCfg = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|x64.Build.0 = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|x86.ActiveCfg = Release|Any CPU
+		{C743543A-A031-4406-B863-B67ABE22935B}.Release|x86.Build.0 = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|x64.Build.0 = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Debug|x86.Build.0 = Debug|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|x64.ActiveCfg = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|x64.Build.0 = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|x86.ActiveCfg = Release|Any CPU
+		{8999040F-FC94-4EFE-A2A0-41754335D482}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -153,5 +181,6 @@ Global
 		{B14BA3F3-3B6C-4A69-ADE9-0D89F37EF945} = {00F6D1E2-8F3F-4C25-822C-BA8C6004FBE8}
 		{265C25B7-3BDE-4D16-8CB2-606191A91E47} = {A247595B-73A1-4812-9377-14B8D68D0211}
 		{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F} = {A247595B-73A1-4812-9377-14B8D68D0211}
+		{8999040F-FC94-4EFE-A2A0-41754335D482} = {A247595B-73A1-4812-9377-14B8D68D0211}
 	EndGlobalSection
 EndGlobal
