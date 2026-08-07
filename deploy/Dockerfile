@@ -7,6 +7,7 @@ COPY src/RasHub.Application/RasHub.Application.csproj src/RasHub.Application/
 COPY src/RasHub.Domain/RasHub.Domain.csproj src/RasHub.Domain/
 COPY src/RasHub.Infrastructure/RasHub.Infrastructure.csproj src/RasHub.Infrastructure/
 COPY src/RasHub.Web/RasHub.Web.csproj src/RasHub.Web/
+COPY src/RasHub.Synchronization/RasHub.Synchronization.csproj src/RasHub.Synchronization/
 COPY src/RasHub.Contracts/src/RasHub.Contracts/RasHub.Contracts.csproj src/RasHub.Contracts/src/RasHub.Contracts/
 
 RUN dotnet restore src/RasHub.Web/RasHub.Web.csproj -m:1
