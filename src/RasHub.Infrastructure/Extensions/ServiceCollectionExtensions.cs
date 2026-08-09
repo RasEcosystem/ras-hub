@@ -4,11 +4,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
 using RasHub.Infrastructure.Database.Queries;
-using RasHub.Infrastructure.RasGates;
-using RasHub.Infrastructure.RasGates.Serialization;
+using RasHub.Infrastructure.RasGates.Client;
+using RasHub.Infrastructure.RasGates.Endpoints;
+using RasHub.Infrastructure.RasGates.Rac;
+using RasHub.Infrastructure.RasGates.Rac.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.Extensions;
 
@@ -25,10 +30,14 @@ public static class ServiceCollectionExtensions
                 $"Connection string 'ConnectionStrings:{RasHubDbContext.ConnectionStringName}' is required.");
 
         services.AddSingleton<AuditSoftDeleteInterceptor>();
+        services.AddSingleton<RasGateConfigurationRevisionInterceptor>();
 
         services.AddDbContext<RasHubDbContext>((serviceProvider, options) =>
         {
-            options.AddInterceptors(serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>());
+            options.AddInterceptors(
+                serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
+                serviceProvider.GetRequiredService<
+                    RasGateConfigurationRevisionInterceptor>());
 
             options.UseNpgsql(connectionString, npgsql =>
             {
@@ -39,12 +48,29 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IRasClusterSnapshotStore, RasClusterSnapshotStore>();
+        services.AddScoped<IRasGateSyncPublisher, RasGateSyncPublisher>();
         services.AddScoped<RasClusterQueries>();
         services.AddScoped<RasGateQueries>();
 
+        services.AddSingleton<IRasGateEndpointFactory, RasGateEndpointFactory>();
         services.AddSingleton<RasGateHttpClientTransport>();
+        services.AddSingleton<RacVersionParser>();
         services.AddSingleton<RacKeyValueOutputDeserializer>();
         services.AddSingleton<RacClusterOutputDeserializer>();
+        services.AddSingleton<RacClusterSnapshotV1Adapter>();
+        services.AddSingleton<RacClusterInfoV1Adapter>();
+        services.AddSingleton<IRacResourceAdapter<RasClusterSnapshot>>(serviceProvider => serviceProvider
+            .GetRequiredService<
+                RacClusterSnapshotV1Adapter>());
+        services.AddSingleton<IRacResourceAdapter<RasClusterSnapshot>>(serviceProvider => serviceProvider
+            .GetRequiredService<
+                RacClusterInfoV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider.GetRequiredService<
+            RacClusterSnapshotV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider.GetRequiredService<
+            RacClusterInfoV1Adapter>());
+        services.AddSingleton<RacCapabilityResolver>();
+        services.AddSingleton(typeof(RacResourceAdapterResolver<>));
         services.AddSingleton<IRasGateClientFactory, RasGateClientFactory>();
 
         services.AddScoped<IUnitOfWork>(serviceProvider =>

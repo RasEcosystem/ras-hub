@@ -47,11 +47,20 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
         if (user is null)
             return AuthenticateResult.Fail("The provided API key is invalid.");
 
+        var roles = await (
+                from userRole in _dbContext.UserRoles.AsNoTracking()
+                join role in _dbContext.Roles.AsNoTracking()
+                    on userRole.RoleId equals role.Id
+                where userRole.UserId == user.Id && role.Name != null
+                select role.Name!)
+            .ToListAsync(Context.RequestAborted);
+
         var identity = new ClaimsIdentity(
-            [
+            new[]
+            {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? user.Id)
-            ],
+            }.Concat(roles.Select(role => new Claim(ClaimTypes.Role, role))),
             Scheme.Name);
 
         var principal = new ClaimsPrincipal(identity);
@@ -70,6 +79,21 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
         Response.Headers[ApiTrace.HeaderName] = traceId;
 
         var response = ApiResponse<object>.Fail(HttpStatusCode.Unauthorized);
+
+        await Response.WriteAsJsonAsync(
+            response,
+            Context.RequestAborted);
+    }
+
+    protected override async Task HandleForbiddenAsync(
+        AuthenticationProperties properties)
+    {
+        Response.StatusCode = StatusCodes.Status403Forbidden;
+
+        var traceId = ApiTrace.GetTraceId(Context);
+        Response.Headers[ApiTrace.HeaderName] = traceId;
+
+        var response = ApiResponse<object>.Fail(HttpStatusCode.Forbidden);
 
         await Response.WriteAsJsonAsync(
             response,

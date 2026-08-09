@@ -1,14 +1,16 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks;
+using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
-using RasHub.Synchronization.Abstractions;
 using RasHub.Web.Authentication;
+using RasHub.Web.Data;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
 namespace RasHub.Web.IntegrationTests.Api;
@@ -59,6 +61,46 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
+    public async Task Non_admin_api_key_cannot_mutate_RasGate_configuration()
+    {
+        var apiKey = $"non-admin-{Guid.NewGuid():N}";
+        var email = $"non-admin-{Guid.NewGuid():N}@example.test";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var result = await userManager.CreateAsync(new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                ApiKey = apiKey
+            });
+            Assert.True(result.Succeeded);
+        }
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            ApiKeyAuthenticationDefaults.HeaderName,
+            apiKey);
+        var request = new CreateRasGateRequest(
+            "Forbidden gate",
+            "https://gate.example.test",
+            443,
+            "gate-secret");
+
+        using var response = await client.PostAsJsonAsync(
+            RasGatesPath,
+            request,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("forbidden", GetErrorCode(json));
+        AssertTraceId(response);
+    }
+
+    [Fact]
     public async Task Create_returns_created_location_and_does_not_expose_api_key()
     {
         using var client = _factory.CreateAuthenticatedClient();
@@ -90,6 +132,49 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.NotNull(stored);
         Assert.Equal(request.ApiKey, stored.ApiKey);
         Assert.True(stored.IsActive);
+    }
+
+    [Fact]
+    public async Task Create_http_private_endpoint_with_custom_port_returns_created()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+        var request = new CreateRasGateRequest(
+            "Private gate",
+            "http://10.42.0.15",
+            15_050,
+            "private-gate-secret");
+
+        using var response = await client.PostAsJsonAsync(
+            RasGatesPath,
+            request,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.True(json.GetProperty("success").GetBoolean());
+        Assert.Equal(request.Url, json.GetProperty("data").GetProperty("url").GetString());
+        Assert.Equal(request.Port, json.GetProperty("data").GetProperty("port").GetInt32());
+    }
+
+    [Fact]
+    public async Task Create_unsupported_endpoint_scheme_returns_bad_request()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+        var request = new CreateRasGateRequest(
+            "Invalid gate",
+            "ftp://gate.example.test",
+            21,
+            "gate-secret");
+
+        using var response = await client.PostAsJsonAsync(
+            RasGatesPath,
+            request,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(json.GetProperty("success").GetBoolean());
+        Assert.Equal("ras_gate_endpoint_invalid", GetErrorCode(json));
     }
 
     [Fact]
@@ -133,7 +218,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_status_without_refresh_returns_cached_status()
+    public async Task Get_status_returns_cached_status()
     {
         var observedAt = DateTime.UtcNow.AddMinutes(-5);
         var rasGate = await _factory.SeedRasGateAsync(
@@ -156,7 +241,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_status_with_refresh_calls_gate_persists_and_returns_status()
+    public async Task Check_status_calls_gate_persists_and_returns_status()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         _factory.RasGateClientFactory.Status =
@@ -165,8 +250,9 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
                 "2.3.4");
         using var client = _factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status?refresh=true",
+        using var response = await client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/check",
+            null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
@@ -194,12 +280,61 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
-    public async Task Get_status_for_unknown_gate_returns_not_found_without_scheduling_refresh()
+    public async Task Status_response_from_previous_configuration_is_not_published()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        _factory.RasGateClientFactory.Status =
+            new RasGateStatus("Old remote Gate", "1.0.0");
+        _factory.RasGateClientFactory.PauseStatusRequests();
+        using var client = _factory.CreateAuthenticatedClient();
+        var checkTask = client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/check",
+            null,
+            TestContext.Current.CancellationToken);
+
+        try
+        {
+            await _factory.RasGateClientFactory.WaitForStatusRequestAsync(
+                TestContext.Current.CancellationToken);
+
+            using var updateResponse = await client.PutAsJsonAsync(
+                $"{RasGatesPath}/{rasGate.Id}",
+                new UpdateRasGateRequest(
+                    rasGate.Name,
+                    "https://replacement.example.test",
+                    9443,
+                    "replacement-secret"),
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        }
+        finally
+        {
+            _factory.RasGateClientFactory.ReleaseStatusRequests();
+        }
+
+        using var checkResponse = await checkTask;
+        var json = await ReadJsonAsync(checkResponse);
+
+        Assert.Equal(HttpStatusCode.Conflict, checkResponse.StatusCode);
+        Assert.Equal("ras_gate_configuration_changed", GetErrorCode(json));
+
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(2, stored.ConfigurationRevision);
+        Assert.Null(stored.InstanceName);
+        Assert.Null(stored.Version);
+        Assert.Null(stored.StatusObservedAt);
+        Assert.Null(stored.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Check_status_for_unknown_gate_returns_not_found_without_scheduling_check()
     {
         using var client = _factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync(
-            $"{RasGatesPath}/{Guid.NewGuid()}/status?refresh=true",
+        using var response = await client.PostAsync(
+            $"{RasGatesPath}/{Guid.NewGuid()}/status/check",
+            null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -211,16 +346,19 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Get_status_for_inactive_gate_returns_conflict_without_calling_gate(
-        bool refresh)
+    public async Task Status_endpoints_for_inactive_gate_return_conflict_without_calling_gate(
+        bool check)
     {
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
         using var client = _factory.CreateAuthenticatedClient();
         var path = $"{RasGatesPath}/{rasGate.Id}/status" +
-                   (refresh ? "?refresh=true" : string.Empty);
+                   (check ? "/check" : string.Empty);
+        using var request = new HttpRequestMessage(
+            check ? HttpMethod.Post : HttpMethod.Get,
+            path);
 
-        using var response = await client.GetAsync(
-            path,
+        using var response = await client.SendAsync(
+            request,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -235,13 +373,13 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
         using var scope = _factory.Services.CreateScope();
         var statusHandler = scope.ServiceProvider.GetRequiredService<
-            IBackgroundTaskHandler<RefreshRasGateStatusTask>>();
+            IBackgroundTaskHandler<CheckRasGateStatusTask>>();
         var clustersHandler = scope.ServiceProvider.GetRequiredService<
             IBackgroundTaskHandler<SynchronizeClustersTask>>();
 
         await Assert.ThrowsAsync<RasGateInactiveException>(() =>
             statusHandler.ExecuteAsync(
-                new RefreshRasGateStatusTask(rasGate.Id),
+                new CheckRasGateStatusTask(rasGate.Id),
                 TestContext.Current.CancellationToken));
         await Assert.ThrowsAsync<RasGateInactiveException>(() =>
             clustersHandler.ExecuteAsync(
@@ -259,8 +397,8 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         using var client = _factory.CreateAuthenticatedClient();
         var request = new UpdateRasGateRequest(
             "Updated gate",
-            "https://updated.example.test",
-            9443);
+            rasGate.Url,
+            rasGate.Port);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -280,6 +418,33 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
+    public async Task Update_endpoint_without_api_key_is_rejected_and_preserves_configuration()
+    {
+        var rasGate = await _factory.SeedRasGateAsync(apiKey: "original-secret");
+        using var client = _factory.CreateAuthenticatedClient();
+        var request = new UpdateRasGateRequest(
+            "Updated gate",
+            "https://attacker.example.test",
+            9443);
+
+        using var response = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            request,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("ras_gate_api_key_required", GetErrorCode(json));
+
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(rasGate.Url, stored.Url);
+        Assert.Equal(rasGate.Port, stored.Port);
+        Assert.Equal("original-secret", stored.ApiKey);
+        Assert.Equal(1, stored.ConfigurationRevision);
+    }
+
+    [Fact]
     public async Task Update_with_api_key_replaces_the_stored_secret()
     {
         var rasGate = await _factory.SeedRasGateAsync(apiKey: "original-secret");
@@ -296,7 +461,9 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("new-secret", (await _factory.FindRasGateAsync(rasGate.Id))?.ApiKey);
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.Equal("new-secret", stored?.ApiKey);
+        Assert.Equal(2, stored?.ConfigurationRevision);
     }
 
     [Fact]

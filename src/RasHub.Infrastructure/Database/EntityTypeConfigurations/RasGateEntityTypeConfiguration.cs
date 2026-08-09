@@ -36,10 +36,20 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
             .HasMaxLength(RasGate.ApiKeyMaxLength)
             .IsRequired();
 
+        builder.Property(rasGate => rasGate.ConfigurationRevision)
+            .HasColumnName("configuration_revision")
+            .HasDefaultValue(1L)
+            .IsConcurrencyToken()
+            .IsRequired();
+
         builder.Property(rasGate => rasGate.IsActive)
             .HasColumnName("is_active")
             .HasDefaultValue(true)
+            .IsConcurrencyToken()
             .IsRequired();
+
+        builder.Property(rasGate => rasGate.IsDeleted)
+            .IsConcurrencyToken();
 
         builder.Property(rasGate => rasGate.InstanceName)
             .HasColumnName("instance_name");

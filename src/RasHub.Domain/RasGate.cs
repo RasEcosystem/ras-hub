@@ -16,6 +16,8 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
 
     public required string ApiKey { get; set; }
 
+    public long ConfigurationRevision { get; set; } = 1;
+
     public bool IsActive { get; set; } = true;
 
     public string? InstanceName { get; set; }

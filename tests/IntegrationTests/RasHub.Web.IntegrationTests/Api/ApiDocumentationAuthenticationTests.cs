@@ -101,7 +101,7 @@ public sealed partial class ApiDocumentationAuthenticationTests
             "/",
             TestContext.Current.CancellationToken);
         using var engine = await client.GetAsync(
-            "/synchronization-engine",
+            "/background-tasks",
             TestContext.Current.CancellationToken);
         using var userSettings = await client.GetAsync(
             "/user-settings",
@@ -230,12 +230,12 @@ public sealed partial class ApiDocumentationAuthenticationTests
         var root = document.RootElement;
         var successSchema = ResolveResponseSchema(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
             "post",
             "200");
         var errorSchema = ResolveResponseSchema(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
             "post",
             "502");
 

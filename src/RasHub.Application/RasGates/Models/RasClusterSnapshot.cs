@@ -30,13 +30,13 @@ public sealed record RasClusterSnapshot
 
     public required bool KillProblemProcesses { get; init; }
 
-    public bool KillByMemoryWithDump { get; init; }
+    public bool? KillByMemoryWithDump { get; init; }
 
-    public bool AllowAccessRightAuditEventsRecording { get; init; }
+    public bool? AllowAccessRightAuditEventsRecording { get; init; }
 
-    public long PingPeriod { get; init; }
+    public long? PingPeriod { get; init; }
 
-    public long PingTimeout { get; init; }
+    public long? PingTimeout { get; init; }
 
-    public string RestartSchedule { get; init; } = string.Empty;
+    public string? RestartSchedule { get; init; }
 }

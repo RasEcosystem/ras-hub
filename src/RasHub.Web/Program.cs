@@ -13,11 +13,11 @@ using MudBlazor.Services;
 using Nava.Settings.Abstractions;
 using Nava.Settings.Extensions;
 using RasHub.Application.RasGates.Tasks;
+using RasHub.BackgroundTasks.Abstractions;
+using RasHub.BackgroundTasks.Configuration;
 using RasHub.Contracts.Common;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Extensions;
-using RasHub.Synchronization.Abstractions;
-using RasHub.Synchronization.Configuration;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
@@ -29,6 +29,7 @@ using RasHub.Web.Infrastructure;
 using RasHub.Web.Infrastructure.Authorization;
 using RasHub.Web.Infrastructure.Diagnostics;
 using RasHub.Web.Infrastructure.RasGates;
+using RasHub.Web.Infrastructure.Security;
 using RasHub.Web.Infrastructure.Settings;
 using RasHub.Web.Infrastructure.Themes.Providers;
 using RasHub.Web.Middlewares;
@@ -69,6 +70,7 @@ public class Program
         var applicationDiagnostics = new ApplicationDiagnostics(TimeProvider.System);
 
         builder.Services.AddSingleton(applicationDiagnostics);
+        builder.Services.AddRasHubDataProtection(builder.Configuration);
 
         builder.Host.UseSerilog((context, services, configuration) =>
         {
@@ -103,6 +105,9 @@ public class Program
                 policy => policy.RequireAuthenticatedUser());
             options.AddPolicy(
                 AppPolicies.ManageGlobalSettings,
+                policy => policy.RequireRole(AppRoles.Admin));
+            options.AddPolicy(
+                AppPolicies.ManageRasGates,
                 policy => policy.RequireRole(AppRoles.Admin));
         });
 
@@ -176,7 +181,6 @@ public class Program
         builder.Services.AddScoped<CurrentUserAccessor>();
         builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
         builder.Services.AddScoped<UserAdministrationService>();
-        builder.Services.AddScoped<FirstUserAdminService>();
         builder.Services.AddScoped<UserApiKeyService>();
 
         builder.Services.ConfigureReverseProxy(builder.Configuration);
@@ -190,18 +194,21 @@ public class Program
 
         builder.Services.AddRasHubInfrastructure(builder.Configuration);
 
-        builder.Services.AddRasHubSynchronization(options =>
+        builder.Services.AddRasHubBackgroundTasks(options =>
         {
             builder.Configuration
-                .GetSection(SynchronizationEngineOptions.SectionName)
+                .GetSection(BackgroundTaskEngineOptions.SectionName)
                 .Bind(options);
         });
         builder.Services.AddScoped<
-            IBackgroundTaskHandler<RefreshRasGateStatusTask>,
-            RefreshRasGateStatusTaskHandler>();
+            IBackgroundTaskHandler<CheckRasGateStatusTask>,
+            CheckRasGateStatusTaskHandler>();
         builder.Services.AddScoped<
             IBackgroundTaskHandler<SynchronizeClustersTask>,
             SynchronizeClustersTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<SynchronizeClusterTask>,
+            SynchronizeClusterTaskHandler>();
         builder.Services
             .AddOptions<RasGateMonitoringOptions>()
             .Bind(builder.Configuration.GetSection(

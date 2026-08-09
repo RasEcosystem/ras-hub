@@ -46,4 +46,36 @@ public sealed class RasClusterQueriesTests : IDisposable
             firstPage.Items.Concat(secondPage.Items),
             item => item.Id == other.ExternalId);
     }
+
+    [Fact]
+    public async Task Get_by_external_id_returns_cluster_only_from_requested_gate()
+    {
+        var firstGate = RasGateTestData.Create("First gate");
+        var secondGate = RasGateTestData.Create("Second gate");
+        var sharedExternalId = Guid.NewGuid();
+        var expected = RasClusterTestData.Create(
+            firstGate.Id,
+            sharedExternalId,
+            name: "Expected cluster");
+        var other = RasClusterTestData.Create(
+            secondGate.Id,
+            sharedExternalId,
+            name: "Other cluster");
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(firstGate, secondGate);
+        db.RasClusters.AddRange(expected, other);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var queries = new RasClusterQueries(db);
+
+        var result = await queries.GetByExternalIdAsync(
+            firstGate.Id,
+            sharedExternalId,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(expected.ExternalId, result.Id);
+        Assert.Equal(expected.Name, result.Name);
+    }
 }

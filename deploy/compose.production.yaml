@@ -83,9 +83,20 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       Database__ApplyMigrations: "false"
+      Authorization__BootstrapAdminEmail: ${RASHUB_BOOTSTRAP_ADMIN_EMAIL:?RASHUB_BOOTSTRAP_ADMIN_EMAIL is required}
+      Authorization__BootstrapAdminPasswordFile: /run/secrets/rashub-bootstrap-admin-password
+      DataProtection__KeysPath: /home/app/.aspnet/DataProtection-Keys
+      DataProtection__CertificatePath: /run/secrets/rashub-data-protection-certificate
+      DataProtection__CertificatePasswordFile: /run/secrets/rashub-data-protection-certificate-password
       ReverseProxy__KnownProxies__0: ${RASHUB_TRUSTED_PROXY:-127.0.0.1}
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
       Seq__UiUrl: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
+    volumes:
+      - data-protection-production:/home/app/.aspnet/DataProtection-Keys
+    secrets:
+      - rashub-bootstrap-admin-password
+      - rashub-data-protection-certificate
+      - rashub-data-protection-certificate-password
     ports:
       - "${RASHUB_BIND_ADDRESS:-127.0.0.1}:${RASHUB_PORT:-8080}:8080"
     depends_on:
@@ -106,5 +117,14 @@ services:
     stop_grace_period: 30s
 
 volumes:
+  data-protection-production:
   postgres-production:
   seq-production:
+
+secrets:
+  rashub-bootstrap-admin-password:
+    file: ${RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE:?RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE is required}
+  rashub-data-protection-certificate:
+    file: ${RASHUB_DATA_PROTECTION_CERTIFICATE_PATH:?RASHUB_DATA_PROTECTION_CERTIFICATE_PATH is required}
+  rashub-data-protection-certificate-password:
+    file: ${RASHUB_DATA_PROTECTION_CERTIFICATE_PASSWORD_FILE:?RASHUB_DATA_PROTECTION_CERTIFICATE_PASSWORD_FILE is required}

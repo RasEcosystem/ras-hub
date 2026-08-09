@@ -5,7 +5,11 @@ RasHub is the central .NET backend for [RasStudio](https://github.com/zmaxb/ras-
 Shared request and response models are provided by [RasHub.Contracts](https://github.com/zmaxb/ras-hub-contracts), included as a Git submodule.
 
 Long-running, prioritized, periodic, and recoverable in-process work is managed
-by the [Synchronization Engine](src/RasHub.Synchronization/README.md).
+by the [Background Task Engine](src/RasHub.BackgroundTasks/README.md).
+
+RAC version detection, resource adapters, snapshot completeness, and the
+procedure for adding platform support are documented in
+[RAC compatibility boundary](docs/rac-compatibility.md).
 
 ## Requirements
 

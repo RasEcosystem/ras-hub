@@ -10,6 +10,9 @@ internal sealed class SqliteRasHubDatabase : IDisposable
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
     private readonly AuditSoftDeleteInterceptor _interceptor = new();
 
+    private readonly RasGateConfigurationRevisionInterceptor _revisionInterceptor =
+        new();
+
     public SqliteRasHubDatabase()
     {
         _connection.Open();
@@ -27,7 +30,7 @@ internal sealed class SqliteRasHubDatabase : IDisposable
     {
         var options = new DbContextOptionsBuilder<RasHubDbContext>()
             .UseSqlite(_connection)
-            .AddInterceptors(_interceptor)
+            .AddInterceptors(_interceptor, _revisionInterceptor)
             .Options;
 
         return new RasHubDbContext(options);

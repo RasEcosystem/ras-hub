@@ -9,4 +9,7 @@ public static class AppPolicies
 {
     public const string ManageGlobalSettings =
         "ManageGlobalSettings";
+
+    public const string ManageRasGates =
+        "ManageRasGates";
 }

@@ -24,9 +24,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Infrastructure.Integ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Web.IntegrationTests", "tests\IntegrationTests\RasHub.Web.IntegrationTests\RasHub.Web.IntegrationTests.csproj", "{51BDACF1-B8B9-4C5C-B39D-D22EA8BA614F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization", "src\RasHub.Synchronization\RasHub.Synchronization.csproj", "{C743543A-A031-4406-B863-B67ABE22935B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.BackgroundTasks", "src\RasHub.BackgroundTasks\RasHub.BackgroundTasks.csproj", "{C743543A-A031-4406-B863-B67ABE22935B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.Synchronization.IntegrationTests", "tests\IntegrationTests\RasHub.Synchronization.IntegrationTests\RasHub.Synchronization.IntegrationTests.csproj", "{8999040F-FC94-4EFE-A2A0-41754335D482}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RasHub.BackgroundTasks.IntegrationTests", "tests\IntegrationTests\RasHub.BackgroundTasks.IntegrationTests\RasHub.BackgroundTasks.IntegrationTests.csproj", "{8999040F-FC94-4EFE-A2A0-41754335D482}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

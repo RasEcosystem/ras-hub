@@ -48,6 +48,45 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
                 db.RasClusters.Remove(cluster);
     }
 
+    public async Task InvalidateAsync(
+        Guid rasGateId,
+        CancellationToken cancellationToken)
+    {
+        var clusters = await db.RasClusters
+            .Where(cluster => cluster.RasGateId == rasGateId)
+            .ToListAsync(cancellationToken);
+
+        db.RasClusters.RemoveRange(clusters);
+    }
+
+    public async Task UpsertAsync(
+        Guid rasGateId,
+        RasClusterSnapshot snapshot,
+        DateTime observedAt,
+        CancellationToken cancellationToken)
+    {
+        var cluster = await db.RasClusters
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(
+                item => item.RasGateId == rasGateId &&
+                        item.ExternalId == snapshot.ExternalId,
+                cancellationToken);
+
+        if (cluster is null)
+        {
+            cluster = new RasCluster
+            {
+                RasGateId = rasGateId,
+                ExternalId = snapshot.ExternalId,
+                Name = snapshot.Name,
+                Host = snapshot.Host
+            };
+            db.RasClusters.Add(cluster);
+        }
+
+        Apply(cluster, snapshot, observedAt);
+    }
+
     private static void Apply(
         RasCluster cluster,
         RasClusterSnapshot snapshot,

@@ -28,7 +28,7 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<bool>("AllowAccessRightAuditEventsRecording")
+                    b.Property<bool?>("AllowAccessRightAuditEventsRecording")
                         .HasColumnType("boolean")
                         .HasColumnName("allow_access_right_audit_events_recording");
 
@@ -63,7 +63,7 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<bool>("KillByMemoryWithDump")
+                    b.Property<bool?>("KillByMemoryWithDump")
                         .HasColumnType("boolean")
                         .HasColumnName("kill_by_memory_with_dump");
 
@@ -98,11 +98,11 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("observed_at");
 
-                    b.Property<long>("PingPeriod")
+                    b.Property<long?>("PingPeriod")
                         .HasColumnType("bigint")
                         .HasColumnName("ping_period");
 
-                    b.Property<long>("PingTimeout")
+                    b.Property<long?>("PingTimeout")
                         .HasColumnType("bigint")
                         .HasColumnName("ping_timeout");
 
@@ -115,7 +115,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnName("ras_gate_id");
 
                     b.Property<string>("RestartSchedule")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("restart_schedule");
 
@@ -156,6 +155,13 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("api_key");
 
+                    b.Property<long>("ConfigurationRevision")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("configuration_revision");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -169,12 +175,14 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnName("instance_name");
 
                     b.Property<bool>("IsActive")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
                     b.Property<bool>("IsDeleted")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)

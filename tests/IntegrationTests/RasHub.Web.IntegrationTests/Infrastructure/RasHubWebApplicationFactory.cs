@@ -9,12 +9,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
 using RasHub.Web.Authentication;
 using RasHub.Web.Data;
+using RasHub.Web.Infrastructure.Authorization;
 
 namespace RasHub.Web.IntegrationTests.Infrastructure;
 
@@ -26,6 +28,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _environment;
     private readonly SqliteConnection _identityConnection = new("Data Source=:memory:");
     private readonly bool _seedApiUser;
+    private readonly IReadOnlyDictionary<string, string?> _settings;
 
     public RasHubWebApplicationFactory()
         : this("Testing")
@@ -39,10 +42,12 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
     internal RasHubWebApplicationFactory(
         string environment,
-        bool seedApiUser = true)
+        bool seedApiUser = true,
+        IReadOnlyDictionary<string, string?>? settings = null)
     {
         _environment = environment;
         _seedApiUser = seedApiUser;
+        _settings = settings ?? new Dictionary<string, string?>();
         _connection.Open();
         _identityConnection.Open();
     }
@@ -182,6 +187,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 ["Settings:InitializeOnStart"] = "false",
                 ["RasGateMonitoring:RunOnStartup"] = "false"
             });
+            configuration.AddInMemoryCollection(_settings);
         });
 
         builder.ConfigureServices(services =>
@@ -198,7 +204,9 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             {
                 options.UseSqlite(_connection);
                 options.AddInterceptors(
-                    serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>());
+                    serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
+                    serviceProvider.GetRequiredService<
+                        RasGateConfigurationRevisionInterceptor>());
             });
 
             services.AddDbContext<ApplicationDbContext>(options =>
@@ -235,6 +243,17 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 ConcurrencyStamp = "api-user-concurrency-stamp"
             });
             identityDb.SaveChanges();
+
+            var adminRoleId = identityDb.Roles
+                .Where(role => role.Name == AppRoles.Admin)
+                .Select(role => role.Id)
+                .Single();
+            identityDb.UserRoles.Add(new IdentityUserRole<string>
+            {
+                UserId = "api-user",
+                RoleId = adminRoleId
+            });
+            identityDb.SaveChanges();
         }
 
         return host;
@@ -254,16 +273,33 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
 public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 {
+    private int _clusterInfoRequestCount;
     private int _clusterRequestCount;
     private int _statusRequestCount;
+    private TaskCompletionSource<bool>? _statusRequestRelease;
+    private TaskCompletionSource<bool>? _statusRequestStarted;
 
     public int ClusterRequestCount => Volatile.Read(ref _clusterRequestCount);
+
+    public int ClusterInfoRequestCount => Volatile.Read(
+        ref _clusterInfoRequestCount);
 
     public int StatusRequestCount => Volatile.Read(ref _statusRequestCount);
 
     public IReadOnlyList<RasClusterSnapshot> Clusters { get; set; } = [];
 
+    public RasClusterSnapshot? Cluster { get; set; }
+
+    public SnapshotCompleteness ClusterSnapshotCompleteness { get; set; } =
+        SnapshotCompleteness.Complete;
+
+    public bool SupportsClusterSnapshots { get; set; } = true;
+
+    public bool SupportsClusterInfo { get; set; } = true;
+
     public Exception? ClustersException { get; set; }
+
+    public Exception? ClusterException { get; set; }
 
     public RasGateStatus Status { get; set; } =
         new("Test RasGate", "1.0.0");
@@ -273,27 +309,74 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         return new FakeRasGateClient(this);
     }
 
+    public void PauseStatusRequests()
+    {
+        _statusRequestStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _statusRequestRelease = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public Task WaitForStatusRequestAsync(CancellationToken cancellationToken)
+    {
+        return (_statusRequestStarted?.Task ??
+                throw new InvalidOperationException(
+                    "Status requests are not paused."))
+            .WaitAsync(cancellationToken);
+    }
+
+    public void ReleaseStatusRequests()
+    {
+        _statusRequestRelease?.TrySetResult(true);
+    }
+
     public void Reset()
     {
+        ReleaseStatusRequests();
+        _statusRequestStarted = null;
+        _statusRequestRelease = null;
+        Volatile.Write(ref _clusterInfoRequestCount, 0);
         Volatile.Write(ref _clusterRequestCount, 0);
         Volatile.Write(ref _statusRequestCount, 0);
         Clusters = [];
+        Cluster = null;
+        ClusterSnapshotCompleteness = SnapshotCompleteness.Complete;
+        SupportsClusterSnapshots = true;
+        SupportsClusterInfo = true;
         ClustersException = null;
+        ClusterException = null;
         Status = new RasGateStatus("Test RasGate", "1.0.0");
     }
 
     private sealed class FakeRasGateClient(FakeRasGateClientFactory owner)
         : IRasGateClient
     {
-        public Task<RasGateStatus> GetStatusAsync(
+        public async Task<RasGateStatus> GetStatusAsync(
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._statusRequestCount);
-            return Task.FromResult(owner.Status);
+            owner._statusRequestStarted?.TrySetResult(true);
+
+            if (owner._statusRequestRelease is not null)
+                await owner._statusRequestRelease.Task.WaitAsync(cancellationToken);
+
+            return owner.Status;
         }
 
-        public Task<IReadOnlyList<RasClusterSnapshot>> GetClustersAsync(
+        public Task<RasGateCapabilities> GetCapabilitiesAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return Task.FromResult(new RasGateCapabilities
+            {
+                RacVersion = "8.3.27.2214",
+                Resources = GetCapabilities(owner)
+            });
+        }
+
+        public Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -302,7 +385,50 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
             if (owner.ClustersException is not null)
                 throw owner.ClustersException;
 
-            return Task.FromResult(owner.Clusters);
+            return Task.FromResult(
+                new RasResourceSnapshot<RasClusterSnapshot>
+                {
+                    SchemaVersion = 1,
+                    SourceVersion = "8.3.27.2214",
+                    Completeness = owner.ClusterSnapshotCompleteness,
+                    Items = owner.Clusters
+                });
+        }
+
+        public Task<RasClusterSnapshot> GetClusterAsync(
+            Guid clusterId,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._clusterInfoRequestCount);
+
+            if (owner.ClusterException is not null)
+                throw owner.ClusterException;
+
+            var cluster = owner.Cluster ?? owner.Clusters.SingleOrDefault(item => item.ExternalId == clusterId);
+
+            return Task.FromResult(cluster ?? throw new RasGateClientException(
+                $"Cluster '{clusterId}' is unavailable."));
+        }
+
+        private static IReadOnlyList<RasResourceCapability> GetCapabilities(
+            FakeRasGateClientFactory owner)
+        {
+            var capabilities = new List<RasResourceCapability>();
+
+            if (owner.SupportsClusterSnapshots)
+                capabilities.Add(new RasResourceCapability(
+                    "clusters",
+                    "snapshot",
+                    1));
+
+            if (owner.SupportsClusterInfo)
+                capabilities.Add(new RasResourceCapability(
+                    "clusters",
+                    "info",
+                    1));
+
+            return capabilities;
         }
     }
 }

@@ -33,15 +33,15 @@ public sealed class RasCluster : IEntity, IAuditable, ISoftDeletable
 
     public bool KillProblemProcesses { get; set; }
 
-    public bool KillByMemoryWithDump { get; set; }
+    public bool? KillByMemoryWithDump { get; set; }
 
-    public bool AllowAccessRightAuditEventsRecording { get; set; }
+    public bool? AllowAccessRightAuditEventsRecording { get; set; }
 
-    public long PingPeriod { get; set; }
+    public long? PingPeriod { get; set; }
 
-    public long PingTimeout { get; set; }
+    public long? PingTimeout { get; set; }
 
-    public string RestartSchedule { get; set; } = string.Empty;
+    public string? RestartSchedule { get; set; }
 
     public DateTime ObservedAt { get; set; }
 

@@ -6,6 +6,13 @@ public interface IRasGateClient
 {
     Task<RasGateStatus> GetStatusAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<RasClusterSnapshot>> GetClustersAsync(
+    Task<RasGateCapabilities> GetCapabilitiesAsync(
+        CancellationToken cancellationToken);
+
+    Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
+        CancellationToken cancellationToken);
+
+    Task<RasClusterSnapshot> GetClusterAsync(
+        Guid clusterId,
         CancellationToken cancellationToken);
 }

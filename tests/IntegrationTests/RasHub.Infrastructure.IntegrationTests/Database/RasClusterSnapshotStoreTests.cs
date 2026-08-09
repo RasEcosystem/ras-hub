@@ -90,6 +90,53 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Upsert_updates_one_cluster_without_deleting_other_clusters()
+    {
+        var rasGate = RasGateTestData.Create();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+
+        await using (var db = _database.CreateContext())
+        {
+            db.RasGates.Add(rasGate);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var store = new RasClusterSnapshotStore(db);
+            await store.ApplyAsync(
+                rasGate.Id,
+                [CreateSnapshot(firstId, "First"), CreateSnapshot(secondId, "Second")],
+                DateTime.UtcNow.AddMinutes(-1),
+                TestContext.Current.CancellationToken);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var db = _database.CreateContext())
+        {
+            var store = new RasClusterSnapshotStore(db);
+            await store.UpsertAsync(
+                rasGate.Id,
+                CreateSnapshot(firstId, "First updated"),
+                DateTime.UtcNow,
+                TestContext.Current.CancellationToken);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var db = _database.CreateContext())
+        {
+            var clusters = await db.RasClusters
+                .OrderBy(cluster => cluster.Name)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, clusters.Count);
+            Assert.Contains(clusters, cluster =>
+                cluster.ExternalId == firstId &&
+                cluster.Name == "First updated");
+            Assert.Contains(clusters, cluster =>
+                cluster.ExternalId == secondId &&
+                cluster.Name == "Second");
+        }
+    }
+
     private static RasClusterSnapshot CreateSnapshot(Guid externalId, string name)
     {
         return new RasClusterSnapshot

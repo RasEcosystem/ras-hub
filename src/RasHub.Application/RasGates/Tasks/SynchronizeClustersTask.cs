@@ -1,4 +1,4 @@
-using RasHub.Synchronization.Abstractions;
+using RasHub.BackgroundTasks.Abstractions;
 
 namespace RasHub.Application.RasGates.Tasks;
 

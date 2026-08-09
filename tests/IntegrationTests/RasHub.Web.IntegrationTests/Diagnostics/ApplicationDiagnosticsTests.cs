@@ -159,7 +159,7 @@ public sealed class ApplicationDiagnosticsTests
         logEvent.AddPropertyIfAbsent(new LogEventProperty(
             "SourceContext",
             new ScalarValue(
-                "RasHub.Synchronization.Internal.Processing.BackgroundTaskWorker")));
+                "RasHub.BackgroundTasks.Internal.Processing.BackgroundTaskWorker")));
         logEvent.AddPropertyIfAbsent(new LogEventProperty(
             "TaskId",
             new ScalarValue(taskId)));

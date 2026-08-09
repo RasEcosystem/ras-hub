@@ -1,16 +1,16 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
+using RasHub.BackgroundTasks.Abstractions;
+using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
-using RasHub.Synchronization.Abstractions;
-using RasHub.Synchronization.Exceptions;
 
 namespace RasHub.Application.RasGates.Tasks;
 
 public sealed class SynchronizeClustersTaskHandler(
     IRepository<RasGate> rasGateRepository,
-    IRasClusterSnapshotStore snapshotStore,
-    IUnitOfWork unitOfWork,
+    IRasGateSyncPublisher publisher,
     IRasGateClientFactory clientFactory,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<SynchronizeClustersTask>
@@ -30,16 +30,30 @@ public sealed class SynchronizeClustersTaskHandler(
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
 
+        var configurationRevision = rasGate.ConfigurationRevision;
         var client = clientFactory.Create(rasGate);
+        var capabilities = await client.GetCapabilitiesAsync(cancellationToken);
+
+        if (!capabilities.Supports("clusters", "snapshot"))
+            throw new RasGateCapabilityNotSupportedException(
+                rasGate.Id,
+                "clusters",
+                "snapshot");
+
         var snapshot = await client.GetClustersAsync(cancellationToken);
+
+        if (snapshot.Completeness != SnapshotCompleteness.Complete)
+            throw new RasGateClientException(
+                "RasGate returned an incomplete cluster snapshot.");
+
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
-        await snapshotStore.ApplyAsync(
-            rasGate.Id,
-            snapshot,
-            observedAt,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (!await publisher.TryPublishClustersAsync(
+                rasGate.Id,
+                configurationRevision,
+                snapshot.Items,
+                observedAt,
+                cancellationToken))
+            throw new RasGateConfigurationChangedException(rasGate.Id);
     }
 }

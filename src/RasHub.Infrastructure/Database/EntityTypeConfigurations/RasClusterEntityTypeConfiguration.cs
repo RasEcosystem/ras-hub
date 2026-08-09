@@ -77,24 +77,19 @@ public sealed class RasClusterEntityTypeConfiguration
             .IsRequired();
 
         builder.Property(cluster => cluster.KillByMemoryWithDump)
-            .HasColumnName("kill_by_memory_with_dump")
-            .IsRequired();
+            .HasColumnName("kill_by_memory_with_dump");
 
         builder.Property(cluster => cluster.AllowAccessRightAuditEventsRecording)
-            .HasColumnName("allow_access_right_audit_events_recording")
-            .IsRequired();
+            .HasColumnName("allow_access_right_audit_events_recording");
 
         builder.Property(cluster => cluster.PingPeriod)
-            .HasColumnName("ping_period")
-            .IsRequired();
+            .HasColumnName("ping_period");
 
         builder.Property(cluster => cluster.PingTimeout)
-            .HasColumnName("ping_timeout")
-            .IsRequired();
+            .HasColumnName("ping_timeout");
 
         builder.Property(cluster => cluster.RestartSchedule)
-            .HasColumnName("restart_schedule")
-            .IsRequired();
+            .HasColumnName("restart_schedule");
 
         builder.Property(cluster => cluster.ObservedAt)
             .HasColumnName("observed_at")

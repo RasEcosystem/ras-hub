@@ -1,4 +1,4 @@
-using RasHub.Synchronization.Exceptions;
+using RasHub.BackgroundTasks.Exceptions;
 
 namespace RasHub.Application.RasGates.Exceptions;
 
