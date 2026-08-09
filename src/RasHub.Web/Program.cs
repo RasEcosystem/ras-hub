@@ -27,6 +27,8 @@ using RasHub.Web.Components.Account;
 using RasHub.Web.Data;
 using RasHub.Web.Infrastructure;
 using RasHub.Web.Infrastructure.Authorization;
+using RasHub.Web.Infrastructure.Diagnostics;
+using RasHub.Web.Infrastructure.RasGates;
 using RasHub.Web.Infrastructure.Settings;
 using RasHub.Web.Infrastructure.Themes.Providers;
 using RasHub.Web.Middlewares;
@@ -64,6 +66,9 @@ public class Program
     private static async Task RunAsync(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        var applicationDiagnostics = new ApplicationDiagnostics(TimeProvider.System);
+
+        builder.Services.AddSingleton(applicationDiagnostics);
 
         builder.Host.UseSerilog((context, services, configuration) =>
         {
@@ -73,7 +78,8 @@ public class Program
                 .Enrich.FromLogContext()
                 .Enrich.WithProperty(
                     "Environment",
-                    context.HostingEnvironment.EnvironmentName);
+                    context.HostingEnvironment.EnvironmentName)
+                .WriteTo.Sink(applicationDiagnostics);
         });
 
         builder.Services
@@ -137,8 +143,29 @@ public class Program
             })
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
-            .AddSignInManager()
+            .AddSignInManager<ApplicationSignInManager>()
             .AddDefaultTokenProviders();
+        builder.Services.ConfigureApplicationCookie(options =>
+        {
+            options.Events.OnValidatePrincipal = async context =>
+            {
+                await SecurityStampValidator.ValidatePrincipalAsync(context);
+
+                if (context.Principal?.Identity?.IsAuthenticated != true)
+                    return;
+
+                var userManager = context.HttpContext.RequestServices
+                    .GetRequiredService<UserManager<ApplicationUser>>();
+                var user = await userManager.GetUserAsync(context.Principal);
+
+                if (user?.IsBlocked != true)
+                    return;
+
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(
+                    IdentityConstants.ApplicationScheme);
+            };
+        });
         builder.Services.AddSingleton<IEmailSender<ApplicationUser>,
             IdentityNoOpEmailSender>();
 
@@ -175,6 +202,21 @@ public class Program
         builder.Services.AddScoped<
             IBackgroundTaskHandler<SynchronizeClustersTask>,
             SynchronizeClustersTaskHandler>();
+        builder.Services
+            .AddOptions<RasGateMonitoringOptions>()
+            .Bind(builder.Configuration.GetSection(
+                RasGateMonitoringOptions.SectionName))
+            .Validate(
+                value => value.PollInterval > TimeSpan.Zero,
+                "RasGate monitoring poll interval must be positive.")
+            .Validate(
+                value => value.OnlineThreshold >= value.PollInterval,
+                "RasGate online threshold must not be shorter than the poll interval.")
+            .Validate(
+                value => value.RequestTimeout > TimeSpan.Zero,
+                "RasGate monitoring request timeout must be positive.")
+            .ValidateOnStart();
+        builder.Services.AddHostedService<RasGateMonitoringService>();
 
         builder.Services
             .AddHealthChecks()

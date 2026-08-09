@@ -80,6 +80,23 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 result.Errors.Select(error => error.Description)));
     }
 
+    public async Task SetIdentityUserBlockedAsync(string email, bool isBlocked)
+    {
+        using var scope = Services.CreateScope();
+        var userManager = scope.ServiceProvider
+            .GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByEmailAsync(email) ??
+                   throw new InvalidOperationException($"User '{email}' does not exist.");
+
+        user.IsBlocked = isBlocked;
+        var result = await userManager.UpdateSecurityStampAsync(user);
+
+        if (!result.Succeeded)
+            throw new InvalidOperationException(string.Join(
+                "; ",
+                result.Errors.Select(error => error.Description)));
+    }
+
     public async Task<RasGate> SeedRasGateAsync(
         string name = "Gate",
         string url = "https://gate.example.test",
@@ -87,7 +104,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         string apiKey = "stored-secret",
         string? instanceName = null,
         string? version = null,
-        DateTime? statusObservedAt = null)
+        DateTime? statusObservedAt = null,
+        bool isActive = true)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
@@ -97,6 +115,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             Url = url,
             Port = port,
             ApiKey = apiKey,
+            IsActive = isActive,
             InstanceName = instanceName,
             Version = version,
             StatusObservedAt = statusObservedAt
@@ -152,6 +171,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:RasHub", "Host=unused");
         builder.UseSetting("Database:ApplyMigrations", "false");
         builder.UseSetting("Settings:InitializeOnStart", "false");
+        builder.UseSetting("RasGateMonitoring:RunOnStartup", "false");
 
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
@@ -159,7 +179,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:RasHub"] = "Host=unused",
                 ["Database:ApplyMigrations"] = "false",
-                ["Settings:InitializeOnStart"] = "false"
+                ["Settings:InitializeOnStart"] = "false",
+                ["RasGateMonitoring:RunOnStartup"] = "false"
             });
         });
 

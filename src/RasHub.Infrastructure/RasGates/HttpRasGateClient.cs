@@ -179,9 +179,9 @@ public sealed class HttpRasGateClient : IRasGateClient
 
     private sealed record RasGateStatusData
     {
-        public string InstanceName { get; } = string.Empty;
+        public string InstanceName { get; init; } = string.Empty;
 
-        public string Version { get; } = string.Empty;
+        public string Version { get; init; } = string.Empty;
     }
 
     private sealed record ExecuteRacData

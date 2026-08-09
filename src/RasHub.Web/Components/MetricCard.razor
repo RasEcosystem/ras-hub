@@ -2,7 +2,18 @@
     <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
         <div>
             <MudText Typo="Typo.overline" Color="Color.Secondary">@Title</MudText>
-            <MudText Typo="Typo.h4" Class="mt-1">@Value</MudText>
+            @if (string.IsNullOrWhiteSpace(ValueHref))
+            {
+                <MudText Typo="Typo.h4" Class="mt-1">@Value</MudText>
+            }
+            else
+            {
+                <a class="metric-value-link"
+                   href="@ValueHref"
+                   aria-label="@(ValueAriaLabel ?? Title)">
+                    <MudText Typo="Typo.h4" Class="mt-1">@Value</MudText>
+                </a>
+            }
             <MudText Typo="Typo.caption" Color="Color.Secondary">@Detail</MudText>
         </div>
         <MudAvatar Color="@Color" Variant="Variant.Outlined">
@@ -22,4 +33,6 @@
     [Parameter] [EditorRequired] public string Icon { get; set; } = string.Empty;
     [Parameter] public Color Color { get; set; }
     [Parameter] public double? Progress { get; set; }
+    [Parameter] public string? ValueHref { get; set; }
+    [Parameter] public string? ValueAriaLabel { get; set; }
 }

@@ -40,7 +40,7 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
 
         var user = await _dbContext.Users
             .AsNoTracking()
-            .Where(item => item.ApiKey == providedApiKey)
+            .Where(item => item.ApiKey == providedApiKey && !item.IsBlocked)
             .Select(item => new { item.Id, item.UserName, item.Email })
             .SingleOrDefaultAsync(Context.RequestAborted);
 

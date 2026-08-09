@@ -1,7 +1,6 @@
 using System.Globalization;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Serialization;
-using RasHub.Domain;
 using RasHub.Domain.Enums;
 
 namespace RasHub.Infrastructure.RasGates.Serialization;

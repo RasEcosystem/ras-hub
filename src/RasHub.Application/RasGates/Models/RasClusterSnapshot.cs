@@ -1,4 +1,3 @@
-using RasHub.Domain;
 using RasHub.Domain.Enums;
 
 namespace RasHub.Application.RasGates.Models;

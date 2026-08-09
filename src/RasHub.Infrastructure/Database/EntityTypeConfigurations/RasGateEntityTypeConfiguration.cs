@@ -36,6 +36,11 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
             .HasMaxLength(RasGate.ApiKeyMaxLength)
             .IsRequired();
 
+        builder.Property(rasGate => rasGate.IsActive)
+            .HasColumnName("is_active")
+            .HasDefaultValue(true)
+            .IsRequired();
+
         builder.Property(rasGate => rasGate.InstanceName)
             .HasColumnName("instance_name");
 
@@ -44,5 +49,8 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
 
         builder.Property(rasGate => rasGate.StatusObservedAt)
             .HasColumnName("status_observed_at");
+
+        builder.Property(rasGate => rasGate.LastSeenAt)
+            .HasColumnName("last_seen_at");
     }
 }

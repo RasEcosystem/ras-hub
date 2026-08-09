@@ -1,5 +1,6 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Domain;
 using RasHub.Synchronization.Abstractions;
 using RasHub.Synchronization.Exceptions;
@@ -26,6 +27,9 @@ public sealed class SynchronizeClustersTaskHandler(
             throw new NonRetryableBackgroundTaskException(
                 $"RasGate '{task.RasGateId}' was not found.");
 
+        if (!rasGate.IsActive)
+            throw new RasGateInactiveException(rasGate.Id);
+
         var client = clientFactory.Create(rasGate);
         var snapshot = await client.GetClustersAsync(cancellationToken);
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -35,6 +39,7 @@ public sealed class SynchronizeClustersTaskHandler(
             snapshot,
             observedAt,
             cancellationToken);
+        rasGate.LastSeenAt = observedAt;
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

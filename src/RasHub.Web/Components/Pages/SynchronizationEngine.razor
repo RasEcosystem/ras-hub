@@ -1,0 +1,331 @@
+﻿@page "/synchronization-engine"
+@using Microsoft.Extensions.Options
+@using RasHub.Synchronization.Abstractions
+@using RasHub.Synchronization.Configuration
+@using RasHub.Synchronization.Models
+@implements IAsyncDisposable
+@inject ISynchronizationEngine Engine
+@inject IOptions<SynchronizationEngineOptions> EngineOptions
+@inject TimeProvider TimeProvider
+
+<AppPageTitle Title="Synchronization monitor"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="Synchronization engine"
+              Subtitle="Live workload, workers and task execution state"
+              Icon="@Icons.Material.Filled.Sync">
+    <HeaderActions>
+        <MudChip T="string" Color="@HealthColor" Variant="Variant.Outlined" Icon="@HealthIcon">
+            @HealthLabel
+        </MudChip>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="monitor-updated">
+            Updated @LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+        </MudText>
+        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="RefreshAsync" aria-label="Refresh"/>
+    </HeaderActions>
+    <ChildContent>
+        <MudStack Spacing="3">
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6" lg="3">
+                    <MetricCard Title="Active executions" Value="@ActiveLabel"
+                                Detail="@($"History {Statistics.CompletedTaskHistory:N0} / {Options.MaxCompletedTaskHistory:N0}")"
+                                Icon="@Icons.Material.Outlined.Inventory2" Color="@UtilizationColor(RegistryPercent)"
+                                Progress="@RegistryPercent"/>
+                </MudItem>
+                <MudItem xs="12" sm="6" lg="3">
+                    <MetricCard Title="Running now" Value="@RunningCount.ToString()"
+                                Detail="@($"of {TotalWorkers} workers")"
+                                Icon="@Icons.Material.Outlined.Memory" Color="Color.Info" Progress="@WorkerPercent"/>
+                </MudItem>
+                <MudItem xs="12" sm="6" lg="3">
+                    <MetricCard Title="Average wait" Value="@FormatDuration(Statistics.OverallTiming.AverageWait)"
+                                Detail="since engine start"
+                                Icon="@Icons.Material.Outlined.HourglassTop" Color="Color.Warning"/>
+                </MudItem>
+                <MudItem xs="12" sm="6" lg="3">
+                    <MetricCard Title="Average runtime" Value="@FormatDuration(Statistics.OverallTiming.AverageRuntime)"
+                                Detail="since engine start"
+                                Icon="@Icons.Material.Outlined.Timer" Color="Color.Success"/>
+                </MudItem>
+            </MudGrid>
+
+            <MudGrid Spacing="3">
+                @foreach (var lane in Lanes)
+                {
+                    <MudItem xs="12" lg="4">
+                        <MudPaper Class="pa-3 lane-card" Elevation="1">
+                            <MudStack Spacing="2">
+                                <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudAvatar Color="@lane.Color" Variant="Variant.Filled" Size="Size.Medium">
+                                            <MudIcon Icon="@lane.Icon"/>
+                                        </MudAvatar>
+                                        <div>
+                                            <MudText Typo="Typo.h6">@lane.Name</MudText>
+                                            <MudText Typo="Typo.caption"
+                                                     Color="Color.Secondary">@lane.Description</MudText>
+                                        </div>
+                                    </MudStack>
+                                    <MudChip T="string" Size="Size.Small" Color="@UtilizationColor(lane.QueuePercent)">
+                                        @($"{lane.QueuePercent:0.#}%")
+                                    </MudChip>
+                                </MudStack>
+                                <MudProgressLinear Value="@lane.QueuePercent"
+                                                   Color="@UtilizationColor(lane.QueuePercent)"
+                                                   Rounded/>
+                                <MudGrid Spacing="2">
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Queued" Value="@($"{lane.Queued} / {lane.Capacity}")"/>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Running" Value="@($"{lane.Running} / {lane.Workers}")"/>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Oldest wait" Value="@FormatDuration(lane.OldestWait)"/>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Completed since start"
+                                                   Value="@lane.Completed.ToString("N0")"/>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Peak queue depth"
+                                                   Value="@($"{lane.HighWaterMark} / {lane.Capacity}")"/>
+                                    </MudItem>
+                                    <MudItem xs="4">
+                                        <LaneValue Label="Avg total time"
+                                                   Value="@FormatDuration(lane.AverageTotalTime)"/>
+                                    </MudItem>
+                                </MudGrid>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudPaper Class="pa-3 executions-card" Elevation="1">
+                <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center"
+                          Class="mb-2 executions-header">
+                    <div>
+                        <MudText Typo="Typo.h6">Executions</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Active first, followed by recently
+                            completed tasks
+                        </MudText>
+                    </div>
+                    <MudStack Row Spacing="1" Class="state-summary">
+                        @foreach (var state in StateSummary)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@StateColor(state.Key)">
+                                @state.Key @state.Value
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudStack>
+
+                <MudTable Items="@VisibleTasks" Dense Hover FixedHeader Height="460px"
+                          Breakpoint="Breakpoint.Md" Class="executions-table">
+                    <HeaderContent>
+                        <MudTh>Task</MudTh>
+                        <MudTh>Lane</MudTh>
+                        <MudTh>State</MudTh>
+                        <MudTh>Priority</MudTh>
+                        <MudTh>Attempt</MudTh>
+                        <MudTh>Age</MudTh>
+                        <MudTh>Runtime / wait</MudTh>
+                        <MudTh>Deduplication</MudTh>
+                        <MudTh>Concurrency</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Task">
+                            <MudText Typo="Typo.body2">@FriendlyTypeName(context.TaskType)</MudText>
+                            <MudText Typo="Typo.caption"
+                                     Color="Color.Secondary">@context.Id.ToString()[..8]</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Lane">@context.Queue</MudTd>
+                        <MudTd DataLabel="State">
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@StateColor(context.State)">@context.State</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Priority">@context.Priority</MudTd>
+                        <MudTd DataLabel="Attempt">@context.AttemptCount / @context.MaxAttempts</MudTd>
+                        <MudTd DataLabel="Age">@FormatDuration(Now - context.CreatedAt)</MudTd>
+                        <MudTd DataLabel="Runtime / wait">@FormatTaskTiming(context)</MudTd>
+                        <MudTd DataLabel="Deduplication"><span
+                                class="task-key"
+                                title="@context.DeduplicationKey">@(context.DeduplicationKey ?? "—")</span>
+                        </MudTd>
+                        <MudTd DataLabel="Concurrency"><span
+                                class="task-key" title="@context.ConcurrencyKey">@(context.ConcurrencyKey ?? "—")</span>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4" Color="Color.Secondary">No tracked executions</MudText>
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="@(new[] { 10, 25, 50 })"/>
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+        </MudStack>
+    </ChildContent>
+</AppPageShell>
+
+@code {
+    private readonly CancellationTokenSource _disposeToken = new();
+    private SynchronizationEngineOptions Options => EngineOptions.Value;
+    private IReadOnlyList<BackgroundTaskSnapshot> Tasks { get; set; } = [];
+    private IReadOnlyList<LaneSnapshot> Lanes { get; set; } = [];
+    private SynchronizationEngineStatistics Statistics { get; set; } = default!;
+    private DateTimeOffset LastUpdated { get; set; }
+    private DateTimeOffset Now { get; set; }
+
+    private IEnumerable<BackgroundTaskSnapshot> VisibleTasks => Tasks
+        .OrderBy(task => task.State is BackgroundTaskState.Running ? 0 : task.State is BackgroundTaskState.Pending ? 1 : 2)
+        .ThenByDescending(task => task.CreatedAt);
+
+    private int RunningCount => Tasks.Count(task => task.State == BackgroundTaskState.Running);
+    private int TotalWorkers => Options.InteractiveWorkerCount + Options.WorkerCount + Options.MaintenanceWorkerCount;
+    private double RegistryPercent => Percent(Statistics.ActiveTasks, Options.MaxActiveTasks);
+    private double WorkerPercent => Percent(RunningCount, TotalWorkers);
+    private string ActiveLabel => $"{Statistics.ActiveTasks:N0} / {Options.MaxActiveTasks:N0}";
+
+    private IEnumerable<KeyValuePair<BackgroundTaskState, int>> StateSummary => Enum.GetValues<BackgroundTaskState>()
+        .Select(state => KeyValuePair.Create(state, Tasks.Count(task => task.State == state))).Where(x => x.Value > 0);
+
+    private Color HealthColor => RegistryPercent >= 100 || Lanes.Any(x => x.QueuePercent >= 100) ? Color.Error
+        : RegistryPercent >= 80 || Lanes.Any(x => x.QueuePercent >= 80) ? Color.Warning : Color.Success;
+
+    private string HealthLabel => HealthColor == Color.Error ? "Capacity exhausted" : HealthColor == Color.Warning ? "Under pressure" : "Operational";
+    private string HealthIcon => HealthColor == Color.Error ? Icons.Material.Outlined.Error : HealthColor == Color.Warning ? Icons.Material.Outlined.Warning : Icons.Material.Outlined.CheckCircle;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        _ = PollAsync();
+    }
+
+    private Task RefreshAsync()
+    {
+        Refresh();
+        return Task.CompletedTask;
+    }
+
+    private void Refresh()
+    {
+        Now = TimeProvider.GetUtcNow();
+        Tasks = Engine.GetTasks();
+        Statistics = Engine.GetStatistics();
+        Lanes =
+        [
+            CreateLane(BackgroundTaskQueue.Interactive, "Interactive", "User-facing work", Icons.Material.Outlined.Bolt, Color.Info, Statistics.InteractiveQueueLength, Options.InteractiveQueueCapacity, Options.InteractiveWorkerCount, Statistics.InteractiveCompletedTasks, Statistics.InteractiveQueueHighWaterMark, Statistics.InteractiveTiming),
+            CreateLane(BackgroundTaskQueue.Synchronization, "Synchronization", "Regular background work", Icons.Material.Outlined.Sync, Color.Primary, Statistics.SynchronizationQueueLength, Options.QueueCapacity, Options.WorkerCount, Statistics.SynchronizationCompletedTasks, Statistics.SynchronizationQueueHighWaterMark, Statistics.SynchronizationTiming),
+            CreateLane(BackgroundTaskQueue.Maintenance, "Maintenance", "Cleanup and low-priority work", Icons.Material.Outlined.Build, Color.Secondary, Statistics.MaintenanceQueueLength, Options.MaintenanceQueueCapacity, Options.MaintenanceWorkerCount, Statistics.MaintenanceCompletedTasks, Statistics.MaintenanceQueueHighWaterMark, Statistics.MaintenanceTiming)
+        ];
+        LastUpdated = Now;
+    }
+
+    private LaneSnapshot CreateLane(BackgroundTaskQueue queue, string name, string description, string icon, Color color, int queued, int capacity, int workers, long completed, int highWaterMark, BackgroundTaskTimingStatistics timing)
+    {
+        var laneTasks = Tasks.Where(task => task.Queue == queue).ToArray();
+        var oldest = laneTasks.Where(task => task.State == BackgroundTaskState.Pending)
+            .Select(task => (TimeSpan?)(Now - task.CreatedAt)).OrderDescending().FirstOrDefault();
+        return new LaneSnapshot(queue, name, description, icon, color, queued, capacity, workers,
+            laneTasks.Count(task => task.State == BackgroundTaskState.Running), oldest, completed, highWaterMark,
+            timing.AverageTotalTime);
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), TimeProvider);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(() =>
+                {
+                    Refresh();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _disposeToken.Cancel();
+        _disposeToken.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private static double Percent(int value, int maximum)
+    {
+        return maximum <= 0 ? 0 : Math.Clamp(value * 100d / maximum, 0, 100);
+    }
+
+    private static TimeSpan? Average(IEnumerable<TimeSpan> values)
+    {
+        var ticks = values.Select(value => value.Ticks).ToArray();
+        return ticks.Length == 0 ? null : TimeSpan.FromTicks((long)ticks.Average());
+    }
+
+    private static string FriendlyTypeName(Type type)
+    {
+        return type.Name.EndsWith("Task", StringComparison.Ordinal) ? type.Name[..^4] : type.Name;
+    }
+
+    private static string FormatDuration(TimeSpan? value)
+    {
+        if (value is null) return "—";
+        var duration = value.Value < TimeSpan.Zero ? TimeSpan.Zero : value.Value;
+        return duration.TotalDays >= 1 ? $"{duration.TotalDays:0.#}d"
+            : duration.TotalHours >= 1 ? $"{duration.TotalHours:0.#}h"
+            : duration.TotalMinutes >= 1 ? $"{duration.TotalMinutes:0.#}m"
+            : duration.TotalSeconds >= 1 ? $"{duration.TotalSeconds:0.#}s" : $"{duration.TotalMilliseconds:0}ms";
+    }
+
+    private string FormatTaskTiming(BackgroundTaskSnapshot task)
+    {
+        return task.State switch
+        {
+            BackgroundTaskState.Running when task.StartedAt.HasValue => FormatDuration(Now - task.StartedAt.Value),
+            BackgroundTaskState.Pending => FormatDuration(Now - task.CreatedAt),
+            _ when task.StartedAt.HasValue && task.CompletedAt.HasValue => FormatDuration(task.CompletedAt.Value - task.StartedAt.Value),
+            _ => "—"
+        };
+    }
+
+    private static Color StateColor(BackgroundTaskState state)
+    {
+        return state switch
+        {
+            BackgroundTaskState.Running => Color.Info, BackgroundTaskState.Pending => Color.Warning,
+            BackgroundTaskState.Succeeded => Color.Success, BackgroundTaskState.Failed => Color.Error,
+            BackgroundTaskState.Canceled => Color.Default, _ => Color.Default
+        };
+    }
+
+    private static Color UtilizationColor(double percent)
+    {
+        return percent >= 100 ? Color.Error : percent >= 80 ? Color.Warning : Color.Success;
+    }
+
+    private sealed record LaneSnapshot(
+        BackgroundTaskQueue Queue,
+        string Name,
+        string Description,
+        string Icon,
+        Color Color,
+        int Queued,
+        int Capacity,
+        int Workers,
+        int Running,
+        TimeSpan? OldestWait,
+        long Completed,
+        int HighWaterMark,
+        TimeSpan? AverageTotalTime)
+    {
+        public double QueuePercent => Percent(Queued, Capacity);
+    }
+
+}

@@ -1,68 +1,100 @@
 @page "/Settings"
 @using Microsoft.AspNetCore.Identity
 @using RasHub.Web.Infrastructure.Authorization
+@using RasHub.Web.Infrastructure.Logging
 @attribute [Authorize(Policy = AppPolicies.ManageGlobalSettings)]
+@inject IConfiguration Configuration
+@inject NavigationManager NavigationManager
 @inject UserAdministrationService UserAdministrationService
 @inject ISnackbar Snackbar
 @inject ILogger<Settings> Logger
 
 <AppPageTitle Title="Settings"/>
 
-<MudContainer MaxWidth="MaxWidth.False"
-              Style="max-width: 1600px;"
-              Class="py-8">
-    <MudStack Spacing="6">
-        <MudStack Spacing="1">
-            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
-                <MudIcon Icon="@Icons.Material.Filled.Settings"
-                         Size="Size.Large"
-                         Color="Color.Primary"/>
-                <MudText Typo="Typo.h3">Settings</MudText>
-            </MudStack>
-            <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
-                Configure application settings and user access
-            </MudText>
-        </MudStack>
-
-        <MudDivider/>
-
-        <MudTabs Elevation="0" Rounded="true">
-            <MudTabPanel Text="General" Icon="@Icons.Material.Outlined.Tune">
-                <MudForm Model="_settings" ValidationDelay="0">
-                    <MudPaper Class="pa-6" Elevation="1">
-                        <MudStack Spacing="4">
-                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Outlined.Palette"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-                                <MudText Typo="Typo.h5">Appearance</MudText>
-                            </MudStack>
-                            <MudSelect T="AppTheme"
-                                       Label="Theme"
-                                       Variant="Variant.Outlined"
-                                       FullWidth
-                                       @bind-Value="_settings.Theme">
-                                <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
-                                <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
-                            </MudSelect>
+<AppPageShell Width="AppPageWidth.Standard"
+              Title="Settings"
+              Subtitle="Configure application settings and user access"
+              Icon="@Icons.Material.Filled.Settings">
+    <MudTabs Elevation="0" Rounded="true">
+        <MudTabPanel Text="General" Icon="@Icons.Material.Outlined.Tune">
+            <MudForm Model="_settings" ValidationDelay="0">
+                <MudPaper Class="pa-6" Elevation="1">
+                    <MudStack Spacing="4">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Outlined.Palette"
+                                     Size="Size.Small"
+                                     Color="Color.Primary"/>
+                            <MudText Typo="Typo.h5">Appearance</MudText>
                         </MudStack>
-                    </MudPaper>
-
-                    <MudStack Row
-                              Justify="Justify.FlexEnd"
-                              Class="mt-3">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Outlined.Save"
-                                   OnClick="@SaveAsync">
-                            Save changes
-                        </MudButton>
+                        <MudSelect T="AppTheme"
+                                   Label="Theme"
+                                   Variant="Variant.Outlined"
+                                   FullWidth
+                                   @bind-Value="_settings.Theme">
+                            <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
+                            <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
+                        </MudSelect>
                     </MudStack>
-                </MudForm>
-            </MudTabPanel>
+                </MudPaper>
 
-            <MudTabPanel Text="Users" Icon="@Icons.Material.Outlined.Group">
-                <MudStack Spacing="4">
+                <MudStack Row
+                          Justify="Justify.FlexEnd"
+                          Class="mt-3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Outlined.Save"
+                               OnClick="@SaveAsync">
+                        Save changes
+                    </MudButton>
+                </MudStack>
+            </MudForm>
+
+            <MudPaper Class="pa-6 mt-4" Elevation="1">
+                <MudStack Spacing="3">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Outlined.ManageSearch"
+                                 Size="Size.Small"
+                                 Color="Color.Primary"/>
+                        <MudText Typo="Typo.h5">Logs and diagnostics</MudText>
+                    </MudStack>
+
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Review concise application warnings and errors in RasHub, or open Seq for complete logs and
+                        advanced queries.
+                    </MudText>
+
+                    <MudStack Row Wrap="Wrap.Wrap" Spacing="2">
+                        <MudButton Href="/health-events"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.NotificationImportant">
+                            Application events
+                        </MudButton>
+
+                        @if (SeqUiUrl is not null)
+                        {
+                            <MudButton Href="@SeqUiUrl"
+                                       Target="_blank"
+                                       Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Outlined.OpenInNew">
+                                Open Seq
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">
+                                Seq UI URL is not configured.
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Users" Icon="@Icons.Material.Outlined.Group">
+            <MudStack Spacing="4">
+                <MudForm Model="_settings" ValidationDelay="0">
                     <MudPaper Class="pa-6" Elevation="1">
                         <MudStack Spacing="4">
                             <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
@@ -98,126 +130,149 @@
                                                Label="Allow registration"/>
                                 </MudItem>
                             </MudGrid>
-
-                            <MudStack Row Justify="Justify.FlexEnd">
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Outlined.Save"
-                                           OnClick="@SaveAsync">
-                                    Save changes
-                                </MudButton>
-                            </MudStack>
                         </MudStack>
                     </MudPaper>
 
-                    <MudPaper Class="pa-6" Elevation="1">
-                        <MudStack Spacing="4">
-                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Outlined.AdminPanelSettings"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-                                <MudText Typo="Typo.h5">RasHub users</MudText>
-                            </MudStack>
+                    <MudStack Row
+                              Justify="Justify.FlexEnd"
+                              Class="mt-3">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Save"
+                                   OnClick="@SaveAsync">
+                            Save changes
+                        </MudButton>
+                    </MudStack>
+                </MudForm>
 
-                            @if (_loadingUsers)
-                            {
-                                <MudProgressLinear Indeterminate Color="Color.Primary"/>
-                            }
-                            else
-                            {
-                                <MudTable T="UserAdministrationItem"
-                                          Items="@_users"
-                                          Hover
-                                          Striped
-                                          Bordered>
-                                    <HeaderContent>
-                                        <MudTh Class="mud-theme-secondary">User</MudTh>
-                                        <MudTh Class="mud-theme-secondary">Administrator</MudTh>
-                                        <MudTh Class="mud-theme-secondary">API key</MudTh>
-                                        <MudTh Class="mud-theme-secondary">Actions</MudTh>
-                                    </HeaderContent>
-                                    <RowTemplate>
-                                        <MudTd DataLabel="User">
-                                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
-                                                @if (context.IsCurrentUser)
-                                                {
-                                                    <MudChip T="string"
-                                                             Size="Size.Small"
-                                                             Color="Color.Info"
-                                                             Variant="Variant.Outlined">
-                                                        You
-                                                    </MudChip>
-                                                }
-                                            </MudStack>
-                                        </MudTd>
-                                        <MudTd DataLabel="Administrator">
-                                            <MudSwitch T="bool"
-                                                       Value="@context.IsAdmin"
-                                                       ValueChanged="@(value => SetAdminAsync(context, value))"
+                <MudPaper Class="pa-6" Elevation="1">
+                    <MudStack Spacing="4">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Outlined.AdminPanelSettings"
+                                     Size="Size.Small"
+                                     Color="Color.Primary"/>
+                            <MudText Typo="Typo.h5">Users</MudText>
+                        </MudStack>
+
+                        @if (_loadingUsers)
+                        {
+                            <MudProgressLinear Indeterminate Color="Color.Primary"/>
+                        }
+                        else
+                        {
+                            <MudTable T="UserAdministrationItem"
+                                      Items="@_users"
+                                      Hover
+                                      Striped
+                                      Bordered>
+                                <HeaderContent>
+                                    <MudTh>User</MudTh>
+                                    <MudTh>Status</MudTh>
+                                    <MudTh>Administrator</MudTh>
+                                    <MudTh>API key</MudTh>
+                                    <MudTh>Actions</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="User">
+                                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                            @if (context.IsCurrentUser)
+                                            {
+                                                <MudChip T="string"
+                                                         Size="Size.Small"
+                                                         Color="Color.Info"
+                                                         Variant="Variant.Outlined">
+                                                    You
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                    </MudTd>
+                                    <MudTd DataLabel="Status">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@(context.IsBlocked ? Color.Error : Color.Success)"
+                                                 Variant="Variant.Outlined">
+                                            @(context.IsBlocked ? "Blocked" : "Active")
+                                        </MudChip>
+                                    </MudTd>
+                                    <MudTd DataLabel="Administrator">
+                                        <MudSwitch T="bool"
+                                                   Value="@context.IsAdmin"
+                                                   ValueChanged="@(value => SetAdminAsync(context, value))"
+                                                   Disabled="@(_updatingUserId is not null || context.IsCurrentUser)"
+                                                   Color="Color.Primary"
+                                                   aria-label="@($"Administrator access for {context.DisplayName}")"/>
+                                    </MudTd>
+                                    <MudTd DataLabel="API key">
+                                        @if (context.ApiKey is null)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                                Not generated
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2"
+                                                     Style="font-family: monospace; overflow-wrap: anywhere;">
+                                                @context.ApiKey
+                                            </MudText>
+                                        }
+                                    </MudTd>
+                                    <MudTd DataLabel="Actions">
+                                        <MudStack Row Wrap="Wrap.Wrap" Spacing="1">
+                                            <MudButton Variant="Variant.Outlined"
+                                                       Color="@(context.IsBlocked ? Color.Success : Color.Error)"
+                                                       Size="Size.Small"
+                                                       StartIcon="@(context.IsBlocked ? Icons.Material.Outlined.LockOpen : Icons.Material.Outlined.Block)"
                                                        Disabled="@(_updatingUserId is not null || context.IsCurrentUser)"
+                                                       OnClick="@(() => SetBlockedAsync(context, !context.IsBlocked))">
+                                                @(context.IsBlocked ? "Unblock" : "Block")
+                                            </MudButton>
+                                            <MudButton Variant="Variant.Outlined"
                                                        Color="Color.Primary"
-                                                       aria-label="@($"Administrator access for {context.DisplayName}")"/>
-                                        </MudTd>
-                                        <MudTd DataLabel="API key">
-                                            @if (context.ApiKey is null)
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Outlined.Key"
+                                                       Disabled="@(_updatingUserId is not null)"
+                                                       OnClick="@(() => GenerateApiKeyAsync(context))">
+                                                @(context.ApiKey is null ? "Generate" : "Regenerate")
+                                            </MudButton>
+                                            @if (context.ApiKey is not null)
                                             {
-                                                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                                    Not generated
-                                                </MudText>
-                                            }
-                                            else
-                                            {
-                                                <MudText Typo="Typo.body2"
-                                                         Style="font-family: monospace; overflow-wrap: anywhere;">
-                                                    @context.ApiKey
-                                                </MudText>
-                                            }
-                                        </MudTd>
-                                        <MudTd DataLabel="Actions">
-                                            <MudStack Row Wrap="Wrap.Wrap" Spacing="1">
-                                                <MudButton Variant="Variant.Outlined"
-                                                           Color="Color.Primary"
+                                                <MudButton Variant="Variant.Text"
+                                                           Color="Color.Error"
                                                            Size="Size.Small"
-                                                           StartIcon="@Icons.Material.Outlined.Key"
+                                                           StartIcon="@Icons.Material.Outlined.KeyOff"
                                                            Disabled="@(_updatingUserId is not null)"
-                                                           OnClick="@(() => GenerateApiKeyAsync(context))">
-                                                    @(context.ApiKey is null ? "Generate" : "Regenerate")
+                                                           OnClick="@(() => ClearApiKeyAsync(context))">
+                                                    Clear
                                                 </MudButton>
-                                                @if (context.ApiKey is not null)
-                                                {
-                                                    <MudButton Variant="Variant.Text"
-                                                               Color="Color.Error"
-                                                               Size="Size.Small"
-                                                               StartIcon="@Icons.Material.Outlined.KeyOff"
-                                                               Disabled="@(_updatingUserId is not null)"
-                                                               OnClick="@(() => ClearApiKeyAsync(context))">
-                                                        Clear
-                                                    </MudButton>
-                                                }
-                                            </MudStack>
-                                        </MudTd>
-                                    </RowTemplate>
-                                    <NoRecordsContent>
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                            No users found.
-                                        </MudText>
-                                    </NoRecordsContent>
-                                </MudTable>
-                            }
-                        </MudStack>
-                    </MudPaper>
-                </MudStack>
-            </MudTabPanel>
-        </MudTabs>
-    </MudStack>
-</MudContainer>
+                                            }
+                                        </MudStack>
+                                    </MudTd>
+                                </RowTemplate>
+                                <NoRecordsContent>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        No users found.
+                                    </MudText>
+                                </NoRecordsContent>
+                            </MudTable>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudStack>
+        </MudTabPanel>
+    </MudTabs>
+</AppPageShell>
 
 @code {
     private ApplicationSettings _settings = new();
     private IReadOnlyList<UserAdministrationItem> _users = [];
     private bool _loadingUsers;
     private string? _updatingUserId;
+
+    private string? SeqUiUrl => SeqUiUrlResolver.Resolve(
+        Configuration["Seq:UiUrl"],
+        new Uri(NavigationManager.BaseUri));
 
     protected override async Task OnInitializedAsync()
     {
@@ -269,6 +324,17 @@
             () => UserAdministrationService.GenerateApiKeyAsync(user.Id),
             $"API key for {user.DisplayName} was generated.",
             "Unable to generate the API key.");
+    }
+
+    private async Task SetBlockedAsync(UserAdministrationItem user, bool isBlocked)
+    {
+        await UpdateUserAsync(
+            user,
+            () => UserAdministrationService.SetBlockedAsync(user.Id, isBlocked),
+            isBlocked
+                ? $"{user.DisplayName} was blocked. Login and API access were revoked."
+                : $"{user.DisplayName} was unblocked.",
+            "Unable to update user status.");
     }
 
     private async Task ClearApiKeyAsync(UserAdministrationItem user)

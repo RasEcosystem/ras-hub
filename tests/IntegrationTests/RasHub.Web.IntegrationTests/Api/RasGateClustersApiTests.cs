@@ -4,7 +4,6 @@ using System.Text.Json;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Contracts.Common.Pagination;
-using RasHub.Domain;
 using RasHub.Domain.Enums;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
@@ -57,6 +56,8 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         Assert.Equal(snapshot.ExternalId, stored.ExternalId);
         Assert.Equal(snapshot.Name, stored.Name);
         Assert.NotEqual(default, stored.ObservedAt);
+        var storedGate = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(storedGate?.LastSeenAt);
     }
 
     [Fact]
@@ -100,6 +101,30 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal(
             "ras_gate_not_found",
+            json.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(0, _factory.RasGateClientFactory.ClusterRequestCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Get_paged_for_inactive_gate_returns_conflict_without_calling_gate(
+        bool refresh)
+    {
+        var rasGate = await _factory.SeedRasGateAsync(isActive: false);
+        using var client = _factory.CreateAuthenticatedClient();
+        var path = $"/api/v1/ras-gates/{rasGate.Id}/clusters/get-paged" +
+                   (refresh ? "?refresh=true" : string.Empty);
+
+        using var response = await client.PostAsJsonAsync(
+            path,
+            new PageRequest(),
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(
+            "ras_gate_inactive",
             json.GetProperty("error").GetProperty("code").GetString());
         Assert.Equal(0, _factory.RasGateClientFactory.ClusterRequestCount);
     }

@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using RasHub.Application.RasGates.Models;
-using RasHub.Domain;
 using RasHub.Domain.Enums;
 using RasHub.Infrastructure.Database;
 

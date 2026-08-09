@@ -1,9 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
+using RasHub.Application.RasGates.Tasks;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
+using RasHub.Synchronization.Abstractions;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
@@ -77,6 +81,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal(request.Name, data.GetProperty("name").GetString());
         Assert.Equal(request.Url, data.GetProperty("url").GetString());
         Assert.Equal(request.Port, data.GetProperty("port").GetInt32());
+        Assert.True(data.GetProperty("isActive").GetBoolean());
         Assert.False(data.TryGetProperty("apiKey", out _));
         Assert.EndsWith($"{RasGatesPath}/{id}", response.Headers.Location?.AbsoluteUri);
         AssertTraceId(response);
@@ -84,6 +89,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         var stored = await _factory.FindRasGateAsync(id);
         Assert.NotNull(stored);
         Assert.Equal(request.ApiKey, stored.ApiKey);
+        Assert.True(stored.IsActive);
     }
 
     [Fact]
@@ -105,6 +111,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(rasGate.Id, data.GetProperty("id").GetGuid());
         Assert.Equal(rasGate.Name, data.GetProperty("name").GetString());
+        Assert.True(data.GetProperty("isActive").GetBoolean());
         Assert.False(data.TryGetProperty("apiKey", out _));
     }
 
@@ -175,6 +182,8 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal("Remote Gate", stored.InstanceName);
         Assert.Equal("2.3.4", stored.Version);
         Assert.NotNull(stored.StatusObservedAt);
+        Assert.NotNull(stored.LastSeenAt);
+        Assert.Equal(stored.StatusObservedAt, stored.LastSeenAt);
 
         using var cachedResponse = await client.GetAsync(
             $"{RasGatesPath}/{rasGate.Id}/status",
@@ -197,6 +206,50 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("ras_gate_not_found", GetErrorCode(json));
         Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Get_status_for_inactive_gate_returns_conflict_without_calling_gate(
+        bool refresh)
+    {
+        var rasGate = await _factory.SeedRasGateAsync(isActive: false);
+        using var client = _factory.CreateAuthenticatedClient();
+        var path = $"{RasGatesPath}/{rasGate.Id}/status" +
+                   (refresh ? "?refresh=true" : string.Empty);
+
+        using var response = await client.GetAsync(
+            path,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("ras_gate_inactive", GetErrorCode(json));
+        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Background_handlers_reject_inactive_gate_before_creating_requests()
+    {
+        var rasGate = await _factory.SeedRasGateAsync(isActive: false);
+        using var scope = _factory.Services.CreateScope();
+        var statusHandler = scope.ServiceProvider.GetRequiredService<
+            IBackgroundTaskHandler<RefreshRasGateStatusTask>>();
+        var clustersHandler = scope.ServiceProvider.GetRequiredService<
+            IBackgroundTaskHandler<SynchronizeClustersTask>>();
+
+        await Assert.ThrowsAsync<RasGateInactiveException>(() =>
+            statusHandler.ExecuteAsync(
+                new RefreshRasGateStatusTask(rasGate.Id),
+                TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<RasGateInactiveException>(() =>
+            clustersHandler.ExecuteAsync(
+                new SynchronizeClustersTask(rasGate.Id),
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateClientFactory.ClusterRequestCount);
     }
 
     [Fact]
@@ -244,6 +297,49 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("new-secret", (await _factory.FindRasGateAsync(rasGate.Id))?.ApiKey);
+    }
+
+    [Fact]
+    public async Task Update_changes_activity_and_omission_preserves_it()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+        var deactivate = new UpdateRasGateRequest(
+            rasGate.Name,
+            rasGate.Url,
+            rasGate.Port,
+            IsActive: false);
+
+        using var deactivateResponse = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            deactivate,
+            TestContext.Current.CancellationToken);
+        var deactivateJson = await ReadJsonAsync(deactivateResponse);
+
+        Assert.Equal(HttpStatusCode.OK, deactivateResponse.StatusCode);
+        Assert.False(deactivateJson.GetProperty("data").GetProperty("isActive").GetBoolean());
+        Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
+
+        var updateWithoutActivity = new UpdateRasGateRequest(
+            "Renamed gate",
+            rasGate.Url,
+            rasGate.Port);
+        using var preserveResponse = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            updateWithoutActivity,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, preserveResponse.StatusCode);
+        Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
+
+        var reactivate = updateWithoutActivity with { IsActive = true };
+        using var reactivateResponse = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            reactivate,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, reactivateResponse.StatusCode);
+        Assert.True((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
     }
 
     [Fact]

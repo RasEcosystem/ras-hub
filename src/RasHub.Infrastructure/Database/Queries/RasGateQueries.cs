@@ -8,6 +8,31 @@ namespace RasHub.Infrastructure.Database.Queries;
 
 public sealed class RasGateQueries(RasHubDbContext db)
 {
+    public Task<List<Guid>> GetActiveIdsAsync(CancellationToken cancellationToken)
+    {
+        return db.RasGates
+            .AsNoTracking()
+            .Where(rasGate => rasGate.IsActive)
+            .OrderBy(rasGate => rasGate.Id)
+            .Select(rasGate => rasGate.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<RasGateHealthSummary> GetHealthSummaryAsync(
+        DateTime onlineSince,
+        CancellationToken cancellationToken)
+    {
+        var query = db.RasGates
+            .AsNoTracking()
+            .Where(rasGate => rasGate.IsActive);
+
+        return new RasGateHealthSummary(
+            await query.CountAsync(cancellationToken),
+            await query.CountAsync(
+                rasGate => rasGate.LastSeenAt >= onlineSince,
+                cancellationToken));
+    }
+
     public async Task<PageResult<RasGateModel>> GetPagedAsync(
         PageRequest request,
         CancellationToken cancellationToken)
@@ -27,6 +52,7 @@ public sealed class RasGateQueries(RasHubDbContext db)
                 rasGate.Name,
                 rasGate.Url,
                 rasGate.Port,
+                rasGate.IsActive,
                 rasGate.CreatedAt,
                 rasGate.UpdatedAt))
             .ToListAsync(cancellationToken);
@@ -52,6 +78,7 @@ public sealed class RasGateQueries(RasHubDbContext db)
                 rasGate.Name,
                 rasGate.Url,
                 rasGate.Port,
+                rasGate.IsActive,
                 rasGate.CreatedAt,
                 rasGate.UpdatedAt))
             .SingleOrDefaultAsync(cancellationToken);
@@ -73,3 +100,5 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .SingleOrDefaultAsync(cancellationToken);
     }
 }
+
+public sealed record RasGateHealthSummary(int TotalCount, int OnlineCount);

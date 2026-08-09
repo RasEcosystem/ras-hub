@@ -1,47 +1,136 @@
-.monitor-page {
-    min-height: calc(100vh - 64px);
-}
-
-.lane-card {
-    height: 100%;
-    border-top: 3px solid var(--mud-palette-primary);
-}
-
-.task-key {
-    display: block;
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: monospace;
-    font-size: .75rem;
-}
-
-.state-summary,
-.monitor-header-status {
-    flex-wrap: wrap;
-}
-
-.executions-card {
-    width: 100%;
+.health-panel {
     min-width: 0;
 }
 
-.executions-table {
+.health-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.health-timeline-scroll {
     width: 100%;
+    overflow-x: auto;
+    padding-bottom: .4rem;
+}
+
+.health-timeline {
+    display: grid;
+    grid-template-columns: repeat(24, minmax(46px, 1fr));
+    gap: 3px;
+    min-width: 1100px;
+}
+
+.health-hour {
+    --health-hour-color: var(--mud-palette-lines-default);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 74px;
+    padding: .45rem .25rem;
+    border: 1px solid color-mix(in srgb, var(--health-hour-color) 72%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--health-hour-color) 16%, var(--mud-palette-surface));
+    color: var(--mud-palette-text-primary);
+    box-sizing: border-box;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+.health-hour:hover,
+.health-hour:focus-visible {
+    border-color: var(--health-hour-color);
+    background: color-mix(in srgb, var(--health-hour-color) 24%, var(--mud-palette-surface));
+    outline: none;
+}
+
+.health-hour--healthy {
+    --health-hour-color: var(--mud-palette-success);
+}
+
+.health-hour--warning {
+    --health-hour-color: var(--mud-palette-warning);
+}
+
+.health-hour--error {
+    --health-hour-color: var(--mud-palette-error);
+}
+
+.health-hour--no-data {
+    --health-hour-color: var(--mud-palette-lines-default);
+    color: var(--mud-palette-text-secondary);
+    background: color-mix(in srgb, var(--mud-palette-lines-default) 10%, var(--mud-palette-surface));
+}
+
+.health-hour--current {
+    box-shadow: inset 0 0 0 2px var(--mud-palette-primary);
+}
+
+.health-hour-time {
+    font-size: .7rem;
+    line-height: 1;
+    color: var(--mud-palette-text-secondary);
+}
+
+.health-hour-counts {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 2rem;
+    font-size: .7rem;
+    font-weight: 700;
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+}
+
+.health-hour-ok,
+.health-hour-empty {
+    font-size: .65rem;
+    font-weight: 600;
+}
+
+.health-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem 1.25rem;
+    margin-top: .8rem;
+    color: var(--mud-palette-text-secondary);
+    font-size: .75rem;
+}
+
+.health-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.health-legend-swatch {
+    display: inline-block;
+    width: .65rem;
+    height: .65rem;
+    border-radius: 2px;
+    background: var(--mud-palette-lines-default);
+}
+
+.health-legend-swatch--healthy {
+    background: var(--mud-palette-success);
+}
+
+.health-legend-swatch--warning {
+    background: var(--mud-palette-warning);
+}
+
+.health-legend-swatch--error {
+    background: var(--mud-palette-error);
 }
 
 @media (max-width: 600px) {
-    .monitor-header,
-    .executions-header {
-        align-items: flex-start !important;
-        flex-direction: column !important;
-    }
-}
-
-@media (max-width: 960px) {
-    .monitor-page {
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+    .health-header {
+        flex-direction: column;
     }
 }

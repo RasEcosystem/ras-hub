@@ -1,0 +1,334 @@
+@page "/health-events"
+@attribute [Authorize(Policy = AppPolicies.ManageGlobalSettings)]
+@using RasHub.Web.Infrastructure.Authorization
+@using RasHub.Web.Infrastructure.Diagnostics
+@using Serilog.Events
+@implements IAsyncDisposable
+@inject ApplicationDiagnostics Diagnostics
+@inject NavigationManager NavigationManager
+@inject TimeProvider TimeProvider
+
+<AppPageTitle Title="Application events"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="Application events"
+              Subtitle="Warnings and errors retained for the current application process"
+              Icon="@Icons.Material.Filled.ManageSearch">
+    <HeaderActions>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+            Warnings @WarningCount.ToString("N0")
+        </MudChip>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error">
+            Errors @ErrorCount.ToString("N0")
+        </MudChip>
+        <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                       OnClick="RefreshEvents"
+                       aria-label="Refresh application events"/>
+    </HeaderActions>
+    <ChildContent>
+        <MudStack Spacing="3">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudGrid Spacing="2" Class="event-filters">
+                    <MudItem xs="12" md="6">
+                        <MudTextField T="string"
+                                      @bind-Value="_searchText"
+                                      Label="Search messages"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Immediate
+                                      Clearable
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Outlined.Search"/>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudSelect T="DiagnosticEventLevelFilter"
+                                   @bind-Value="_levelFilter"
+                                   Label="Level"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense">
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.All">All actionable</MudSelectItem>
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.Warnings">Warnings</MudSelectItem>
+                            <MudSelectItem Value="DiagnosticEventLevelFilter.Errors">Errors</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack Row AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="event-range-label">
+                                @TimeRangeLabel
+                            </MudText>
+                            @if (HasTimeFilter)
+                            {
+                                <MudTooltip Text="Show all retained events">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.FilterAltOff"
+                                                   OnClick="ClearTimeFilter"
+                                                   aria-label="Clear time filter"/>
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudPaper Class="pa-3 events-card" Elevation="1">
+                <MudTable T="ApplicationDiagnosticEvent"
+                          Items="@FilteredEvents"
+                          Dense
+                          Hover
+                          Breakpoint="Breakpoint.Md"
+                          RowsPerPage="25">
+                    <HeaderContent>
+                        <MudTh>Time</MudTh>
+                        <MudTh>Level</MudTh>
+                        <MudTh>Source</MudTh>
+                        <MudTh>Message</MudTh>
+                        <MudTh>Trace</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Time" Class="event-time">
+                            <MudText Typo="Typo.body2">
+                                @context.Timestamp.ToLocalTime().ToString("dd MMM HH:mm:ss")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @($"#{context.Id}")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Level">
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Variant="Variant.Outlined"
+                                     Color="@GetLevelColor(context.Level)">
+                                @GetLevelLabel(context.Level)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Source">
+                            <span class="event-source" title="@context.SourceContext">
+                                @foreach (var sourcePart in GetSourceParts(context.SourceContext))
+                                {
+                                    <span class="event-source-line">@sourcePart</span>
+                                }
+                            </span>
+                        </MudTd>
+                        <MudTd DataLabel="Message" Class="event-message">
+                            <MudText Typo="Typo.body2">@context.Message</MudText>
+                            @if (context.ExceptionDetails is not null)
+                            {
+                                <details class="event-details">
+                                    <summary>Technical details</summary>
+                                    @if (context.ExceptionType is not null)
+                                    {
+                                        <div class="event-exception-type">@context.ExceptionType</div>
+                                    }
+                                    <pre>@context.ExceptionDetails</pre>
+                                </details>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Trace">
+                            <span class="event-trace">@(context.TraceId ?? "—")</span>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="1" Class="pa-6">
+                            <MudIcon Icon="@Icons.Material.Outlined.CheckCircleOutline"
+                                     Color="Color.Success"
+                                     Size="Size.Large"/>
+                            <MudText Typo="Typo.body1">No matching warnings or errors</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                The viewer retains up
+                                to @ApplicationDiagnostics.RetainedEventCapacity.ToString("N0") events for the current
+                                process.
+                            </MudText>
+                        </MudStack>
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="@(new[] { 10, 25, 50, 100 })"/>
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+        </MudStack>
+    </ChildContent>
+</AppPageShell>
+
+@code {
+    private readonly CancellationTokenSource _disposeToken = new();
+    private IReadOnlyList<ApplicationDiagnosticEvent> _events = [];
+    private DiagnosticEventLevelFilter _levelFilter;
+    private string? _searchText;
+
+    [SupplyParameterFromQuery(Name = "from")]
+    public long? FromUnixSeconds { get; set; }
+
+    [SupplyParameterFromQuery(Name = "to")]
+    public long? ToUnixSeconds { get; set; }
+
+    [SupplyParameterFromQuery(Name = "level")]
+    public string? Level { get; set; }
+
+    private DateTimeOffset? FromTime => FromUnixSeconds is { } value
+        ? TryFromUnixTime(value)
+        : null;
+
+    private DateTimeOffset? ToTime => ToUnixSeconds is { } value
+        ? TryFromUnixTime(value)
+        : null;
+
+    private bool HasTimeFilter => FromTime is not null || ToTime is not null;
+
+    private IReadOnlyList<ApplicationDiagnosticEvent> FilteredEvents => _events
+        .Where(MatchesLevel)
+        .Where(MatchesSearch)
+        .ToArray();
+
+    private int WarningCount => _events.Count(item => item.Level == LogEventLevel.Warning);
+
+    private int ErrorCount => _events.Count(item => item.Level is LogEventLevel.Error or LogEventLevel.Fatal);
+
+    private string TimeRangeLabel
+    {
+        get
+        {
+            if (FromTime is { } from && ToTime is { } to)
+                return $"{from.ToLocalTime():dd MMM, HH:mm}–{to.ToLocalTime():HH:mm}";
+
+            if (FromTime is { } fromOnly)
+                return $"From {fromOnly.ToLocalTime():dd MMM, HH:mm}";
+
+            if (ToTime is { } toOnly)
+                return $"Before {toOnly.ToLocalTime():dd MMM, HH:mm}";
+
+            return $"Current process · {_events.Count:N0} retained";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _levelFilter = ParseLevelFilter(Level);
+        RefreshEvents();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+            _ = PollAsync();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2), TimeProvider);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(() =>
+                {
+                    RefreshEvents();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void RefreshEvents()
+    {
+        _events = Diagnostics.GetEvents(FromTime, ToTime);
+    }
+
+    private bool MatchesLevel(ApplicationDiagnosticEvent diagnosticEvent)
+    {
+        return _levelFilter switch
+        {
+            DiagnosticEventLevelFilter.Warnings => diagnosticEvent.Level == LogEventLevel.Warning,
+            DiagnosticEventLevelFilter.Errors => diagnosticEvent.Level is LogEventLevel.Error or LogEventLevel.Fatal,
+            _ => true
+        };
+    }
+
+    private bool MatchesSearch(ApplicationDiagnosticEvent diagnosticEvent)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+            return true;
+
+        var searchText = _searchText.Trim();
+        return Contains(diagnosticEvent.Message, searchText) ||
+               Contains(diagnosticEvent.SourceContext, searchText) ||
+               Contains(diagnosticEvent.TraceId, searchText) ||
+               Contains(diagnosticEvent.ExceptionMessage, searchText) ||
+               Contains(diagnosticEvent.ExceptionType, searchText);
+    }
+
+    private static bool Contains(string? value, string searchText)
+    {
+        return value?.Contains(searchText, StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static Color GetLevelColor(LogEventLevel level)
+    {
+        return level == LogEventLevel.Warning ? Color.Warning : Color.Error;
+    }
+
+    private static string GetLevelLabel(LogEventLevel level)
+    {
+        return level == LogEventLevel.Fatal ? "Fatal" : level.ToString();
+    }
+
+    private static DiagnosticEventLevelFilter ParseLevelFilter(string? level)
+    {
+        return level?.ToLowerInvariant() switch
+        {
+            "warnings" => DiagnosticEventLevelFilter.Warnings,
+            "errors" => DiagnosticEventLevelFilter.Errors,
+            _ => DiagnosticEventLevelFilter.All
+        };
+    }
+
+    private static IReadOnlyList<string> GetSourceParts(string? sourceContext)
+    {
+        if (string.IsNullOrWhiteSpace(sourceContext))
+            return ["Application"];
+
+        var parts = sourceContext.Split('.');
+        return parts.Length <= 2
+            ? parts
+            : parts[^2..];
+    }
+
+    private static DateTimeOffset? TryFromUnixTime(long value)
+    {
+        try
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(value);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
+    private void ClearTimeFilter()
+    {
+        var levelQuery = _levelFilter switch
+        {
+            DiagnosticEventLevelFilter.Warnings => "?level=warnings",
+            DiagnosticEventLevelFilter.Errors => "?level=errors",
+            _ => string.Empty
+        };
+
+        NavigationManager.NavigateTo($"/health-events{levelQuery}");
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _disposeToken.Cancel();
+        _disposeToken.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private enum DiagnosticEventLevelFilter
+    {
+        All,
+        Warnings,
+        Errors
+    }
+
+}

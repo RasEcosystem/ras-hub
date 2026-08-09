@@ -16,11 +16,15 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
 
     public required string ApiKey { get; set; }
 
+    public bool IsActive { get; set; } = true;
+
     public string? InstanceName { get; set; }
 
     public string? Version { get; set; }
 
     public DateTime? StatusObservedAt { get; set; }
+
+    public DateTime? LastSeenAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using RasHub.Application.Interfaces;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Tasks;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.Common.Pagination;
@@ -38,6 +39,9 @@ public sealed class RasGatesController : ControllerBase
         StatusCodes.Status404NotFound)]
     [ProducesResponseType(
         typeof(OpenApiErrorResponse),
+        StatusCodes.Status409Conflict)]
+    [ProducesResponseType(
+        typeof(OpenApiErrorResponse),
         StatusCodes.Status502BadGateway)]
     [ProducesResponseType(
         typeof(OpenApiErrorResponse),
@@ -52,10 +56,15 @@ public sealed class RasGatesController : ControllerBase
         CancellationToken cancellationToken,
         [FromQuery] bool refresh = false)
     {
-        var status = await query.GetStatusAsync(id, cancellationToken);
+        var rasGate = await query.GetByIdAsync(id, cancellationToken);
 
-        if (status is null)
+        if (rasGate is null)
             return CreateStatusNotFoundResponse(id);
+
+        if (!rasGate.IsActive)
+            return CreateInactiveStatusResponse(id);
+
+        var status = await query.GetStatusAsync(id, cancellationToken);
 
         if (!refresh)
             return ApiResponse<RasGateStatusResponse>.Ok(status);
@@ -161,7 +170,8 @@ public sealed class RasGatesController : ControllerBase
             Name = request.Name,
             Url = request.Url,
             Port = request.Port,
-            ApiKey = request.ApiKey
+            ApiKey = request.ApiKey,
+            IsActive = request.IsActive
         };
 
         await repository.AddAsync(rasGate, cancellationToken);
@@ -179,7 +189,7 @@ public sealed class RasGatesController : ControllerBase
     [HttpPut("{id:guid}")]
     [EndpointSummary("Update gateway")]
     [EndpointDescription(
-        "Updates the gateway connection. When the API key is omitted, the stored key is preserved.")]
+        "Updates the gateway connection and activity. When the API key or activity is omitted, the stored value is preserved.")]
     [ProducesResponseType(
         typeof(ApiResponse<RasGateModel>),
         StatusCodes.Status200OK)]
@@ -207,6 +217,14 @@ public sealed class RasGatesController : ControllerBase
 
         if (request.ApiKey is not null)
             rasGate.ApiKey = request.ApiKey;
+
+        if (request.IsActive is { } isActive && rasGate.IsActive != isActive)
+        {
+            rasGate.IsActive = isActive;
+
+            if (isActive)
+                rasGate.LastSeenAt = null;
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -257,6 +275,15 @@ public sealed class RasGatesController : ControllerBase
             $"RasGate '{id}' was not found.");
     }
 
+    private static ApiResponse<RasGateStatusResponse> CreateInactiveStatusResponse(
+        Guid id)
+    {
+        return ApiResponse<RasGateStatusResponse>.Fail(
+            HttpStatusCode.Conflict,
+            "ras_gate_inactive",
+            $"RasGate '{id}' is inactive.");
+    }
+
     private static ApiResponse<RasGateStatusResponse> CreateRefreshFailureResponse(
         BackgroundTaskResult result)
     {
@@ -265,6 +292,9 @@ public sealed class RasGatesController : ControllerBase
                 HttpStatusCode.ServiceUnavailable,
                 "ras_gate_refresh_canceled",
                 "RasGate status refresh was canceled.");
+
+        if (result.Exception is RasGateInactiveException inactiveException)
+            return CreateInactiveStatusResponse(inactiveException.RasGateId);
 
         if (result.Exception is TimeoutException)
             return ApiResponse<RasGateStatusResponse>.Fail(
@@ -285,6 +315,7 @@ public sealed class RasGatesController : ControllerBase
             rasGate.Name,
             rasGate.Url,
             rasGate.Port,
+            rasGate.IsActive,
             rasGate.CreatedAt,
             rasGate.UpdatedAt);
     }

@@ -1,5 +1,4 @@
 using RasHub.Application.RasGates.Serialization;
-using RasHub.Domain;
 using RasHub.Domain.Enums;
 using RasHub.Infrastructure.RasGates.Serialization;
 

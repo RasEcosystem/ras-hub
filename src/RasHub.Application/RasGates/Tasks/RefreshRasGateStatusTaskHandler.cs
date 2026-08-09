@@ -1,5 +1,6 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Domain;
 using RasHub.Synchronization.Abstractions;
 using RasHub.Synchronization.Exceptions;
@@ -25,12 +26,18 @@ public sealed class RefreshRasGateStatusTaskHandler(
             throw new NonRetryableBackgroundTaskException(
                 $"RasGate '{task.RasGateId}' was not found.");
 
+        if (!rasGate.IsActive)
+            throw new RasGateInactiveException(rasGate.Id);
+
         var client = clientFactory.Create(rasGate);
         var status = await client.GetStatusAsync(cancellationToken);
 
+        var observedAt = timeProvider.GetUtcNow().UtcDateTime;
+
         rasGate.InstanceName = status.InstanceName;
         rasGate.Version = status.Version;
-        rasGate.StatusObservedAt = timeProvider.GetUtcNow().UtcDateTime;
+        rasGate.StatusObservedAt = observedAt;
+        rasGate.LastSeenAt = observedAt;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }

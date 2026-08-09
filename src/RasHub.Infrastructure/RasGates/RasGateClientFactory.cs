@@ -12,6 +12,9 @@ internal sealed class RasGateClientFactory(
 {
     public IRasGateClient Create(RasGate rasGate)
     {
+        if (!rasGate.IsActive)
+            throw new RasGateInactiveException(rasGate.Id);
+
         return new HttpRasGateClient(
             transport.Client,
             CreateBaseAddress(rasGate),

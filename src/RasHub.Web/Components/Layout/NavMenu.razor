@@ -1,7 +1,8 @@
 ﻿@using RasHub.Web.Infrastructure.Authorization
+@using RasHub.Web.Infrastructure.Logging
 @implements IDisposable
+@inject IHostEnvironment HostEnvironment
 @inject NavigationManager NavigationManager
-@inject IConfiguration Configuration
 
 <div style="
     height: 100%;
@@ -30,19 +31,21 @@
 
         </MudTooltip>
 
-        <MudTooltip Text="Test workload"
+        <MudTooltip Text="Synchronization engine"
                     Placement="Placement.Right"
                     Arrow="true">
 
             <MudIconButton
-                Icon="@Icons.Material.Filled.Science"
-                Href="/test-workload"
-                Color="@GetRouteColor("test-workload")"
+                Icon="@Icons.Material.Filled.Sync"
+                Href="/synchronization-engine"
+                Color="@GetRouteColor("synchronization-engine")"
                 Size="Size.Medium"
                 Variant="Variant.Text"
-                aria-label="Test workload"/>
+                aria-label="Synchronization engine"/>
 
         </MudTooltip>
+
+        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
     </MudStack>
 
@@ -80,25 +83,41 @@
 
                 </MudTooltip>
 
-                @if (!string.IsNullOrWhiteSpace(SeqUiUrl))
-                {
-                    <MudTooltip Text="Logs (Seq)"
-                                Placement="Placement.Right"
-                                Arrow="true">
+                <MudTooltip Text="Application events"
+                            Placement="Placement.Right"
+                            Arrow="true">
 
-                        <MudIconButton
-                            Icon="@Icons.Material.Filled.ManageSearch"
-                            Href="@SeqUiUrl"
-                            Target="_blank"
-                            Color="Color.Default"
-                            Size="Size.Medium"
-                            Variant="Variant.Text"
-                            aria-label="Open Seq logs"/>
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.ManageSearch"
+                        Href="/health-events"
+                        Color="@GetRouteColor("health-events")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="Application events"/>
 
-                    </MudTooltip>
-                }
+                </MudTooltip>
             </Authorized>
         </AuthorizeView>
+
+        @if (HostEnvironment.IsDevelopment())
+        {
+            <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+
+            <MudTooltip Text="API documentation"
+                        Placement="Placement.Right"
+                        Arrow="true">
+
+                <MudIconButton
+                    Icon="@Icons.Material.Filled.Api"
+                    Href="@SwaggerUiUrl"
+                    Target="_blank"
+                    Color="Color.Default"
+                    Size="Size.Medium"
+                    Variant="Variant.Text"
+                    aria-label="Open API documentation"/>
+
+            </MudTooltip>
+        }
 
         <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
@@ -146,7 +165,9 @@
 
 @code {
     private string _currentUrl = string.Empty;
-    private string? SeqUiUrl => Configuration["Seq:UiUrl"];
+
+    private string SwaggerUiUrl => SwaggerUiUrlResolver.Resolve(
+        new Uri(NavigationManager.BaseUri));
 
     private string ReturnUrl =>
         string.IsNullOrEmpty(_currentUrl)

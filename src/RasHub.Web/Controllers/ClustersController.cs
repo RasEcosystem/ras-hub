@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Tasks;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.Common.Pagination;
@@ -34,6 +35,9 @@ public sealed class ClustersController : ControllerBase
         StatusCodes.Status404NotFound)]
     [ProducesResponseType(
         typeof(OpenApiErrorResponse),
+        StatusCodes.Status409Conflict)]
+    [ProducesResponseType(
+        typeof(OpenApiErrorResponse),
         StatusCodes.Status502BadGateway)]
     [ProducesResponseType(
         typeof(OpenApiErrorResponse),
@@ -56,6 +60,9 @@ public sealed class ClustersController : ControllerBase
 
         if (rasGate is null)
             return CreateNotFoundResponse(rasGateId);
+
+        if (!rasGate.IsActive)
+            return CreateInactiveResponse(rasGateId);
 
         if (refresh)
         {
@@ -106,6 +113,15 @@ public sealed class ClustersController : ControllerBase
             $"RasGate '{rasGateId}' was not found.");
     }
 
+    private static ApiResponse<PageResult<RasClusterModel>> CreateInactiveResponse(
+        Guid rasGateId)
+    {
+        return ApiResponse<PageResult<RasClusterModel>>.Fail(
+            HttpStatusCode.Conflict,
+            "ras_gate_inactive",
+            $"RasGate '{rasGateId}' is inactive.");
+    }
+
     private static ApiResponse<PageResult<RasClusterModel>>
         CreateSynchronizationFailureResponse(BackgroundTaskResult result)
     {
@@ -114,6 +130,9 @@ public sealed class ClustersController : ControllerBase
                 HttpStatusCode.ServiceUnavailable,
                 "ras_gate_clusters_sync_canceled",
                 "RasGate cluster synchronization was canceled.");
+
+        if (result.Exception is RasGateInactiveException inactiveException)
+            return CreateInactiveResponse(inactiveException.RasGateId);
 
         if (result.Exception is TimeoutException)
             return ApiResponse<PageResult<RasClusterModel>>.Fail(

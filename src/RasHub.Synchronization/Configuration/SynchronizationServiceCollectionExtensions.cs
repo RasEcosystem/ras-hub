@@ -9,7 +9,6 @@ using RasHub.Synchronization.Internal.Processing;
 using RasHub.Synchronization.Internal.Queues;
 using RasHub.Synchronization.Internal.Recovery;
 using RasHub.Synchronization.Internal.Scheduling;
-using RasHub.Synchronization.Tasks;
 
 namespace RasHub.Synchronization.Configuration;
 
@@ -72,9 +71,6 @@ public static class SynchronizationServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
         services.AddSingleton<BackgroundTaskRecoveryRunner>();
         services.AddSingleton<BackgroundTaskWorker>();
-        services.TryAddTransient<
-            IBackgroundTaskHandler<TestBackgroundTask>,
-            TestBackgroundTaskHandler>();
 
         services.AddSingleton<SynchronizationEngine>();
         services.AddSingleton<ISynchronizationEngine>(serviceProvider =>

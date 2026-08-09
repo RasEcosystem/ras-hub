@@ -13,6 +13,7 @@ public sealed record UserAdministrationItem(
     string DisplayName,
     bool IsAdmin,
     bool IsCurrentUser,
+    bool IsBlocked,
     string? ApiKey);
 
 public sealed class UserAdministrationService(
@@ -37,6 +38,7 @@ public sealed class UserAdministrationService(
                 user.Email ?? user.UserName ?? user.Id,
                 await userManager.IsInRoleAsync(user, AppRoles.Admin),
                 user.Id == currentUserId,
+                user.IsBlocked,
                 user.ApiKey));
 
         return result;
@@ -92,6 +94,52 @@ public sealed class UserAdministrationService(
             isAdmin);
 
         return await userManager.UpdateSecurityStampAsync(user);
+    }
+
+    public async Task<IdentityResult> SetBlockedAsync(
+        string userId,
+        bool isBlocked)
+    {
+        var principal = await GetAuthorizedPrincipalAsync();
+        var user = await userManager.FindByIdAsync(userId);
+
+        if (user is null) return Failed("The user no longer exists.");
+
+        if (user.IsBlocked == isBlocked) return IdentityResult.Success;
+
+        var currentUserId = userManager.GetUserId(principal);
+
+        if (isBlocked && user.Id == currentUserId)
+            return Failed("You cannot block your own account.");
+
+        if (isBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
+        {
+            var administrators = await userManager.GetUsersInRoleAsync(AppRoles.Admin);
+
+            if (administrators.Count(administrator => !administrator.IsBlocked) <= 1)
+                return Failed("The last active administrator cannot be blocked.");
+        }
+
+        user.IsBlocked = isBlocked;
+        var result = await userManager.UpdateSecurityStampAsync(user);
+
+        if (result.Succeeded)
+            logger.LogInformation(
+                "Administrator {ActorUserId} set blocked state for " +
+                "user {TargetUserId} to {IsBlocked}",
+                currentUserId,
+                user.Id,
+                isBlocked);
+        else
+            logger.LogWarning(
+                "Administrator {ActorUserId} failed to set blocked state for " +
+                "user {TargetUserId} to {IsBlocked}: {Errors}",
+                currentUserId,
+                user.Id,
+                isBlocked,
+                string.Join("; ", result.Errors.Select(error => error.Code)));
+
+        return result;
     }
 
     public async Task<IdentityResult> GenerateApiKeyAsync(string userId)

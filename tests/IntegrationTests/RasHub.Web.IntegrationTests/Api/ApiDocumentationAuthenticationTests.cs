@@ -100,17 +100,86 @@ public sealed partial class ApiDocumentationAuthenticationTests
         using var application = await client.GetAsync(
             "/",
             TestContext.Current.CancellationToken);
+        using var engine = await client.GetAsync(
+            "/synchronization-engine",
+            TestContext.Current.CancellationToken);
+        using var userSettings = await client.GetAsync(
+            "/user-settings",
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, scalar.StatusCode);
         Assert.Equal(HttpStatusCode.OK, openApi.StatusCode);
         Assert.Equal(HttpStatusCode.OK, application.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, engine.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, userSettings.StatusCode);
 
         var document = await openApi.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var homePage = await application.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var enginePage = await engine.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var userSettingsPage = await userSettings.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
         Assert.DoesNotContain(
             "/Account/",
             document,
             StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Administration and monitoring", homePage);
+        Assert.Contains("Uptime", homePage);
+        Assert.Contains("Warnings", homePage);
+        Assert.Contains("Errors", homePage);
+        Assert.Contains("Online RasGates", homePage);
+        Assert.Contains("Health history", homePage);
+        Assert.Contains("Application health during the last 24 hours", homePage);
+        Assert.DoesNotContain("Monitor workload, queues, workers and task execution", homePage);
+        Assert.DoesNotContain("Manage your profile, appearance and API access", homePage);
+        Assert.DoesNotContain("Configure global settings and user access", homePage);
+        Assert.DoesNotContain("Live workload, workers and task execution state", homePage);
+        Assert.Contains("Live workload, workers and task execution state", enginePage);
+        Assert.DoesNotContain("Uptime", enginePage);
+        Assert.Contains("app-page--wide", homePage);
+        Assert.Contains("app-page--wide", enginePage);
+        Assert.Contains("app-page--standard", userSettingsPage);
+    }
+
+    [Fact]
+    public async Task Blocked_identity_user_cannot_log_in()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        await factory.SetIdentityUserBlockedAsync(UserEmail, true);
+        using var client = CreateClient(factory);
+
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        var html = await login.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Contains("Invalid login attempt", html);
+        Assert.False(login.Headers.TryGetValues("Set-Cookie", out var cookies) &&
+                     cookies.Any(cookie => cookie.StartsWith(
+                         ".AspNetCore.Identity.Application=",
+                         StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Blocking_user_revokes_existing_identity_cookie()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        await factory.SetIdentityUserBlockedAsync(UserEmail, true);
+
+        using var response = await client.GetAsync(
+            "/swagger/",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/Account/Login", response.Headers.Location?.AbsolutePath);
     }
 
     [Fact]

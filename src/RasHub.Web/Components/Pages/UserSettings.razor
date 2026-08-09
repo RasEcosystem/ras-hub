@@ -7,146 +7,118 @@
 
 <AppPageTitle Title="User Settings"/>
 
-<MudContainer MaxWidth="MaxWidth.False"
-              Style="max-width: 1600px;"
-              Class="py-8">
+<AppPageShell Width="AppPageWidth.Standard"
+              Title="User Settings"
+              Subtitle="Configure your personal application preferences"
+              Icon="@Icons.Material.Filled.ManageAccounts">
+    <MudForm Model="_settings"
+             @ref="_form"
+             ValidationDelay="0">
 
-    <MudStack Spacing="6">
+        <MudGrid Spacing="3">
 
-        <MudStack Spacing="1">
-            <MudStack Row
-                      AlignItems="AlignItems.Center"
-                      Spacing="2">
+            <MudItem xs="12">
+                <MudPaper Class="pa-6"
+                          Elevation="1">
 
-                <MudIcon Icon="@Icons.Material.Filled.ManageAccounts"
-                         Size="Size.Large"
-                         Color="Color.Primary"/>
+                    <MudStack Spacing="4">
 
-                <MudText Typo="Typo.h3">
-                    User Settings
-                </MudText>
+                        <MudStack Row
+                                  AlignItems="AlignItems.Center"
+                                  Spacing="1">
 
-            </MudStack>
+                            <MudIcon Icon="@Icons.Material.Outlined.Palette"
+                                     Size="Size.Small"
+                                     Color="Color.Primary"/>
 
-            <MudText Typo="Typo.subtitle1"
-                     Color="Color.Secondary">
-                Configure your personal application preferences
-            </MudText>
-        </MudStack>
-
-        <MudDivider/>
-
-        <MudForm Model="_settings"
-                 @ref="_form"
-                 ValidationDelay="0">
-
-            <MudGrid Spacing="3">
-
-                <MudItem xs="12">
-                    <MudPaper Class="pa-6"
-                              Elevation="1">
-
-                        <MudStack Spacing="4">
-
-                            <MudStack Row
-                                      AlignItems="AlignItems.Center"
-                                      Spacing="1">
-
-                                <MudIcon Icon="@Icons.Material.Outlined.Palette"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-
-                                <MudText Typo="Typo.h5">
-                                    Appearance
-                                </MudText>
-
-                            </MudStack>
-
-                            <MudSelect T="AppTheme?"
-                                       Label="Theme"
-                                       Variant="Variant.Outlined"
-                                       FullWidth
-                                       @bind-Value="_settings.Theme">
-
-                                <MudSelectItem T="AppTheme?"
-                                               Value="@((AppTheme?)null)">
-                                    Use global theme
-                                </MudSelectItem>
-
-                                <MudSelectItem T="AppTheme?"
-                                               Value="@((AppTheme?)AppTheme.Carbon)">
-                                    Carbon
-                                </MudSelectItem>
-
-                                <MudSelectItem T="AppTheme?"
-                                               Value="@((AppTheme?)AppTheme.Slate)">
-                                    Slate
-                                </MudSelectItem>
-
-                            </MudSelect>
+                            <MudText Typo="Typo.h5">
+                                Appearance
+                            </MudText>
 
                         </MudStack>
 
-                    </MudPaper>
-                </MudItem>
+                        <MudSelect T="AppTheme?"
+                                   Label="Theme"
+                                   Variant="Variant.Outlined"
+                                   FullWidth
+                                   @bind-Value="_settings.Theme">
 
-                <MudItem xs="12">
-                    <MudPaper Class="pa-6" Elevation="1">
-                        <MudStack Spacing="4">
-                            <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                                <MudIcon Icon="@Icons.Material.Outlined.Key"
-                                         Size="Size.Small"
-                                         Color="Color.Primary"/>
-                                <MudText Typo="Typo.h5">API access</MudText>
-                            </MudStack>
+                            <MudSelectItem T="AppTheme?"
+                                           Value="@((AppTheme?)null)">
+                                Use global theme
+                            </MudSelectItem>
 
-                            @if (_apiKey is null)
-                            {
-                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                                    An API key has not been generated for your account.
-                                </MudAlert>
-                            }
-                            else
-                            {
-                                <MudTextField T="string"
-                                              Value="@_apiKey"
-                                              Label="API key"
-                                              Variant="Variant.Outlined"
-                                              ReadOnly
-                                              FullWidth
-                                              Adornment="Adornment.Start"
-                                              AdornmentIcon="@Icons.Material.Outlined.Key"
-                                              HelperText="Send this value in the X-Api-Key request header."
-                                              Style="font-family: monospace;"/>
-                            }
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
+                            <MudSelectItem T="AppTheme?"
+                                           Value="@((AppTheme?)AppTheme.Carbon)">
+                                Carbon
+                            </MudSelectItem>
 
-                <MudItem xs="12">
-                    <MudStack Row
-                              Wrap="Wrap.Wrap"
-                              Justify="Justify.FlexEnd"
-                              Spacing="2">
+                            <MudSelectItem T="AppTheme?"
+                                           Value="@((AppTheme?)AppTheme.Slate)">
+                                Slate
+                            </MudSelectItem>
 
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Outlined.Save"
-                                   Disabled="_saving"
-                                   OnClick="@SaveAsync">
-                            Save changes
-                        </MudButton>
+                        </MudSelect>
 
                     </MudStack>
-                </MudItem>
 
-            </MudGrid>
+                </MudPaper>
+            </MudItem>
 
-        </MudForm>
+            <MudItem xs="12">
+                <MudPaper Class="pa-6" Elevation="1">
+                    <MudStack Spacing="4">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Outlined.Key"
+                                     Size="Size.Small"
+                                     Color="Color.Primary"/>
+                            <MudText Typo="Typo.h5">API access</MudText>
+                        </MudStack>
 
-    </MudStack>
+                        @if (_apiKey is null)
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                An API key has not been generated for your account.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudTextField T="string"
+                                          Value="@_apiKey"
+                                          Label="API key"
+                                          Variant="Variant.Outlined"
+                                          ReadOnly
+                                          FullWidth
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Outlined.Key"
+                                          HelperText="Send this value in the X-Api-Key request header."
+                                          Style="font-family: monospace;"/>
+                        }
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
 
-</MudContainer>
+            <MudItem xs="12">
+                <MudStack Row
+                          Wrap="Wrap.Wrap"
+                          Justify="Justify.FlexEnd"
+                          Spacing="2">
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Outlined.Save"
+                               Disabled="_saving"
+                               OnClick="@SaveAsync">
+                        Save changes
+                    </MudButton>
+
+                </MudStack>
+            </MudItem>
+
+        </MudGrid>
+
+    </MudForm>
+</AppPageShell>
 
 @code
 {
