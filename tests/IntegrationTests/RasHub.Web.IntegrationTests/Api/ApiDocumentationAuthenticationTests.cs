@@ -249,6 +249,35 @@ public sealed partial class ApiDocumentationAuthenticationTests
         Assert.False(errorProperties.TryGetProperty("data", out _));
     }
 
+    [Fact]
+    public async Task OpenApi_exposes_status_synchronize_route_only()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        using var response = await client.GetAsync(
+            "/openapi/v1.json",
+            TestContext.Current.CancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var paths = document.RootElement.GetProperty("paths");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/status/synchronize",
+            out var synchronizationPath));
+        Assert.True(synchronizationPath.TryGetProperty("post", out _));
+        Assert.False(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/status/check",
+            out _));
+    }
+
     private static async Task<HttpResponseMessage> LoginAsync(
         HttpClient client,
         string email,

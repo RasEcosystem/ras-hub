@@ -83,6 +83,7 @@ public sealed class UserAdministrationServiceTests
             new ClaimsPrincipal(identity));
 
         return new UserAdministrationService(
+            services.GetRequiredService<ApplicationDbContext>(),
             userManager,
             authenticationStateProvider,
             services.GetRequiredService<IAuthorizationService>(),

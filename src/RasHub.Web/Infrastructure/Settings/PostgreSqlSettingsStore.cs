@@ -8,6 +8,7 @@ namespace RasHub.Web.Infrastructure.Settings;
 
 public sealed class PostgreSqlSettingsStore(
     RasHubDbContext dbContext,
+    TimeProvider timeProvider,
     ILogger<PostgreSqlSettingsStore> logger)
     : ISettingsStore
 {
@@ -49,7 +50,7 @@ public sealed class PostgreSqlSettingsStore(
     {
         var key = ConfigurationKey.For<T>(scope);
         var value = JsonSerializer.Serialize(settings, JsonOptions);
-        var updatedAt = DateTimeOffset.UtcNow;
+        var updatedAt = timeProvider.GetUtcNow();
 
         var updated = await dbContext.Settings
             .Where(entry => entry.Key == key)

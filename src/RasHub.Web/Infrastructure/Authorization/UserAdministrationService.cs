@@ -17,6 +17,7 @@ public sealed record UserAdministrationItem(
     string? ApiKey);
 
 public sealed class UserAdministrationService(
+    ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
     AuthenticationStateProvider authenticationStateProvider,
     IAuthorizationService authorizationService,
@@ -26,22 +27,24 @@ public sealed class UserAdministrationService(
     {
         var principal = await GetAuthorizedPrincipalAsync();
         var currentUserId = userManager.GetUserId(principal);
-        var users = await userManager.Users
+        return await dbContext.Users
             .AsNoTracking()
             .OrderBy(user => user.Email ?? user.UserName)
-            .ToListAsync();
-        var result = new List<UserAdministrationItem>(users.Count);
-
-        foreach (var user in users)
-            result.Add(new UserAdministrationItem(
+            .Select(user => new UserAdministrationItem(
                 user.Id,
                 user.Email ?? user.UserName ?? user.Id,
-                await userManager.IsInRoleAsync(user, AppRoles.Admin),
+                dbContext.UserRoles
+                    .Where(userRole => userRole.UserId == user.Id)
+                    .Join(
+                        dbContext.Roles.Where(role => role.Name == AppRoles.Admin),
+                        userRole => userRole.RoleId,
+                        role => role.Id,
+                        (_, _) => 1)
+                    .Any(),
                 user.Id == currentUserId,
                 user.IsBlocked,
-                user.ApiKey));
-
-        return result;
+                user.ApiKey))
+            .ToListAsync();
     }
 
     public async Task<IdentityResult> SetAdminAsync(

@@ -1,22 +1,17 @@
-using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
-using RasHub.Application.RasGates.Tasks;
-using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
-using RasHub.BackgroundTasks.Models;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
-using RasHub.Contracts.RasHub.Responses;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Api.RasGates;
 using RasHub.Web.Authentication;
 using RasHub.Web.Infrastructure.Authorization;
 
@@ -30,109 +25,6 @@ namespace RasHub.Web.Controllers;
     "Manage registered gateways.")]
 public sealed class RasGatesController : ControllerBase
 {
-    [HttpGet("{id:guid}/status")]
-    [EndpointSummary("Get status")]
-    [EndpointDescription(
-        "Returns the cached status without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<RasGateStatusResponse>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<RasGateStatusResponse>> GetStatus(
-        Guid id,
-        [FromServices] RasGateQueries query,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await query.GetByIdAsync(id, cancellationToken);
-
-        if (rasGate is null)
-            return CreateStatusNotFoundResponse(id);
-
-        if (!rasGate.IsActive)
-            return CreateInactiveStatusResponse(id);
-
-        var status = await query.GetStatusAsync(id, cancellationToken);
-
-        return ApiResponse<RasGateStatusResponse>.Ok(status);
-    }
-
-    [HttpPost("{id:guid}/status/check")]
-    [EndpointSummary("Check status")]
-    [EndpointDescription(
-        "Checks the current gateway status, persists it, and returns the observed status.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<RasGateStatusResponse>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<RasGateStatusResponse>> CheckStatus(
-        Guid id,
-        [FromServices] RasGateQueries query,
-        [FromServices] IBackgroundTaskEngine backgroundTaskEngine,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await query.GetByIdAsync(id, cancellationToken);
-
-        if (rasGate is null)
-            return CreateStatusNotFoundResponse(id);
-
-        if (!rasGate.IsActive)
-            return CreateInactiveStatusResponse(id);
-
-        BackgroundTaskHandle handle;
-
-        try
-        {
-            handle = backgroundTaskEngine.Enqueue(
-                new CheckRasGateStatusTask(id),
-                new BackgroundTaskOptions
-                {
-                    Queue = BackgroundTaskQueue.Interactive,
-                    MaxAttempts = 2,
-                    RetryDelay = TimeSpan.FromMilliseconds(250),
-                    Timeout = TimeSpan.FromSeconds(10),
-                    DeduplicationKey = $"ras-gate-status:{id}",
-                    ConcurrencyKey = $"ras-gate:{id}"
-                });
-        }
-        catch (BackgroundTaskRejectedException)
-        {
-            return ApiResponse<RasGateStatusResponse>.Fail(
-                HttpStatusCode.ServiceUnavailable,
-                "ras_gate_status_check_unavailable",
-                "RasGate status check could not be scheduled.");
-        }
-
-        var result = await handle.WaitAsync(cancellationToken);
-
-        if (!result.IsSucceeded)
-            return CreateStatusCheckFailureResponse(result);
-
-        var status = await query.GetStatusAsync(id, cancellationToken);
-
-        return status is null
-            ? CreateStatusNotFoundResponse(id)
-            : ApiResponse<RasGateStatusResponse>.Ok(status);
-    }
-
     [HttpPost("get-paged")]
     [EndpointSummary("List gateways")]
     [EndpointDescription(
@@ -172,7 +64,7 @@ public sealed class RasGatesController : ControllerBase
             cancellationToken);
 
         if (rasGate is null)
-            return CreateNotFoundResponse(id);
+            return RasGateApiResponses.GateNotFound<RasGateModel>(id);
 
         return ApiResponse<RasGateModel>.Ok(rasGate);
     }
@@ -201,7 +93,7 @@ public sealed class RasGatesController : ControllerBase
         }
         catch (RasGateEndpointValidationException)
         {
-            return CreateInvalidEndpointResponse();
+            return RasGateApiResponses.InvalidEndpoint();
         }
 
         var rasGate = new RasGate
@@ -251,14 +143,14 @@ public sealed class RasGatesController : ControllerBase
         var rasGate = await repository.GetByIdAsync(id, cancellationToken);
 
         if (rasGate is null)
-            return CreateNotFoundResponse(id);
+            return RasGateApiResponses.GateNotFound<RasGateModel>(id);
 
         var endpointChanged =
             !string.Equals(rasGate.Url, request.Url, StringComparison.Ordinal) ||
             rasGate.Port != request.Port;
 
         if (endpointChanged && request.ApiKey is null)
-            return CreateApiKeyRequiredResponse();
+            return RasGateApiResponses.ApiKeyRequired();
 
         try
         {
@@ -266,7 +158,7 @@ public sealed class RasGatesController : ControllerBase
         }
         catch (RasGateEndpointValidationException)
         {
-            return CreateInvalidEndpointResponse();
+            return RasGateApiResponses.InvalidEndpoint();
         }
 
         var apiKeyChanged = request.ApiKey is not null &&
@@ -307,7 +199,7 @@ public sealed class RasGatesController : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            return CreateConcurrentUpdateResponse();
+            return RasGateApiResponses.ConcurrentUpdate();
         }
 
         return ApiResponse<RasGateModel>.Ok(ToModel(rasGate));
@@ -333,7 +225,7 @@ public sealed class RasGatesController : ControllerBase
         var rasGate = await repository.GetByIdAsync(id, cancellationToken);
 
         if (rasGate is null)
-            return CreateNotFoundResponse(id);
+            return RasGateApiResponses.GateNotFound<RasGateModel>(id);
 
         repository.Remove(rasGate);
         try
@@ -342,90 +234,10 @@ public sealed class RasGatesController : ControllerBase
         }
         catch (DbUpdateConcurrencyException)
         {
-            return CreateConcurrentUpdateResponse();
+            return RasGateApiResponses.ConcurrentUpdate();
         }
 
         return ApiResponse<RasGateModel>.Ok(ToModel(rasGate));
-    }
-
-    private static ApiResponse<RasGateModel> CreateNotFoundResponse(Guid id)
-    {
-        return ApiResponse<RasGateModel>.Fail(
-            HttpStatusCode.NotFound,
-            "ras_gate_not_found",
-            $"RasGate '{id}' was not found.");
-    }
-
-    private static ApiResponse<RasGateModel> CreateInvalidEndpointResponse()
-    {
-        return ApiResponse<RasGateModel>.Fail(
-            HttpStatusCode.BadRequest,
-            "ras_gate_endpoint_invalid",
-            "The RasGate endpoint is invalid.");
-    }
-
-    private static ApiResponse<RasGateModel> CreateApiKeyRequiredResponse()
-    {
-        return ApiResponse<RasGateModel>.Fail(
-            HttpStatusCode.BadRequest,
-            "ras_gate_api_key_required",
-            "A new RasGate API key is required when the endpoint changes.");
-    }
-
-    private static ApiResponse<RasGateModel> CreateConcurrentUpdateResponse()
-    {
-        return ApiResponse<RasGateModel>.Fail(
-            HttpStatusCode.Conflict,
-            "ras_gate_concurrency_conflict",
-            "RasGate configuration changed concurrently. Retry with current data.");
-    }
-
-    private static ApiResponse<RasGateStatusResponse> CreateStatusNotFoundResponse(
-        Guid id)
-    {
-        return ApiResponse<RasGateStatusResponse>.Fail(
-            HttpStatusCode.NotFound,
-            "ras_gate_not_found",
-            $"RasGate '{id}' was not found.");
-    }
-
-    private static ApiResponse<RasGateStatusResponse> CreateInactiveStatusResponse(
-        Guid id)
-    {
-        return ApiResponse<RasGateStatusResponse>.Fail(
-            HttpStatusCode.Conflict,
-            "ras_gate_inactive",
-            $"RasGate '{id}' is inactive.");
-    }
-
-    private static ApiResponse<RasGateStatusResponse> CreateStatusCheckFailureResponse(
-        BackgroundTaskResult result)
-    {
-        if (result.Outcome == BackgroundTaskOutcome.Canceled)
-            return ApiResponse<RasGateStatusResponse>.Fail(
-                HttpStatusCode.ServiceUnavailable,
-                "ras_gate_status_check_canceled",
-                "RasGate status check was canceled.");
-
-        if (result.Exception is RasGateInactiveException inactiveException)
-            return CreateInactiveStatusResponse(inactiveException.RasGateId);
-
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<RasGateStatusResponse>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during status check.");
-
-        if (result.Exception is TimeoutException)
-            return ApiResponse<RasGateStatusResponse>.Fail(
-                HttpStatusCode.GatewayTimeout,
-                "ras_gate_timeout",
-                "RasGate did not respond in time.");
-
-        return ApiResponse<RasGateStatusResponse>.Fail(
-            HttpStatusCode.BadGateway,
-            "ras_gate_unavailable",
-            "RasGate status could not be retrieved.");
     }
 
     private static RasGateModel ToModel(RasGate rasGate)

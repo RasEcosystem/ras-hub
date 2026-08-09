@@ -8,13 +8,15 @@ namespace RasHub.Infrastructure.IntegrationTests.Database;
 internal sealed class SqliteRasHubDatabase : IDisposable
 {
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
-    private readonly AuditSoftDeleteInterceptor _interceptor = new();
+    private readonly AuditSoftDeleteInterceptor _interceptor;
 
     private readonly RasGateConfigurationRevisionInterceptor _revisionInterceptor =
         new();
 
-    public SqliteRasHubDatabase()
+    public SqliteRasHubDatabase(TimeProvider? timeProvider = null)
     {
+        _interceptor = new AuditSoftDeleteInterceptor(
+            timeProvider ?? TimeProvider.System);
         _connection.Open();
 
         using var db = CreateContext();

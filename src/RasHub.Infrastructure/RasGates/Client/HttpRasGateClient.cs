@@ -260,11 +260,13 @@ public sealed class HttpRasGateClient : IRasGateClient
 
     private sealed record RasGateApiError
     {
-        public string Code { get; } = string.Empty;
+        // Keep init: System.Text.Json must populate this private transport DTO.
+        public string Code { get; init; } = string.Empty;
     }
 
     private sealed record RasGateStatusData
     {
+        // Keep init accessors: System.Text.Json must populate this private transport DTO.
         public string InstanceName { get; init; } = string.Empty;
 
         public string Version { get; init; } = string.Empty;

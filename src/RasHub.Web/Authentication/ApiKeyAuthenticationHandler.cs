@@ -38,29 +38,42 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
             providedApiKey.Length > ApplicationUser.ApiKeyMaxLength)
             return AuthenticateResult.Fail("The provided API key is invalid.");
 
-        var user = await _dbContext.Users
-            .AsNoTracking()
-            .Where(item => item.ApiKey == providedApiKey && !item.IsBlocked)
-            .Select(item => new { item.Id, item.UserName, item.Email })
-            .SingleOrDefaultAsync(Context.RequestAborted);
+        var authenticationRows = await (
+                from candidate in _dbContext.Users.AsNoTracking()
+                join userRole in _dbContext.UserRoles.AsNoTracking()
+                    on candidate.Id equals userRole.UserId into userRoles
+                from userRole in userRoles.DefaultIfEmpty()
+                join role in _dbContext.Roles.AsNoTracking()
+                    on userRole.RoleId equals role.Id into roles
+                from role in roles.DefaultIfEmpty()
+                where candidate.ApiKey == providedApiKey && !candidate.IsBlocked
+                select new
+                {
+                    candidate.Id,
+                    candidate.UserName,
+                    candidate.Email,
+                    RoleName = role == null ? null : role.Name
+                })
+            .ToListAsync(Context.RequestAborted);
 
-        if (user is null)
+        if (authenticationRows.Count == 0)
             return AuthenticateResult.Fail("The provided API key is invalid.");
 
-        var roles = await (
-                from userRole in _dbContext.UserRoles.AsNoTracking()
-                join role in _dbContext.Roles.AsNoTracking()
-                    on userRole.RoleId equals role.Id
-                where userRole.UserId == user.Id && role.Name != null
-                select role.Name!)
-            .ToListAsync(Context.RequestAborted);
+        var authenticatedUser = authenticationRows[0];
+        var roleClaims = authenticationRows
+            .Where(row => row.RoleName is not null)
+            .Select(row => new Claim(ClaimTypes.Role, row.RoleName!));
 
         var identity = new ClaimsIdentity(
             new[]
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Name, user.UserName ?? user.Email ?? user.Id)
-            }.Concat(roles.Select(role => new Claim(ClaimTypes.Role, role))),
+                new Claim(ClaimTypes.NameIdentifier, authenticatedUser.Id),
+                new Claim(
+                    ClaimTypes.Name,
+                    authenticatedUser.UserName ??
+                    authenticatedUser.Email ??
+                    authenticatedUser.Id)
+            }.Concat(roleClaims),
             Scheme.Name);
 
         var principal = new ClaimsPrincipal(identity);

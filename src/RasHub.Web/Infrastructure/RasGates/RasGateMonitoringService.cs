@@ -2,7 +2,6 @@ using Microsoft.Extensions.Options;
 using RasHub.Application.RasGates.Tasks;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Exceptions;
-using RasHub.BackgroundTasks.Models;
 using RasHub.Infrastructure.Database.Queries;
 
 namespace RasHub.Web.Infrastructure.RasGates;
@@ -63,15 +62,9 @@ public sealed class RasGateMonitoringService(
             {
                 backgroundTaskEngine.Enqueue(
                     new CheckRasGateStatusTask(rasGateId),
-                    new BackgroundTaskOptions
-                    {
-                        Queue = BackgroundTaskQueue.Synchronization,
-                        MaxAttempts = 2,
-                        RetryDelay = TimeSpan.FromSeconds(1),
-                        Timeout = Options.RequestTimeout,
-                        DeduplicationKey = $"ras-gate-status:{rasGateId}",
-                        ConcurrencyKey = $"ras-gate:{rasGateId}"
-                    });
+                    RasGateTaskOptions.StatusMonitoring(
+                        rasGateId,
+                        Options.RequestTimeout));
             }
             catch (BackgroundTaskRejectedException exception)
             {

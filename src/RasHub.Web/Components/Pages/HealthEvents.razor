@@ -7,6 +7,7 @@
 @inject ApplicationDiagnostics Diagnostics
 @inject NavigationManager NavigationManager
 @inject TimeProvider TimeProvider
+@inject ILogger<HealthEvents> Logger
 
 <AppPageTitle Title="Application events"/>
 
@@ -150,6 +151,7 @@
 
 @code {
     private readonly CancellationTokenSource _disposeToken = new();
+    private Task _pollTask = Task.CompletedTask;
     private IReadOnlyList<ApplicationDiagnosticEvent> _events = [];
     private DiagnosticEventLevelFilter _levelFilter;
     private string? _searchText;
@@ -208,7 +210,7 @@
     protected override void OnAfterRender(bool firstRender)
     {
         if (firstRender)
-            _ = PollAsync();
+            _pollTask = PollAsync();
     }
 
     private async Task PollAsync()
@@ -226,6 +228,12 @@
         }
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Application event polling stopped unexpectedly");
         }
     }
 
@@ -317,11 +325,18 @@
         NavigationManager.NavigateTo($"/health-events{levelQuery}");
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _disposeToken.Cancel();
-        _disposeToken.Dispose();
-        return ValueTask.CompletedTask;
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
     }
 
     private enum DiagnosticEventLevelFilter

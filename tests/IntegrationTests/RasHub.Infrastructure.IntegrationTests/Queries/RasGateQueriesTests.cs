@@ -65,6 +65,38 @@ public sealed class RasGateQueriesTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_activity_returns_active_state_and_excludes_deleted_gate()
+    {
+        var active = RasGateTestData.Create("Active");
+        var inactive = RasGateTestData.Create("Inactive");
+        var deleted = RasGateTestData.Create("Deleted");
+        inactive.IsActive = false;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(active, inactive, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var queries = new RasGateQueries(db);
+
+        var activeResult = await queries.GetActivityAsync(
+            active.Id,
+            TestContext.Current.CancellationToken);
+        var inactiveResult = await queries.GetActivityAsync(
+            inactive.Id,
+            TestContext.Current.CancellationToken);
+        var deletedResult = await queries.GetActivityAsync(
+            deleted.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(activeResult?.IsActive);
+        Assert.False(inactiveResult?.IsActive);
+        Assert.Null(deletedResult);
+        Assert.Empty(db.ChangeTracker.Entries<RasGate>());
+    }
+
+    [Fact]
     public async Task Get_paged_returns_count_and_stable_order_for_the_requested_page()
     {
         var oldest = RasGateTestData.Create("Oldest");
@@ -126,6 +158,19 @@ public sealed class RasGateQueriesTests : IDisposable
 
         Assert.Equal(3, result.TotalCount);
         Assert.Equal(1, result.OnlineCount);
+    }
+
+    [Fact]
+    public async Task Get_health_summary_without_active_gates_returns_zero_counts()
+    {
+        await using var db = _database.CreateContext();
+
+        var result = await new RasGateQueries(db).GetHealthSummaryAsync(
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.TotalCount);
+        Assert.Equal(0, result.OnlineCount);
     }
 
     [Fact]

@@ -8,6 +8,7 @@
 @inject RasGateQueries RasGateQueries
 @inject IOptions<RasGateMonitoringOptions> RasGateMonitoringOptions
 @inject TimeProvider TimeProvider
+@inject ILogger<Home> Logger
 
 <AppPageTitle Title="Home"/>
 
@@ -117,6 +118,7 @@
 @code {
     private readonly CancellationTokenSource _disposeToken = new();
     private static readonly TimeSpan RasGateCountRefreshInterval = TimeSpan.FromSeconds(10);
+    private Task _pollTask = Task.CompletedTask;
     private IReadOnlyList<ApplicationHealthHour> _healthHours = [];
     private DateTimeOffset _nextRasGateCountRefreshAt;
     private DateTimeOffset _now;
@@ -141,7 +143,7 @@
     {
         RefreshDiagnostics();
         await RefreshRasGateCountAsync();
-        _ = PollAsync();
+        _pollTask = PollAsync();
     }
 
     private async Task PollAsync()
@@ -151,26 +153,48 @@
         try
         {
             while (await timer.WaitForNextTickAsync(_disposeToken.Token))
-                await InvokeAsync(async () =>
+                try
                 {
-                    RefreshDiagnostics();
+                    await InvokeAsync(async () =>
+                    {
+                        RefreshDiagnostics();
 
-                    if (_now >= _nextRasGateCountRefreshAt)
-                        await RefreshRasGateCountAsync();
+                        if (_now >= _nextRasGateCountRefreshAt)
+                            await RefreshRasGateCountAsync();
 
-                    StateHasChanged();
-                });
+                        StateHasChanged();
+                    });
+                }
+                catch (Exception exception) when (!_disposeToken.IsCancellationRequested)
+                {
+                    Logger.LogError(
+                        exception,
+                        "Unable to refresh the home dashboard");
+                }
         }
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {
         }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Home dashboard polling stopped unexpectedly");
+        }
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _disposeToken.Cancel();
-        _disposeToken.Dispose();
-        return ValueTask.CompletedTask;
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
     }
 
     private void RefreshDiagnostics()

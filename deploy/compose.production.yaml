@@ -57,7 +57,6 @@ services:
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       Database__ApplyMigrations: "false"
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
-      Seq__UiUrl: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,7 +89,6 @@ services:
       DataProtection__CertificatePasswordFile: /run/secrets/rashub-data-protection-certificate-password
       ReverseProxy__KnownProxies__0: ${RASHUB_TRUSTED_PROXY:-127.0.0.1}
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
-      Seq__UiUrl: ${SEQ_PUBLIC_URL:?SEQ_PUBLIC_URL is required}
     volumes:
       - data-protection-production:/home/app/.aspnet/DataProtection-Keys
     secrets:

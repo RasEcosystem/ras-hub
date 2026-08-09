@@ -241,7 +241,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
-    public async Task Check_status_calls_gate_persists_and_returns_status()
+    public async Task Synchronize_status_calls_gate_persists_and_returns_status()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         _factory.RasGateClientFactory.Status =
@@ -251,7 +251,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status/check",
+            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -287,8 +287,8 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
             new RasGateStatus("Old remote Gate", "1.0.0");
         _factory.RasGateClientFactory.PauseStatusRequests();
         using var client = _factory.CreateAuthenticatedClient();
-        var checkTask = client.PostAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status/check",
+        var synchronizationTask = client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
             null,
             TestContext.Current.CancellationToken);
 
@@ -312,10 +312,10 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
             _factory.RasGateClientFactory.ReleaseStatusRequests();
         }
 
-        using var checkResponse = await checkTask;
-        var json = await ReadJsonAsync(checkResponse);
+        using var synchronizationResponse = await synchronizationTask;
+        var json = await ReadJsonAsync(synchronizationResponse);
 
-        Assert.Equal(HttpStatusCode.Conflict, checkResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, synchronizationResponse.StatusCode);
         Assert.Equal("ras_gate_configuration_changed", GetErrorCode(json));
 
         var stored = await _factory.FindRasGateAsync(rasGate.Id);
@@ -328,12 +328,12 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
     }
 
     [Fact]
-    public async Task Check_status_for_unknown_gate_returns_not_found_without_scheduling_check()
+    public async Task Synchronize_status_for_unknown_gate_returns_not_found_without_scheduling()
     {
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"{RasGatesPath}/{Guid.NewGuid()}/status/check",
+            $"{RasGatesPath}/{Guid.NewGuid()}/status/synchronize",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -343,18 +343,33 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
     }
 
+    [Fact]
+    public async Task Legacy_status_check_route_is_not_available()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/check",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Status_endpoints_for_inactive_gate_return_conflict_without_calling_gate(
-        bool check)
+        bool synchronize)
     {
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
         using var client = _factory.CreateAuthenticatedClient();
         var path = $"{RasGatesPath}/{rasGate.Id}/status" +
-                   (check ? "/check" : string.Empty);
+                   (synchronize ? "/synchronize" : string.Empty);
         using var request = new HttpRequestMessage(
-            check ? HttpMethod.Post : HttpMethod.Get,
+            synchronize ? HttpMethod.Post : HttpMethod.Get,
             path);
 
         using var response = await client.SendAsync(

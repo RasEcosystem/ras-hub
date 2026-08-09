@@ -7,6 +7,7 @@
 @inject IBackgroundTaskEngine Engine
 @inject IOptions<BackgroundTaskEngineOptions> EngineOptions
 @inject TimeProvider TimeProvider
+@inject ILogger<BackgroundTasks> Logger
 
 <AppPageTitle Title="Tasks"/>
 
@@ -18,7 +19,7 @@
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="monitor-updated">
             Updated @LastUpdated.ToLocalTime().ToString("HH:mm:ss")
         </MudText>
-        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="RefreshAsync" aria-label="Refresh"/>
+        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="Refresh" aria-label="Refresh"/>
     </HeaderActions>
     <ChildContent>
         <MudStack Spacing="3">
@@ -168,7 +169,31 @@
 </AppPageShell>
 
 @code {
+
+    private static readonly LaneDefinition[] LaneDefinitions =
+    [
+        new(
+            BackgroundTaskQueue.Interactive,
+            "Interactive",
+            "User-facing work",
+            Icons.Material.Outlined.Bolt,
+            Color.Info),
+        new(
+            BackgroundTaskQueue.Synchronization,
+            "Synchronization",
+            "Regular background work",
+            Icons.Material.Outlined.Sync,
+            Color.Primary),
+        new(
+            BackgroundTaskQueue.Maintenance,
+            "Maintenance",
+            "Cleanup and low-priority work",
+            Icons.Material.Outlined.Build,
+            Color.Secondary)
+    ];
+
     private readonly CancellationTokenSource _disposeToken = new();
+    private Task _pollTask = Task.CompletedTask;
     private BackgroundTaskEngineOptions Options => EngineOptions.Value;
     private IReadOnlyList<BackgroundTaskSnapshot> Tasks { get; set; } = [];
     private IReadOnlyList<LaneSnapshot> Lanes { get; set; } = [];
@@ -176,29 +201,44 @@
     private DateTimeOffset LastUpdated { get; set; }
     private DateTimeOffset Now { get; set; }
 
-    private IEnumerable<BackgroundTaskSnapshot> VisibleTasks => Tasks
-        .OrderBy(task => task.State is BackgroundTaskState.Running ? 0 : task.State is BackgroundTaskState.Pending ? 1 : 2)
-        .ThenByDescending(task => task.CreatedAt);
+    private IEnumerable<BackgroundTaskSnapshot> VisibleTasks =>
+        Tasks
+            .OrderBy(task => task.State switch
+            {
+                BackgroundTaskState.Running => 0,
+                BackgroundTaskState.Pending => 1,
+                _ => 2
+            })
+            .ThenByDescending(task => task.CreatedAt);
 
-    private int RunningCount => Tasks.Count(task => task.State == BackgroundTaskState.Running);
-    private int TotalWorkers => Options.InteractiveWorkerCount + Options.SynchronizationWorkerCount + Options.MaintenanceWorkerCount;
-    private double RegistryPercent => Percent(Statistics.ActiveTasks, Options.MaxActiveTasks);
+    private int RunningCount => Tasks.Count(task =>
+        task.State == BackgroundTaskState.Running);
+
+    private int TotalWorkers =>
+        Options.InteractiveWorkerCount +
+        Options.SynchronizationWorkerCount +
+        Options.MaintenanceWorkerCount;
+
+    private double RegistryPercent => Percent(
+        Statistics.ActiveTasks,
+        Options.MaxActiveTasks);
+
     private double WorkerPercent => Percent(RunningCount, TotalWorkers);
-    private string ActiveLabel => $"{Statistics.ActiveTasks:N0} / {Options.MaxActiveTasks:N0}";
 
-    private IEnumerable<KeyValuePair<BackgroundTaskState, int>> StateSummary => Enum.GetValues<BackgroundTaskState>()
-        .Select(state => KeyValuePair.Create(state, Tasks.Count(task => task.State == state))).Where(x => x.Value > 0);
+    private string ActiveLabel =>
+        $"{Statistics.ActiveTasks:N0} / {Options.MaxActiveTasks:N0}";
+
+    private IEnumerable<KeyValuePair<BackgroundTaskState, int>> StateSummary =>
+        Enum.GetValues<BackgroundTaskState>()
+            .Select(state => KeyValuePair.Create(
+                state,
+                Tasks.Count(task => task.State == state)))
+            .Where(item => item.Value > 0);
 
     protected override void OnInitialized()
     {
         Refresh();
-        _ = PollAsync();
-    }
-
-    private Task RefreshAsync()
-    {
-        Refresh();
-        return Task.CompletedTask;
+        _pollTask = PollAsync();
     }
 
     private void Refresh()
@@ -206,23 +246,67 @@
         Now = TimeProvider.GetUtcNow();
         Tasks = Engine.GetTasks();
         Statistics = Engine.GetStatistics();
-        Lanes =
-        [
-            CreateLane(BackgroundTaskQueue.Interactive, "Interactive", "User-facing work", Icons.Material.Outlined.Bolt, Color.Info, Statistics.InteractiveQueueLength, Options.InteractiveQueueCapacity, Options.InteractiveWorkerCount, Statistics.InteractiveCompletedTasks, Statistics.InteractiveQueueHighWaterMark, Statistics.InteractiveTiming),
-            CreateLane(BackgroundTaskQueue.Synchronization, "Synchronization", "Regular background work", Icons.Material.Outlined.Sync, Color.Primary, Statistics.SynchronizationQueueLength, Options.SynchronizationQueueCapacity, Options.SynchronizationWorkerCount, Statistics.SynchronizationCompletedTasks, Statistics.SynchronizationQueueHighWaterMark, Statistics.SynchronizationTiming),
-            CreateLane(BackgroundTaskQueue.Maintenance, "Maintenance", "Cleanup and low-priority work", Icons.Material.Outlined.Build, Color.Secondary, Statistics.MaintenanceQueueLength, Options.MaintenanceQueueCapacity, Options.MaintenanceWorkerCount, Statistics.MaintenanceCompletedTasks, Statistics.MaintenanceQueueHighWaterMark, Statistics.MaintenanceTiming)
-        ];
+        Lanes = LaneDefinitions.Select(CreateLane).ToArray();
         LastUpdated = Now;
     }
 
-    private LaneSnapshot CreateLane(BackgroundTaskQueue queue, string name, string description, string icon, Color color, int queued, int capacity, int workers, long completed, int highWaterMark, BackgroundTaskTimingStatistics timing)
+    private LaneSnapshot CreateLane(LaneDefinition definition)
     {
-        var laneTasks = Tasks.Where(task => task.Queue == queue).ToArray();
-        var oldest = laneTasks.Where(task => task.State == BackgroundTaskState.Pending)
-            .Select(task => (TimeSpan?)(Now - task.CreatedAt)).OrderDescending().FirstOrDefault();
-        return new LaneSnapshot(queue, name, description, icon, color, queued, capacity, workers,
-            laneTasks.Count(task => task.State == BackgroundTaskState.Running), oldest, completed, highWaterMark,
-            timing.AverageTotalTime);
+        var metrics = GetLaneMetrics(definition.Queue);
+        var laneTasks = Tasks
+            .Where(task => task.Queue == definition.Queue)
+            .ToArray();
+        var oldestWait = laneTasks
+            .Where(task => task.State == BackgroundTaskState.Pending)
+            .Select(task => (TimeSpan?)(Now - task.CreatedAt))
+            .OrderDescending()
+            .FirstOrDefault();
+
+        return new LaneSnapshot
+        {
+            Name = definition.Name,
+            Description = definition.Description,
+            Icon = definition.Icon,
+            Color = definition.Color,
+            Queued = metrics.Queued,
+            Capacity = metrics.Capacity,
+            Workers = metrics.Workers,
+            Running = laneTasks.Count(task =>
+                task.State == BackgroundTaskState.Running),
+            OldestWait = oldestWait,
+            Completed = metrics.Completed,
+            HighWaterMark = metrics.HighWaterMark,
+            AverageTotalTime = metrics.Timing.AverageTotalTime
+        };
+    }
+
+    private LaneMetrics GetLaneMetrics(BackgroundTaskQueue queue)
+    {
+        return queue switch
+        {
+            BackgroundTaskQueue.Interactive => new LaneMetrics(
+                Statistics.InteractiveQueueLength,
+                Options.InteractiveQueueCapacity,
+                Options.InteractiveWorkerCount,
+                Statistics.InteractiveCompletedTasks,
+                Statistics.InteractiveQueueHighWaterMark,
+                Statistics.InteractiveTiming),
+            BackgroundTaskQueue.Synchronization => new LaneMetrics(
+                Statistics.SynchronizationQueueLength,
+                Options.SynchronizationQueueCapacity,
+                Options.SynchronizationWorkerCount,
+                Statistics.SynchronizationCompletedTasks,
+                Statistics.SynchronizationQueueHighWaterMark,
+                Statistics.SynchronizationTiming),
+            BackgroundTaskQueue.Maintenance => new LaneMetrics(
+                Statistics.MaintenanceQueueLength,
+                Options.MaintenanceQueueCapacity,
+                Options.MaintenanceWorkerCount,
+                Statistics.MaintenanceCompletedTasks,
+                Statistics.MaintenanceQueueHighWaterMark,
+                Statistics.MaintenanceTiming),
+            _ => throw new ArgumentOutOfRangeException(nameof(queue))
+        };
     }
 
     private async Task PollAsync()
@@ -240,13 +324,26 @@
         catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
         {
         }
+        catch (Exception exception)
+        {
+            Logger.LogError(
+                exception,
+                "Background task polling stopped unexpectedly");
+        }
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _disposeToken.Cancel();
-        _disposeToken.Dispose();
-        return ValueTask.CompletedTask;
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
     }
 
     private static double Percent(int value, int maximum)
@@ -254,34 +351,45 @@
         return maximum <= 0 ? 0 : Math.Clamp(value * 100d / maximum, 0, 100);
     }
 
-    private static TimeSpan? Average(IEnumerable<TimeSpan> values)
-    {
-        var ticks = values.Select(value => value.Ticks).ToArray();
-        return ticks.Length == 0 ? null : TimeSpan.FromTicks((long)ticks.Average());
-    }
-
     private static string FriendlyTypeName(Type type)
     {
-        return type.Name.EndsWith("Task", StringComparison.Ordinal) ? type.Name[..^4] : type.Name;
+        return type.Name.EndsWith("Task", StringComparison.Ordinal)
+            ? type.Name[..^4]
+            : type.Name;
     }
 
     private static string FormatDuration(TimeSpan? value)
     {
-        if (value is null) return "—";
-        var duration = value.Value < TimeSpan.Zero ? TimeSpan.Zero : value.Value;
-        return duration.TotalDays >= 1 ? $"{duration.TotalDays:0.#}d"
-            : duration.TotalHours >= 1 ? $"{duration.TotalHours:0.#}h"
-            : duration.TotalMinutes >= 1 ? $"{duration.TotalMinutes:0.#}m"
-            : duration.TotalSeconds >= 1 ? $"{duration.TotalSeconds:0.#}s" : $"{duration.TotalMilliseconds:0}ms";
+        if (value is null)
+            return "—";
+
+        var duration = value.Value < TimeSpan.Zero
+            ? TimeSpan.Zero
+            : value.Value;
+
+        if (duration.TotalDays >= 1)
+            return $"{duration.TotalDays:0.#}d";
+
+        if (duration.TotalHours >= 1)
+            return $"{duration.TotalHours:0.#}h";
+
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.TotalMinutes:0.#}m";
+
+        return duration.TotalSeconds >= 1
+            ? $"{duration.TotalSeconds:0.#}s"
+            : $"{duration.TotalMilliseconds:0}ms";
     }
 
     private string FormatTaskTiming(BackgroundTaskSnapshot task)
     {
         return task.State switch
         {
-            BackgroundTaskState.Running when task.StartedAt.HasValue => FormatDuration(Now - task.StartedAt.Value),
+            BackgroundTaskState.Running when task.StartedAt.HasValue =>
+                FormatDuration(Now - task.StartedAt.Value),
             BackgroundTaskState.Pending => FormatDuration(Now - task.CreatedAt),
-            _ when task.StartedAt.HasValue && task.CompletedAt.HasValue => FormatDuration(task.CompletedAt.Value - task.StartedAt.Value),
+            _ when task.StartedAt.HasValue && task.CompletedAt.HasValue =>
+                FormatDuration(task.CompletedAt.Value - task.StartedAt.Value),
             _ => "—"
         };
     }
@@ -290,32 +398,65 @@
     {
         return state switch
         {
-            BackgroundTaskState.Running => Color.Info, BackgroundTaskState.Pending => Color.Warning,
-            BackgroundTaskState.Succeeded => Color.Success, BackgroundTaskState.Failed => Color.Error,
-            BackgroundTaskState.Canceled => Color.Default, _ => Color.Default
+            BackgroundTaskState.Running => Color.Info,
+            BackgroundTaskState.Pending => Color.Warning,
+            BackgroundTaskState.Succeeded => Color.Success,
+            BackgroundTaskState.Failed => Color.Error,
+            _ => Color.Default
         };
     }
 
     private static Color UtilizationColor(double percent)
     {
-        return percent >= 100 ? Color.Error : percent >= 80 ? Color.Warning : Color.Success;
+        if (percent >= 100)
+            return Color.Error;
+
+        return percent >= 80
+            ? Color.Warning
+            : Color.Success;
     }
 
-    private sealed record LaneSnapshot(
+    private sealed record LaneDefinition(
         BackgroundTaskQueue Queue,
         string Name,
         string Description,
         string Icon,
-        Color Color,
+        Color Color);
+
+    private sealed record LaneMetrics(
         int Queued,
         int Capacity,
         int Workers,
-        int Running,
-        TimeSpan? OldestWait,
         long Completed,
         int HighWaterMark,
-        TimeSpan? AverageTotalTime)
+        BackgroundTaskTimingStatistics Timing);
+
+    private sealed record LaneSnapshot
     {
+        public required string Name { get; init; }
+
+        public required string Description { get; init; }
+
+        public required string Icon { get; init; }
+
+        public required Color Color { get; init; }
+
+        public required int Queued { get; init; }
+
+        public required int Capacity { get; init; }
+
+        public required int Workers { get; init; }
+
+        public required int Running { get; init; }
+
+        public required TimeSpan? OldestWait { get; init; }
+
+        public required long Completed { get; init; }
+
+        public required int HighWaterMark { get; init; }
+
+        public required TimeSpan? AverageTotalTime { get; init; }
+
         public double QueuePercent => Percent(Queued, Capacity);
     }
 

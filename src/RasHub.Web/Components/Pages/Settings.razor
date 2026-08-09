@@ -1,10 +1,7 @@
 @page "/Settings"
 @using Microsoft.AspNetCore.Identity
 @using RasHub.Web.Infrastructure.Authorization
-@using RasHub.Web.Infrastructure.Logging
 @attribute [Authorize(Policy = AppPolicies.ManageGlobalSettings)]
-@inject IConfiguration Configuration
-@inject NavigationManager NavigationManager
 @inject UserAdministrationService UserAdministrationService
 @inject ISnackbar Snackbar
 @inject ILogger<Settings> Logger
@@ -50,47 +47,6 @@
                 </MudStack>
             </MudForm>
 
-            <MudPaper Class="pa-6 mt-4" Elevation="1">
-                <MudStack Spacing="3">
-                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Outlined.ManageSearch"
-                                 Size="Size.Small"
-                                 Color="Color.Primary"/>
-                        <MudText Typo="Typo.h5">Logs and diagnostics</MudText>
-                    </MudStack>
-
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Review concise application warnings and errors in RasHub, or open Seq for complete logs and
-                        advanced queries.
-                    </MudText>
-
-                    <MudStack Row Wrap="Wrap.Wrap" Spacing="2">
-                        <MudButton Href="/health-events"
-                                   Variant="Variant.Outlined"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Outlined.NotificationImportant">
-                            Application events
-                        </MudButton>
-
-                        @if (SeqUiUrl is not null)
-                        {
-                            <MudButton Href="@SeqUiUrl"
-                                       Target="_blank"
-                                       Variant="Variant.Outlined"
-                                       Color="Color.Primary"
-                                       StartIcon="@Icons.Material.Outlined.OpenInNew">
-                                Open Seq
-                            </MudButton>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">
-                                Seq UI URL is not configured.
-                            </MudText>
-                        }
-                    </MudStack>
-                </MudStack>
-            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="Users" Icon="@Icons.Material.Outlined.Group">
@@ -306,10 +262,6 @@
     private IReadOnlyList<UserAdministrationItem> _users = [];
     private bool _loadingUsers;
     private string? _updatingUserId;
-
-    private string? SeqUiUrl => SeqUiUrlResolver.Resolve(
-        Configuration["Seq:UiUrl"],
-        new Uri(NavigationManager.BaseUri));
 
     protected override async Task OnInitializedAsync()
     {

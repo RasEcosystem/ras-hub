@@ -126,9 +126,9 @@ healthy. The API starts only after migration completion. PostgreSQL isn't
 published to the host, and the API binds to `127.0.0.1:8080` by default for a
 TLS reverse proxy.
 
-Seq is bound to `127.0.0.1:5341` by default and must be published through the
-TLS reverse proxy at `SEQ_PUBLIC_URL`. Before the first production start,
-generate the required administrator password hash:
+Seq is bound to `127.0.0.1:5341` by default and can be published through the
+TLS reverse proxy at `SEQ_PUBLIC_URL` when direct UI access is required. Before
+the first production start, generate the required administrator password hash:
 
 ```bash
 printf '%s' 'replace-with-a-long-random-password' |
@@ -136,8 +136,8 @@ printf '%s' 'replace-with-a-long-random-password' |
 ```
 
 Store the resulting value in `SEQ_ADMIN_PASSWORD_HASH`. Seq configuration and
-events are persisted in the `seq-production` volume. The admin-only navigation
-button opens `SEQ_PUBLIC_URL`; Seq still enforces its own authentication.
+events are persisted in the `seq-production` volume. Seq enforces its own
+authentication when its UI is published.
 
 Production also requires a long-lived certificate for encrypting its persistent
 ASP.NET Core Data Protection key ring. Create it once using the development
