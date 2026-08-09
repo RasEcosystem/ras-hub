@@ -8,6 +8,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
@@ -45,6 +47,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         _identityConnection.Open();
     }
 
+    public FakeRasGateClientFactory RasGateClientFactory { get; } = new();
+
     public HttpClient CreateAuthenticatedClient()
     {
         var client = CreateClient();
@@ -80,7 +84,10 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         string name = "Gate",
         string url = "https://gate.example.test",
         int port = 443,
-        string apiKey = "stored-secret")
+        string apiKey = "stored-secret",
+        string? instanceName = null,
+        string? version = null,
+        DateTime? statusObservedAt = null)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
@@ -89,7 +96,10 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             Name = name,
             Url = url,
             Port = port,
-            ApiKey = apiKey
+            ApiKey = apiKey,
+            InstanceName = instanceName,
+            Version = version,
+            StatusObservedAt = statusObservedAt
         };
 
         db.RasGates.Add(rasGate);
@@ -110,11 +120,30 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 TestContext.Current.CancellationToken);
     }
 
+    public async Task<IReadOnlyList<RasCluster>> FindRasClustersAsync(
+        Guid rasGateId,
+        bool includeDeleted = false)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var query = includeDeleted
+            ? db.RasClusters.IgnoreQueryFilters()
+            : db.RasClusters;
+
+        return await query
+            .AsNoTracking()
+            .Where(cluster => cluster.RasGateId == rasGateId)
+            .OrderBy(cluster => cluster.ExternalId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
     public void ResetDatabase()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        db.RasClusters.IgnoreQueryFilters().ExecuteDelete();
         db.RasGates.IgnoreQueryFilters().ExecuteDelete();
+        RasGateClientFactory.Reset();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -142,6 +171,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            services.RemoveAll<IRasGateClientFactory>();
 
             services.AddDbContext<RasHubDbContext>((serviceProvider, options) =>
             {
@@ -152,6 +182,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(_identityConnection));
+
+            services.AddSingleton<IRasGateClientFactory>(RasGateClientFactory);
         });
     }
 
@@ -195,6 +227,61 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         {
             _connection.Dispose();
             _identityConnection.Dispose();
+        }
+    }
+}
+
+public sealed class FakeRasGateClientFactory : IRasGateClientFactory
+{
+    private int _clusterRequestCount;
+    private int _statusRequestCount;
+
+    public int ClusterRequestCount => Volatile.Read(ref _clusterRequestCount);
+
+    public int StatusRequestCount => Volatile.Read(ref _statusRequestCount);
+
+    public IReadOnlyList<RasClusterSnapshot> Clusters { get; set; } = [];
+
+    public Exception? ClustersException { get; set; }
+
+    public RasGateStatus Status { get; set; } =
+        new("Test RasGate", "1.0.0");
+
+    public IRasGateClient Create(RasGate rasGate)
+    {
+        return new FakeRasGateClient(this);
+    }
+
+    public void Reset()
+    {
+        Volatile.Write(ref _clusterRequestCount, 0);
+        Volatile.Write(ref _statusRequestCount, 0);
+        Clusters = [];
+        ClustersException = null;
+        Status = new RasGateStatus("Test RasGate", "1.0.0");
+    }
+
+    private sealed class FakeRasGateClient(FakeRasGateClientFactory owner)
+        : IRasGateClient
+    {
+        public Task<RasGateStatus> GetStatusAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._statusRequestCount);
+            return Task.FromResult(owner.Status);
+        }
+
+        public Task<IReadOnlyList<RasClusterSnapshot>> GetClustersAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._clusterRequestCount);
+
+            if (owner.ClustersException is not null)
+                throw owner.ClustersException;
+
+            return Task.FromResult(owner.Clusters);
         }
     }
 }

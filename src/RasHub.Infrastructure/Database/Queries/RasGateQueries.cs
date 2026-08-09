@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Extensions;
 
 namespace RasHub.Infrastructure.Database.Queries;
@@ -53,6 +54,22 @@ public sealed class RasGateQueries(RasHubDbContext db)
                 rasGate.Port,
                 rasGate.CreatedAt,
                 rasGate.UpdatedAt))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<RasGateStatusResponse?> GetStatusAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return db.RasGates
+            .AsNoTracking()
+            .Where(rasGate => rasGate.Id == id)
+            .Select(rasGate => new RasGateStatusResponse
+            {
+                InstanceName = rasGate.InstanceName,
+                Version = rasGate.Version,
+                ObservedAt = rasGate.StatusObservedAt
+            })
             .SingleOrDefaultAsync(cancellationToken);
     }
 }

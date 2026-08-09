@@ -3,9 +3,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RasHub.Application.Interfaces;
+using RasHub.Application.RasGates.Abstractions;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
 using RasHub.Infrastructure.Database.Queries;
+using RasHub.Infrastructure.RasGates;
+using RasHub.Infrastructure.RasGates.Serialization;
 
 namespace RasHub.Infrastructure.Extensions;
 
@@ -35,7 +38,14 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        services.AddScoped<IRasClusterSnapshotStore, RasClusterSnapshotStore>();
+        services.AddScoped<RasClusterQueries>();
         services.AddScoped<RasGateQueries>();
+
+        services.AddSingleton<RasGateHttpClientTransport>();
+        services.AddSingleton<RacKeyValueOutputDeserializer>();
+        services.AddSingleton<RacClusterOutputDeserializer>();
+        services.AddSingleton<IRasGateClientFactory, RasGateClientFactory>();
 
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<RasHubDbContext>());

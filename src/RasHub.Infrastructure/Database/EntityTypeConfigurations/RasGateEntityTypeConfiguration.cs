@@ -35,5 +35,14 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
             .HasColumnName("api_key")
             .HasMaxLength(RasGate.ApiKeyMaxLength)
             .IsRequired();
+
+        builder.Property(rasGate => rasGate.InstanceName)
+            .HasColumnName("instance_name");
+
+        builder.Property(rasGate => rasGate.Version)
+            .HasColumnName("version");
+
+        builder.Property(rasGate => rasGate.StatusObservedAt)
+            .HasColumnName("status_observed_at");
     }
 }

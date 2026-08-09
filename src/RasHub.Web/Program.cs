@@ -12,9 +12,11 @@ using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using Nava.Settings.Abstractions;
 using Nava.Settings.Extensions;
+using RasHub.Application.RasGates.Tasks;
 using RasHub.Contracts.Common;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Extensions;
+using RasHub.Synchronization.Abstractions;
 using RasHub.Synchronization.Configuration;
 using RasHub.Web.Api;
 using RasHub.Web.Api.Filters;
@@ -167,6 +169,12 @@ public class Program
                 .GetSection(SynchronizationEngineOptions.SectionName)
                 .Bind(options);
         });
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<RefreshRasGateStatusTask>,
+            RefreshRasGateStatusTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<SynchronizeClustersTask>,
+            SynchronizeClustersTaskHandler>();
 
         builder.Services
             .AddHealthChecks()

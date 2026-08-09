@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using RasHub.Application.RasGates.Models;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Web.Authentication;
@@ -122,6 +123,80 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.False(json.GetProperty("success").GetBoolean());
         Assert.Equal("ras_gate_not_found", GetErrorCode(json));
         Assert.Contains(id.ToString(), json.GetProperty("error").GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Get_status_without_refresh_returns_cached_status()
+    {
+        var observedAt = DateTime.UtcNow.AddMinutes(-5);
+        var rasGate = await _factory.SeedRasGateAsync(
+            instanceName: "Cached Gate",
+            version: "1.2.3",
+            statusObservedAt: observedAt);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Cached Gate", data.GetProperty("instanceName").GetString());
+        Assert.Equal("1.2.3", data.GetProperty("version").GetString());
+        Assert.Equal(observedAt, data.GetProperty("observedAt").GetDateTime());
+        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_status_with_refresh_calls_gate_persists_and_returns_status()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        _factory.RasGateClientFactory.Status =
+            new RasGateStatus(
+                "Remote Gate",
+                "2.3.4");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status?refresh=true",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Remote Gate", data.GetProperty("instanceName").GetString());
+        Assert.Equal("2.3.4", data.GetProperty("version").GetString());
+        Assert.NotEqual(JsonValueKind.Null, data.GetProperty("observedAt").ValueKind);
+        Assert.Equal(1, _factory.RasGateClientFactory.StatusRequestCount);
+
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("Remote Gate", stored.InstanceName);
+        Assert.Equal("2.3.4", stored.Version);
+        Assert.NotNull(stored.StatusObservedAt);
+
+        using var cachedResponse = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, cachedResponse.StatusCode);
+        Assert.Equal(1, _factory.RasGateClientFactory.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_status_for_unknown_gate_returns_not_found_without_scheduling_refresh()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{Guid.NewGuid()}/status?refresh=true",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("ras_gate_not_found", GetErrorCode(json));
+        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
     }
 
     [Fact]

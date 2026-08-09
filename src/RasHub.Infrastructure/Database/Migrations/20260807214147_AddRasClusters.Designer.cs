@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RasHub.Infrastructure.Database;
@@ -11,9 +12,11 @@ using RasHub.Infrastructure.Database;
 namespace RasHub.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(RasHubDbContext))]
-    partial class RasHubDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807214147_AddRasClusters")]
+    partial class AddRasClusters
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -27,10 +30,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    b.Property<bool>("AllowAccessRightAuditEventsRecording")
-                        .HasColumnType("boolean")
-                        .HasColumnName("allow_access_right_audit_events_recording");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -63,10 +62,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<bool>("KillByMemoryWithDump")
-                        .HasColumnType("boolean")
-                        .HasColumnName("kill_by_memory_with_dump");
-
                     b.Property<bool>("KillProblemProcesses")
                         .HasColumnType("boolean")
                         .HasColumnName("kill_problem_processes");
@@ -98,14 +93,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("observed_at");
 
-                    b.Property<long>("PingPeriod")
-                        .HasColumnType("bigint")
-                        .HasColumnName("ping_period");
-
-                    b.Property<long>("PingTimeout")
-                        .HasColumnType("bigint")
-                        .HasColumnName("ping_timeout");
-
                     b.Property<int>("Port")
                         .HasColumnType("integer")
                         .HasColumnName("port");
@@ -113,11 +100,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                     b.Property<Guid>("RasGateId")
                         .HasColumnType("uuid")
                         .HasColumnName("ras_gate_id");
-
-                    b.Property<string>("RestartSchedule")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("restart_schedule");
 
                     b.Property<int>("SecurityLevel")
                         .HasColumnType("integer")

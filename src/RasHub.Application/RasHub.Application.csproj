@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\RasHub.Domain\RasHub.Domain.csproj"/>
+        <ProjectReference Include="..\RasHub.Synchronization\RasHub.Synchronization.csproj"/>
     </ItemGroup>
 
 </Project>

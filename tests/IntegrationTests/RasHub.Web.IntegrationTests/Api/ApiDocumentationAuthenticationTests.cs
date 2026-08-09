@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using RasHub.Web.Authentication;
@@ -140,6 +141,45 @@ public sealed partial class ApiDocumentationAuthenticationTests
         Assert.Equal(HttpStatusCode.Unauthorized, apiResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task OpenApi_error_responses_do_not_expose_success_data_schema()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        using var response = await client.GetAsync(
+            "/openapi/v1.json",
+            TestContext.Current.CancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var root = document.RootElement;
+        var successSchema = ResolveResponseSchema(
+            root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            "post",
+            "200");
+        var errorSchema = ResolveResponseSchema(
+            root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            "post",
+            "502");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(successSchema.GetProperty("properties").TryGetProperty("data", out _));
+
+        var errorProperties = errorSchema.GetProperty("properties");
+        Assert.True(errorProperties.TryGetProperty("success", out _));
+        Assert.True(errorProperties.TryGetProperty("error", out _));
+        Assert.True(errorProperties.TryGetProperty("errors", out _));
+        Assert.False(errorProperties.TryGetProperty("data", out _));
+    }
+
     private static async Task<HttpResponseMessage> LoginAsync(
         HttpClient client,
         string email,
@@ -173,6 +213,35 @@ public sealed partial class ApiDocumentationAuthenticationTests
     private static RasHubWebApplicationFactory CreateFactory()
     {
         return new RasHubWebApplicationFactory("Development");
+    }
+
+    private static JsonElement ResolveResponseSchema(
+        JsonElement root,
+        string path,
+        string method,
+        string statusCode)
+    {
+        var schema = root
+            .GetProperty("paths")
+            .GetProperty(path)
+            .GetProperty(method)
+            .GetProperty("responses")
+            .GetProperty(statusCode)
+            .GetProperty("content")
+            .GetProperty("application/json")
+            .GetProperty("schema");
+
+        while (schema.TryGetProperty("$ref", out var reference))
+        {
+            schema = root;
+
+            foreach (var segment in reference.GetString()!
+                         .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                         .Skip(1))
+                schema = schema.GetProperty(segment);
+        }
+
+        return schema;
     }
 
     private static HttpClient CreateClient(
