@@ -141,7 +141,9 @@
 
     [SupplyParameterFromQuery] private bool RememberMe { get; set; }
 
-    private static readonly Dictionary<string, object> AuthenticatorCodeAttributes =
+    // MudStaticTextField mutates UserAttributes during SSR, so this dictionary
+    // must remain scoped to the component instance.
+    private readonly Dictionary<string, object> AuthenticatorCodeAttributes =
         new()
         {
             ["autocomplete"] = "one-time-code",

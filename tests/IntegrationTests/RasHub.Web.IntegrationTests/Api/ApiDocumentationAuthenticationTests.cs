@@ -1,6 +1,8 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Mvc.Testing;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
@@ -52,6 +54,30 @@ public sealed partial class ApiDocumentationAuthenticationTests
         Assert.Contains("type=\"password\"", html);
         Assert.Contains("Log in with a passkey", html);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
+    public void Account_pages_do_not_share_mutable_attribute_dictionaries()
+    {
+        var accountPageTypes = typeof(Program).Assembly
+            .GetTypes()
+            .Where(type => type.Namespace?.StartsWith(
+                "RasHub.Web.Components.Account.Pages",
+                StringComparison.Ordinal) == true)
+            .Where(type => typeof(ComponentBase).IsAssignableFrom(type))
+            .ToArray();
+
+        var sharedDictionaries = accountPageTypes
+            .SelectMany(type => type.GetFields(
+                BindingFlags.NonPublic |
+                BindingFlags.Static))
+            .Where(field => field.FieldType ==
+                            typeof(Dictionary<string, object>))
+            .Select(field => $"{field.DeclaringType?.Name}.{field.Name}")
+            .ToArray();
+
+        Assert.NotEmpty(accountPageTypes);
+        Assert.Empty(sharedDictionaries);
     }
 
     [Fact]

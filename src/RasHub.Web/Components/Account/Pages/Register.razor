@@ -157,21 +157,23 @@
             ? null
             : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
 
-    private static readonly Dictionary<string, object> EmailAttributes =
+    // MudStaticTextField mutates UserAttributes during SSR, so these dictionaries
+    // must remain scoped to the component instance.
+    private readonly Dictionary<string, object> EmailAttributes =
         new()
         {
             ["autocomplete"] = "username",
             ["aria-required"] = "true"
         };
 
-    private static readonly Dictionary<string, object> PasswordAttributes =
+    private readonly Dictionary<string, object> PasswordAttributes =
         new()
         {
             ["autocomplete"] = "new-password",
             ["aria-required"] = "true"
         };
 
-    private static readonly Dictionary<string, object> ConfirmPasswordAttributes =
+    private readonly Dictionary<string, object> ConfirmPasswordAttributes =
         new()
         {
             ["autocomplete"] = "new-password",

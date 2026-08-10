@@ -125,14 +125,16 @@
 
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
 
-    private static readonly Dictionary<string, object> EmailAttributes =
+    // MudStaticTextField mutates UserAttributes during SSR, so these dictionaries
+    // must remain scoped to the component instance.
+    private readonly Dictionary<string, object> EmailAttributes =
         new()
         {
             ["autocomplete"] = "username webauthn",
             ["aria-required"] = "true"
         };
 
-    private static readonly Dictionary<string, object> PasswordAttributes =
+    private readonly Dictionary<string, object> PasswordAttributes =
         new()
         {
             ["autocomplete"] = "current-password",

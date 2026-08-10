@@ -96,10 +96,10 @@ public sealed class RasClusterEntityTypeConfiguration
             .IsRequired();
 
         builder.HasIndex(cluster => new
-            {
-                cluster.RasGateId,
-                cluster.ExternalId
-            })
+        {
+            cluster.RasGateId,
+            cluster.ExternalId
+        })
             .IsUnique()
             .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
 

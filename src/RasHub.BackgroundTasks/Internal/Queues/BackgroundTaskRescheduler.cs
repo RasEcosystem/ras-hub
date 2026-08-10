@@ -96,12 +96,24 @@ internal sealed class BackgroundTaskRescheduler
 
                 await Task.WhenAny(delayTask, changedTask);
                 await waitCancellation.CancelAsync();
+
+                try
+                {
+                    await Task.WhenAll(delayTask, changedTask);
+                }
+                catch (OperationCanceledException)
+                    when (!stoppingToken.IsCancellationRequested)
+                {
+                    // The wait that did not win must finish before the next
+                    // iteration so it cannot consume a later change signal.
+                }
+
                 continue;
             }
 
             lock (_sync)
             {
-                _scheduled.Dequeue();
+                execution = _scheduled.Dequeue();
             }
 
             if (execution.IsTerminal)
