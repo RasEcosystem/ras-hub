@@ -31,12 +31,30 @@
 
         </MudTooltip>
 
+        <AuthorizeView Policy="@AppPolicies.ManageRasGates">
+            <Authorized>
+                <MudTooltip Text="RasGates"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.SettingsEthernet"
+                        Href="/ras-gates"
+                        Color="@GetRouteColor("ras-gates")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="RasGates"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
         <MudTooltip Text="Tasks"
                     Placement="Placement.Right"
                     Arrow="true">
 
             <MudIconButton
-                Icon="@Icons.Material.Outlined.Queue"
+                Icon="@Icons.Material.Filled.DoubleArrow"
                 Href="/background-tasks"
                 Color="@GetRouteColor("background-tasks")"
                 Size="Size.Medium"
@@ -44,6 +62,24 @@
                 aria-label="Tasks"/>
 
         </MudTooltip>
+
+        <AuthorizeView Policy="@AppPolicies.ManageGlobalSettings">
+            <Authorized>
+                <MudTooltip Text="Events"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.ManageSearch"
+                        Href="/health-events"
+                        Color="@GetRouteColor("health-events")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="Events"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
 
         <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
@@ -80,20 +116,6 @@
                         Color="@GetRouteColor("settings")"
                         Size="Size.Medium"
                         Variant="Variant.Text"/>
-
-                </MudTooltip>
-
-                <MudTooltip Text="Application events"
-                            Placement="Placement.Right"
-                            Arrow="true">
-
-                    <MudIconButton
-                        Icon="@Icons.Material.Filled.ManageSearch"
-                        Href="/health-events"
-                        Color="@GetRouteColor("health-events")"
-                        Size="Size.Medium"
-                        Variant="Variant.Text"
-                        aria-label="Application events"/>
 
                 </MudTooltip>
             </Authorized>

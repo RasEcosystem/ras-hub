@@ -81,6 +81,46 @@ public sealed class AuditSoftDeleteInterceptorTests : IDisposable
         Assert.Equal(deleted.DeletedAt, deleted.UpdatedAt);
     }
 
+    [Fact]
+    public async Task Restore_clears_deletion_state_and_returns_entity_to_regular_queries()
+    {
+        var rasGate = RasGateTestData.Create();
+
+        await using (var db = _database.CreateContext())
+        {
+            db.RasGates.Add(rasGate);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            db.RasGates.Remove(rasGate);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        _timeProvider.Advance(TimeSpan.FromMinutes(1));
+
+        await using (var restoreDb = _database.CreateContext())
+        {
+            var deleted = await restoreDb.RasGates
+                .IgnoreQueryFilters()
+                .SingleAsync(
+                    item => item.Id == rasGate.Id,
+                    TestContext.Current.CancellationToken);
+
+            deleted.IsDeleted = false;
+            deleted.DeletedAt = null;
+            await restoreDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var verificationDb = _database.CreateContext();
+        var restored = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(restored.IsDeleted);
+        Assert.Null(restored.DeletedAt);
+        Assert.Equal(
+            InitialTime.AddMinutes(1).UtcDateTime,
+            restored.UpdatedAt);
+    }
+
     private sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         private DateTimeOffset _utcNow = utcNow;

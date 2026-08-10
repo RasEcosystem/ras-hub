@@ -63,6 +63,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     [Theory]
     [InlineData("/settings")]
     [InlineData("/health-events")]
+    [InlineData("/ras-gates")]
     public async Task Api_key_does_not_authenticate_administration_pages(string path)
     {
         using var client = _factory.CreateAuthenticatedClient();

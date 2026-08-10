@@ -97,6 +97,57 @@ public sealed class RasGateQueriesTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_administration_items_projects_operational_state_without_secrets()
+    {
+        var observedAt = new DateTime(2026, 8, 11, 10, 0, 0, DateTimeKind.Utc);
+        var lastSeenAt = observedAt.AddMinutes(1);
+        var gate = RasGateTestData.Create(
+            "Main gate",
+            "https://main.example.test",
+            8443,
+            "must-not-be-projected");
+        var deleted = RasGateTestData.Create("Deleted gate");
+        gate.InstanceName = "rasgate-main";
+        gate.Version = "1.2.3";
+        gate.StatusObservedAt = observedAt;
+        gate.LastSeenAt = lastSeenAt;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(gate, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        var result = await new RasGateQueries(db).GetAdministrationItemsAsync(
+            TestContext.Current.CancellationToken);
+
+        var item = Assert.Single(result);
+        Assert.Equal(gate.Id, item.Id);
+        Assert.Equal("Main gate", item.Name);
+        Assert.Equal("https://main.example.test", item.Url);
+        Assert.Equal(8443, item.Port);
+        Assert.Equal("rasgate-main", item.InstanceName);
+        Assert.Equal("1.2.3", item.Version);
+        Assert.Equal(observedAt, item.StatusObservedAt);
+        Assert.Equal(lastSeenAt, item.LastSeenAt);
+        Assert.False(item.IsDeleted);
+        Assert.Null(item.DeletedAt);
+        Assert.Empty(db.ChangeTracker.Entries<RasGate>());
+
+        var itemsIncludingDeleted = await new RasGateQueries(db)
+            .GetAdministrationItemsAsync(
+                true,
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, itemsIncludingDeleted.Count);
+        var deletedItem = Assert.Single(itemsIncludingDeleted, candidate =>
+            candidate.Id == deleted.Id);
+        Assert.True(deletedItem.IsDeleted);
+        Assert.NotNull(deletedItem.DeletedAt);
+    }
+
+    [Fact]
     public async Task Get_paged_returns_count_and_stable_order_for_the_requested_page()
     {
         var oldest = RasGateTestData.Create("Oldest");

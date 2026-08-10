@@ -30,6 +30,42 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .ToListAsync(cancellationToken);
     }
 
+    public Task<List<RasGateAdministrationItem>> GetAdministrationItemsAsync(
+        bool includeDeleted,
+        CancellationToken cancellationToken)
+    {
+        var query = includeDeleted
+            ? db.RasGates.IgnoreQueryFilters()
+            : db.RasGates;
+
+        return query
+            .AsNoTracking()
+            .OrderBy(rasGate => rasGate.IsDeleted)
+            .ThenBy(rasGate => rasGate.Name)
+            .ThenBy(rasGate => rasGate.Id)
+            .Select(rasGate => new RasGateAdministrationItem(
+                rasGate.Id,
+                rasGate.Name,
+                rasGate.Url,
+                rasGate.Port,
+                rasGate.IsActive,
+                rasGate.InstanceName,
+                rasGate.Version,
+                rasGate.StatusObservedAt,
+                rasGate.LastSeenAt,
+                rasGate.CreatedAt,
+                rasGate.UpdatedAt,
+                rasGate.IsDeleted,
+                rasGate.DeletedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<List<RasGateAdministrationItem>> GetAdministrationItemsAsync(
+        CancellationToken cancellationToken)
+    {
+        return GetAdministrationItemsAsync(false, cancellationToken);
+    }
+
     public async Task<RasGateHealthSummary> GetHealthSummaryAsync(
         DateTime onlineSince,
         CancellationToken cancellationToken)
@@ -114,3 +150,18 @@ public sealed class RasGateQueries(RasHubDbContext db)
 public sealed record RasGateHealthSummary(int TotalCount, int OnlineCount);
 
 public sealed record RasGateActivity(bool IsActive);
+
+public sealed record RasGateAdministrationItem(
+    Guid Id,
+    string Name,
+    string Url,
+    int Port,
+    bool IsActive,
+    string? InstanceName,
+    string? Version,
+    DateTime? StatusObservedAt,
+    DateTime? LastSeenAt,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    bool IsDeleted,
+    DateTime? DeletedAt);

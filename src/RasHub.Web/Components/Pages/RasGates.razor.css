@@ -1,0 +1,39 @@
+.ras-gates-table-card {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 14rem);
+    min-height: calc(100vh - 14rem);
+}
+
+.ras-gates-table-toolbar {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 40px;
+    margin-bottom: 1rem;
+}
+
+.ras-gates-table {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.ras-gate-endpoint {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 960px) {
+    .ras-gates-table-card,
+    .ras-gates-table {
+        min-height: auto;
+        height: auto;
+    }
+
+    .ras-gates-table-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: .5rem;
+    }
+}

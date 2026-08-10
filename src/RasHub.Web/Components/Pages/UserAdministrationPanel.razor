@@ -5,32 +5,23 @@
 @inject ILogger<UserAdministrationPanel> Logger
 @inject IJSRuntime JsRuntime
 
-<MudPaper Class="pa-6" Elevation="1">
-    <MudStack Spacing="4">
-        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-            <MudIcon Icon="@Icons.Material.Outlined.AdminPanelSettings"
-                     Size="Size.Small"
-                     Color="Color.Primary"/>
-            <MudText Typo="Typo.h5">Users</MudText>
-        </MudStack>
-
-        @if (_loadingUsers)
-        {
-            <MudProgressLinear Indeterminate Color="Color.Primary"/>
-        }
-        else
-        {
-            <MudTable T="UserAdministrationItem"
+<MudPaper Class="pa-4 app-data-table-card" Elevation="1">
+    @if (_loadingUsers)
+    {
+        <MudProgressLinear Indeterminate Color="Color.Primary"/>
+    }
+    else
+    {
+        <MudTable T="UserAdministrationItem"
                       Items="@_users"
                       Hover
-                      Striped
-                      Bordered>
+                      Class="app-data-table">
                 <HeaderContent>
                     <MudTh>User</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Role</MudTh>
+                    <MudTh Style="width: 112px;">Status</MudTh>
+                    <MudTh Style="width: 96px;">Role</MudTh>
                     <MudTh>API key</MudTh>
-                    <MudTh Class="text-right">Actions</MudTh>
+                    <MudTh Class="text-right" Style="width: 64px;">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="User">
@@ -47,19 +38,21 @@
                             }
                         </MudStack>
                     </MudTd>
-                    <MudTd DataLabel="Status">
+                    <MudTd DataLabel="Status" Style="width: 112px;">
                         <MudChip T="string"
                                  Size="Size.Small"
                                  Color="@(context.IsBlocked ? Color.Error : Color.Success)"
-                                 Variant="Variant.Outlined">
+                                 Variant="Variant.Outlined"
+                                 Class="app-status-chip">
                             @(context.IsBlocked ? "Blocked" : "Active")
                         </MudChip>
                     </MudTd>
-                    <MudTd DataLabel="Role">
+                    <MudTd DataLabel="Role" Style="width: 96px;">
                         <MudChip T="string"
                                  Size="Size.Small"
                                  Color="@(context.IsAdmin ? Color.Primary : Color.Default)"
-                                 Variant="Variant.Outlined">
+                                 Variant="Variant.Outlined"
+                                 Class="app-role-chip">
                             @(context.IsAdmin ? "Admin" : "User")
                         </MudChip>
                     </MudTd>
@@ -80,7 +73,7 @@
                             </MudText>
                         </MudStack>
                     </MudTd>
-                    <MudTd DataLabel="Actions" Class="text-right">
+                    <MudTd DataLabel="Actions" Class="text-right" Style="width: 64px;">
                         @if (_updatingUserId == context.Id)
                         {
                             <MudProgressCircular Indeterminate
@@ -151,9 +144,8 @@
                         No users found.
                     </MudText>
                 </NoRecordsContent>
-            </MudTable>
-        }
-    </MudStack>
+        </MudTable>
+    }
 </MudPaper>
 
 @code {

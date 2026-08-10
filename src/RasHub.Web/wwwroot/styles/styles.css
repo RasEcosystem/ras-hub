@@ -45,3 +45,68 @@
 #mud-snackbar-container {
     z-index: 99999 !important;
 }
+
+/* =========================================================
+   DATA TABLES
+========================================================= */
+
+.app-data-table-card {
+    overflow: hidden;
+}
+
+.app-data-table {
+    overflow: hidden;
+    border: 1px solid var(--mud-palette-table-lines);
+    border-radius: 8px;
+    background: var(--mud-palette-surface);
+}
+
+.app-data-table .mud-table-head {
+    background: var(--mud-palette-background-gray);
+}
+
+.app-data-table .mud-table-head .mud-table-cell {
+    height: 48px;
+    background: var(--mud-palette-background-gray);
+    color: var(--mud-palette-text-secondary);
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .025em;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--mud-palette-table-lines);
+}
+
+.app-data-table .mud-table-row {
+    transition: background-color 120ms ease;
+}
+
+.app-data-table .mud-table-row:hover {
+    background: var(--mud-palette-table-hover) !important;
+}
+
+.app-data-table .mud-table-row > .mud-table-cell {
+    padding-top: 14px;
+    padding-bottom: 14px;
+    border-bottom-color: var(--mud-palette-divider-light);
+}
+
+.app-data-table .mud-table-row:last-child > .mud-table-cell {
+    border-bottom: 0;
+}
+
+.app-status-chip {
+    width: 96px;
+    justify-content: center;
+}
+
+.app-role-chip {
+    width: 72px;
+    justify-content: center;
+}
+
+@media (max-width: 960px) {
+    .app-data-table .mud-table-row > .mud-table-cell {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+}
