@@ -7,6 +7,9 @@ public sealed class BackgroundTaskEngineOptions
 {
     public const string SectionName = "BackgroundTasks";
 
+    public const int MaximumWorkersPerQueue = 1_024;
+    public const int MaximumTotalWorkerCount = 2_048;
+
     public const int DefaultSynchronizationQueueCapacity = 1_024;
     public const int DefaultSynchronizationWorkerCount = 16;
 

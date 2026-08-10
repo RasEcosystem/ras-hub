@@ -8,8 +8,6 @@ public sealed class RacClusterInfoV1Adapter(
     RacClusterOutputDeserializer deserializer)
     : IRacResourceAdapter<RasClusterSnapshot>
 {
-    private const int MaxFailureOutputLength = 1_000;
-
     private static readonly Version BaselineVersion = new(8, 3, 27, 2214);
     private static readonly Version NextPlatformFamilyVersion = new(8, 4, 0, 0);
 
@@ -51,7 +49,7 @@ public sealed class RacClusterInfoV1Adapter(
 
         if (execution.ExitCode != 0)
             throw new RasGateClientException(
-                CreateFailureMessage(execution));
+                $"RAC cluster info command failed with exit code {execution.ExitCode}.");
 
         var items = deserializer.Deserialize(execution.StandardOutput);
 
@@ -82,24 +80,4 @@ public sealed class RacClusterInfoV1Adapter(
             nameof(externalId));
     }
 
-    private static string CreateFailureMessage(RacExecutionResult execution)
-    {
-        var output = string.IsNullOrWhiteSpace(execution.StandardError)
-            ? execution.StandardOutput
-            : execution.StandardError;
-        output = output
-            .Replace('\r', ' ')
-            .Replace('\n', ' ')
-            .Trim();
-
-        if (output.Length > MaxFailureOutputLength)
-            output = $"{output[..MaxFailureOutputLength]}…";
-
-        var details = output.Length == 0
-            ? string.Empty
-            : $" RAC output: {output}";
-
-        return $"RAC cluster info command failed with exit code " +
-               $"{execution.ExitCode}.{details}";
-    }
 }

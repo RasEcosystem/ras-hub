@@ -1,3 +1,4 @@
+using RasHub.BackgroundTasks.Configuration;
 using RasHub.BackgroundTasks.Models;
 
 namespace RasHub.BackgroundTasks.Internal.Execution;
@@ -32,8 +33,13 @@ internal static class BackgroundTaskOptionsValidator
         if (options.MaxRetryDelay < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(options.MaxRetryDelay));
 
-        if (options.Timeout is { } timeout && timeout <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(options.Timeout));
+        if (options.Timeout is { } timeout &&
+            (timeout <= TimeSpan.Zero ||
+             timeout > BackgroundTaskTimerLimits.MaximumTimerDuration))
+            throw new ArgumentOutOfRangeException(
+                nameof(options.Timeout),
+                $"Timeout must be positive and no greater than " +
+                $"{BackgroundTaskTimerLimits.MaximumTimerDuration}.");
 
         ValidateKey(options.DeduplicationKey, nameof(options.DeduplicationKey));
         ValidateKey(options.ConcurrencyKey, nameof(options.ConcurrencyKey));

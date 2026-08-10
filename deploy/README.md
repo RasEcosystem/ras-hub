@@ -36,6 +36,9 @@ The one-shot `migrate` container updates both databases before the API starts.
 The API and Seq bind to localhost by default for publication through a TLS
 reverse proxy; PostgreSQL is not published.
 
+The container stack exports the `RasHub.BackgroundTasks` meter to Seq through
+OTLP. Override `RASHUB_OTLP_METRICS_ENDPOINT` only when using another collector.
+
 Create the bootstrap administrator password file once:
 
 ```bash

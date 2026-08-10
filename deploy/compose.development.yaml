@@ -64,6 +64,7 @@ services:
       DataProtection__CertificatePasswordFile: ${RASHUB_DEV_DATA_PROTECTION_CERTIFICATE_PASSWORD_FILE:+/run/secrets/rashub-data-protection-certificate-password}
       ReverseProxy__KnownProxies__0: ${RASHUB_DEV_TRUSTED_PROXY:-127.0.0.1}
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      OpenTelemetry__MetricsEndpoint: ${RASHUB_DEV_OTLP_METRICS_ENDPOINT:-http://seq:5341/ingest/otlp/v1/metrics}
     volumes:
       - data-protection-development:/home/app/.aspnet/DataProtection-Keys
     secrets:

@@ -1,7 +1,5 @@
 using System.Net;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Abstractions;
 using RasHub.Web.Data;
@@ -20,7 +18,7 @@ public sealed class RegistrationSecurityTests
     public async Task Registration_page_when_disabled_redirects_to_login()
     {
         using var factory = new RasHubWebApplicationFactory(false);
-        using var client = CreateClient(factory);
+        using var client = factory.CreateIdentityClient();
 
         using var response = await client.GetAsync(
             "/Account/Register",
@@ -35,9 +33,11 @@ public sealed class RegistrationSecurityTests
     {
         using var factory = new RasHubWebApplicationFactory(false);
         await SetRegistrationAsync(factory, true);
-        using var client = CreateClient(factory);
+        using var client = factory.CreateIdentityClient();
         var email = $"blocked-{Guid.NewGuid():N}@example.test";
-        var token = await GetRegistrationTokenAsync(client);
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            "/Account/Register");
 
         await SetRegistrationAsync(factory, false);
         using var response = await PostRegistrationAsync(client, email, token);
@@ -60,9 +60,11 @@ public sealed class RegistrationSecurityTests
     {
         using var factory = new RasHubWebApplicationFactory(false);
         await SetRegistrationAsync(factory, true);
-        using var client = CreateClient(factory);
+        using var client = factory.CreateIdentityClient();
         var email = $"first-{Guid.NewGuid():N}@example.test";
-        var token = await GetRegistrationTokenAsync(client);
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            "/Account/Register");
 
         using var response = await PostRegistrationAsync(client, email, token);
 
@@ -74,15 +76,6 @@ public sealed class RegistrationSecurityTests
         var user = await userManager.FindByEmailAsync(email);
         Assert.NotNull(user);
         Assert.False(await userManager.IsInRoleAsync(user, AppRoles.Admin));
-    }
-
-    private static HttpClient CreateClient(RasHubWebApplicationFactory factory)
-    {
-        return factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true
-        });
     }
 
     private static async Task SetRegistrationAsync(
@@ -97,24 +90,6 @@ public sealed class RegistrationSecurityTests
         {
             AllowRegistration = allowed
         });
-    }
-
-    private static async Task<string> GetRegistrationTokenAsync(HttpClient client)
-    {
-        using var page = await client.GetAsync(
-            "/Account/Register",
-            TestContext.Current.CancellationToken);
-        var html = await page.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var token = Regex.Match(
-                html,
-                "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")
-            .Groups[1]
-            .Value;
-
-        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
-        Assert.False(string.IsNullOrEmpty(token));
-        return WebUtility.HtmlDecode(token);
     }
 
     private static async Task<HttpResponseMessage> PostRegistrationAsync(

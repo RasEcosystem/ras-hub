@@ -11,13 +11,16 @@ internal sealed class BackgroundTaskHealthCheck : IHealthCheck
 
     private readonly IBackgroundTaskEngine _engine;
     private readonly BackgroundTaskEngineOptions _options;
+    private readonly BackgroundTaskRuntimeState _runtimeState;
 
     public BackgroundTaskHealthCheck(
         IBackgroundTaskEngine engine,
-        IOptions<BackgroundTaskEngineOptions> options)
+        IOptions<BackgroundTaskEngineOptions> options,
+        BackgroundTaskRuntimeState runtimeState)
     {
         _engine = engine;
         _options = options.Value;
+        _runtimeState = runtimeState;
     }
 
     public Task<HealthCheckResult> CheckHealthAsync(
@@ -25,8 +28,12 @@ internal sealed class BackgroundTaskHealthCheck : IHealthCheck
         CancellationToken cancellationToken = default)
     {
         var statistics = _engine.GetStatistics();
+        var runtime = _runtimeState.CreateSnapshot();
         var data = new Dictionary<string, object>
         {
+            ["runtimeStatus"] = runtime.Status.ToString(),
+            ["expectedProcessCount"] = runtime.ExpectedProcessCount,
+            ["liveProcessCount"] = runtime.LiveProcessCount,
             ["activeTasks"] = statistics.ActiveTasks,
             ["maxActiveTasks"] = _options.MaxActiveTasks,
             ["completedTaskHistory"] = statistics.CompletedTaskHistory,
@@ -39,6 +46,24 @@ internal sealed class BackgroundTaskHealthCheck : IHealthCheck
             ["maintenanceQueueCapacity"] = _options.MaintenanceQueueCapacity
         };
 
+        if (runtime.FaultedProcess is not null)
+            data["faultedProcess"] = runtime.FaultedProcess;
+
+        if (runtime.FaultedAt is not null)
+            data["faultedAt"] = runtime.FaultedAt.Value;
+
+        var runtimeUnavailable = runtime.Status is
+                                     BackgroundTaskRuntimeStatus.Faulted or
+                                     BackgroundTaskRuntimeStatus.Stopping or
+                                     BackgroundTaskRuntimeStatus.Stopped ||
+                                 runtime.Status == BackgroundTaskRuntimeStatus.Running &&
+                                 runtime.LiveProcessCount != runtime.ExpectedProcessCount;
+
+        if (runtimeUnavailable)
+            return Task.FromResult(HealthCheckResult.Unhealthy(
+                "Background task engine processes are not operational.",
+                data: data));
+
         var saturated = statistics.ActiveTasks >= _options.MaxActiveTasks ||
                         statistics.InteractiveQueueLength >= _options.InteractiveQueueCapacity ||
                         statistics.SynchronizationQueueLength >= _options.SynchronizationQueueCapacity ||
@@ -47,6 +72,13 @@ internal sealed class BackgroundTaskHealthCheck : IHealthCheck
         if (saturated)
             return Task.FromResult(HealthCheckResult.Unhealthy(
                 "Background task engine capacity is exhausted.",
+                data: data));
+
+        if (runtime.Status is
+            BackgroundTaskRuntimeStatus.NotStarted or
+            BackgroundTaskRuntimeStatus.Starting)
+            return Task.FromResult(HealthCheckResult.Degraded(
+                "Background task engine has not finished starting.",
                 data: data));
 
         var degraded = IsAboveThreshold(statistics.ActiveTasks, _options.MaxActiveTasks) ||

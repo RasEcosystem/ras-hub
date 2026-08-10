@@ -27,23 +27,32 @@ public static class BackgroundTaskServiceCollectionExtensions
 
         optionsBuilder
             .Validate(
-                options => options.SynchronizationQueueCapacity > 0,
-                "Synchronization queue capacity must be greater than zero.")
-            .Validate(
-                options => options.SynchronizationWorkerCount > 0,
-                "Synchronization worker count must be greater than zero.")
-            .Validate(
                 options => options.InteractiveQueueCapacity > 0 &&
+                           options.SynchronizationQueueCapacity > 0 &&
                            options.MaintenanceQueueCapacity > 0,
                 "All background task queue capacities must be greater than zero.")
             .Validate(
-                options => options.InteractiveWorkerCount > 0 &&
-                           options.MaintenanceWorkerCount > 0,
-                "All background task worker counts must be greater than zero.")
+                options => IsValidWorkerCount(options.InteractiveWorkerCount) &&
+                           IsValidWorkerCount(options.SynchronizationWorkerCount) &&
+                           IsValidWorkerCount(options.MaintenanceWorkerCount),
+                $"Background task worker counts must be between 1 and " +
+                $"{BackgroundTaskEngineOptions.MaximumWorkersPerQueue}.")
             .Validate(
-                options => options.CompletedTaskRetention >= TimeSpan.Zero &&
-                           options.RegistryCleanupInterval > TimeSpan.Zero,
-                "Task retention cannot be negative and cleanup interval must be positive.")
+                options => GetTotalWorkerCount(options) <=
+                           BackgroundTaskEngineOptions.MaximumTotalWorkerCount,
+                $"The total background task worker count must not exceed " +
+                $"{BackgroundTaskEngineOptions.MaximumTotalWorkerCount}.")
+            .Validate(
+                options => options.CompletedTaskRetention >= TimeSpan.Zero,
+                "Task retention cannot be negative.")
+            .Validate(
+                options => options.RegistryCleanupInterval >=
+                           BackgroundTaskTimerLimits.MinimumPeriodicInterval &&
+                           options.RegistryCleanupInterval <=
+                           BackgroundTaskTimerLimits.MaximumTimerDuration,
+                $"Registry cleanup interval must be between " +
+                $"{BackgroundTaskTimerLimits.MinimumPeriodicInterval} and " +
+                $"{BackgroundTaskTimerLimits.MaximumTimerDuration}.")
             .Validate(
                 options => options.MaxActiveTasks > 0 &&
                            options.MaxCompletedTaskHistory > 0,
@@ -57,8 +66,9 @@ public static class BackgroundTaskServiceCollectionExtensions
             var options = serviceProvider
                 .GetRequiredService<IOptions<BackgroundTaskEngineOptions>>()
                 .Value;
+            var timeProvider = serviceProvider.GetRequiredService<TimeProvider>();
 
-            return new InMemoryBackgroundTaskQueue(options);
+            return new InMemoryBackgroundTaskQueue(options, timeProvider);
         });
 
         services.AddSingleton<BackgroundTaskDispatcher>();
@@ -70,12 +80,15 @@ public static class BackgroundTaskServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskEngine>();
         services.AddSingleton<IBackgroundTaskEngine>(serviceProvider =>
             serviceProvider.GetRequiredService<BackgroundTaskEngine>());
+        services.AddSingleton<IBackgroundTaskEngineLifecycle>(serviceProvider =>
+            serviceProvider.GetRequiredService<BackgroundTaskEngine>());
 
         services.AddSingleton<PeriodicBackgroundTaskScheduler>();
         services.AddSingleton<IBackgroundTaskScheduler>(serviceProvider =>
             serviceProvider.GetRequiredService<PeriodicBackgroundTaskScheduler>());
 
         services.AddHostedService<BackgroundTaskHostedService>();
+        services.AddSingleton<BackgroundTaskRuntimeState>();
 
         services
             .AddHealthChecks()
@@ -84,5 +97,18 @@ public static class BackgroundTaskServiceCollectionExtensions
                 tags: ["ready"]);
 
         return services;
+    }
+
+    private static bool IsValidWorkerCount(int workerCount)
+    {
+        return workerCount is > 0 and <=
+            BackgroundTaskEngineOptions.MaximumWorkersPerQueue;
+    }
+
+    private static long GetTotalWorkerCount(BackgroundTaskEngineOptions options)
+    {
+        return (long)options.InteractiveWorkerCount +
+               options.SynchronizationWorkerCount +
+               options.MaintenanceWorkerCount;
     }
 }

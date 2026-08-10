@@ -5,10 +5,10 @@ owns execution mechanics.
 
 ## Behavior
 
-- bounded FIFO lanes for `Interactive`, `Synchronization`, and `Maintenance`;
+- FIFO lanes with bounded admission for `Interactive`, `Synchronization`, and `Maintenance`;
 - dedicated workers per lane;
 - retry with exponential backoff and per-attempt timeout;
-- cancellation, active-task deduplication, and concurrency keys;
+- cancellation, active-task deduplication, and FIFO handoff for concurrency keys;
 - periodic scheduling;
 - task snapshots, retained history, logging, .NET metrics, and a readiness health check.
 
@@ -64,7 +64,8 @@ using var schedule = scheduler.Schedule(
 ```
 
 The scheduler supplies a deduplication key when none is provided. Overlapping occurrences share the active execution,
-and missed intervals are not replayed.
+and missed intervals are not replayed. Factories should only construct immutable task messages; do not perform I/O or
+capture scoped services in them.
 
 ## Failure and monitoring
 
@@ -73,4 +74,5 @@ Exceptions retry until `MaxAttempts` is reached. Throw
 
 The `BackgroundTasks` configuration section controls lane capacities and worker counts, retention, cleanup, and
 active/history limits. The meter name is
-`RasHub.BackgroundTasks`; the readiness check is `background-tasks`.
+`RasHub.BackgroundTasks`; the readiness check is `background-tasks`. The Web host exports this meter over OTLP when
+`OpenTelemetry:MetricsEndpoint` is configured; the supplied container stacks point it at Seq.

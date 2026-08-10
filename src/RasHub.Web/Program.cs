@@ -51,6 +51,7 @@ public class Program
 
         builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
         builder.Services.AddSingleton<ApplicationDiagnostics>();
+        builder.Services.AddRasHubOpenTelemetry(builder.Configuration);
         builder.Services.AddRasHubDataProtection(builder.Configuration);
         builder.Services.AddAuthenticationRateLimiting();
 
@@ -105,14 +106,19 @@ public class Program
             .Bind(builder.Configuration.GetSection(
                 RasGateMonitoringOptions.SectionName))
             .Validate(
-                value => value.PollInterval > TimeSpan.Zero,
-                "RasGate monitoring poll interval must be positive.")
+                value => value.PollInterval >=
+                         BackgroundTaskTimerLimits.MinimumPeriodicInterval &&
+                         value.PollInterval <=
+                         BackgroundTaskTimerLimits.MaximumTimerDuration,
+                "RasGate monitoring poll interval is outside the supported timer range.")
             .Validate(
                 value => value.OnlineThreshold >= value.PollInterval,
                 "RasGate online threshold must not be shorter than the poll interval.")
             .Validate(
-                value => value.RequestTimeout > TimeSpan.Zero,
-                "RasGate monitoring request timeout must be positive.")
+                value => value.RequestTimeout > TimeSpan.Zero &&
+                         value.RequestTimeout <=
+                         BackgroundTaskTimerLimits.MaximumTimerDuration,
+                "RasGate monitoring request timeout is outside the supported timer range.")
             .ValidateOnStart();
         builder.Services.AddHostedService<RasGateMonitoringService>();
 

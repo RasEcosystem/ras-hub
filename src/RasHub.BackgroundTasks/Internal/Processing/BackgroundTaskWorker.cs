@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RasHub.BackgroundTasks.Exceptions;
 using RasHub.BackgroundTasks.Internal.Diagnostics;
+using RasHub.BackgroundTasks.Internal.Engine;
 using RasHub.BackgroundTasks.Internal.Execution;
 using RasHub.BackgroundTasks.Internal.Queues;
 using RasHub.BackgroundTasks.Models;
@@ -12,11 +13,9 @@ namespace RasHub.BackgroundTasks.Internal.Processing;
 /// </summary>
 internal sealed class BackgroundTaskWorker
 {
-    private static readonly TimeSpan ConcurrencyRetryDelay =
-        TimeSpan.FromMilliseconds(100);
-
     private readonly BackgroundTaskConcurrencyGate _concurrencyGate;
     private readonly BackgroundTaskDispatcher _dispatcher;
+    private readonly BackgroundTaskEngine _engine;
     private readonly ILogger<BackgroundTaskWorker> _logger;
     private readonly BackgroundTaskMetrics _metrics;
 
@@ -27,6 +26,7 @@ internal sealed class BackgroundTaskWorker
     public BackgroundTaskWorker(
         IBackgroundTaskQueue queue,
         BackgroundTaskDispatcher dispatcher,
+        BackgroundTaskEngine engine,
         BackgroundTaskRescheduler rescheduler,
         BackgroundTaskConcurrencyGate concurrencyGate,
         TimeProvider timeProvider,
@@ -35,6 +35,7 @@ internal sealed class BackgroundTaskWorker
     {
         _queue = queue;
         _dispatcher = dispatcher;
+        _engine = engine;
         _rescheduler = rescheduler;
         _concurrencyGate = concurrencyGate;
         _timeProvider = timeProvider;
@@ -59,32 +60,62 @@ internal sealed class BackgroundTaskWorker
                 var execution = await _queue.DequeueAsync(
                     queue,
                     stoppingToken);
+                IDisposable? concurrencyLease = null;
 
-                if (execution.IsTerminal)
-                    continue;
-
-                if (!_concurrencyGate.TryAcquire(
-                        execution.Options.ConcurrencyKey,
-                        out var concurrencyLease))
+                try
                 {
-                    _rescheduler.Schedule(
-                        execution,
-                        _timeProvider.GetUtcNow() + ConcurrencyRetryDelay);
-
-                    continue;
-                }
-
-                using (concurrencyLease)
-                {
-                    if (!execution.TryStart(_timeProvider.GetUtcNow()))
+                    if (execution.IsTerminal)
                         continue;
 
-                    _metrics.Started(execution);
+                    if (!_concurrencyGate.TryAcquireOrWait(
+                            execution,
+                            out concurrencyLease))
+                        continue;
 
-                    await ExecuteAttemptAsync(
-                        workerId,
+                    RetryPlan? retryPlan;
+
+                    using (concurrencyLease)
+                    {
+                        if (!_engine.TryStartExecution(
+                                execution,
+                                _timeProvider.GetUtcNow()))
+                            continue;
+
+                        _metrics.Started(execution);
+
+                        retryPlan = await ExecuteAttemptAsync(
+                            workerId,
+                            execution);
+                    }
+
+                    // The keyed lease must be released before the retry becomes
+                    // visible. Otherwise another worker can dequeue the same
+                    // execution while the previous attempt still owns the key
+                    // and discard it as a duplicate owner entry.
+                    if (retryPlan is not null)
+                        PublishRetry(execution, retryPlan.Value);
+                }
+                catch (OperationCanceledException)
+                    when (stoppingToken.IsCancellationRequested)
+                {
+                    execution.TryCancel(_timeProvider.GetUtcNow());
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    HandleInfrastructureFailure(
                         execution,
+                        exception,
                         stoppingToken);
+                }
+                finally
+                {
+                    // Both locals cross an await and are therefore hoisted into
+                    // the worker state machine. Clear them before the next idle
+                    // dequeue so one terminal payload/result is not retained
+                    // indefinitely per worker.
+                    concurrencyLease = null;
+                    execution = null!;
                 }
             }
         }
@@ -102,10 +133,9 @@ internal sealed class BackgroundTaskWorker
         }
     }
 
-    private async Task ExecuteAttemptAsync(
+    private async Task<RetryPlan?> ExecuteAttemptAsync(
         int workerId,
-        BackgroundTaskExecution execution,
-        CancellationToken stoppingToken)
+        BackgroundTaskExecution execution)
     {
         var taskType = execution.BackgroundTask.GetType().FullName;
         var attemptStarted = _timeProvider.GetTimestamp();
@@ -119,7 +149,6 @@ internal sealed class BackgroundTaskWorker
         using (timeoutCancellation)
         using (var attemptCancellation = CreateAttemptCancellation(
                    execution,
-                   stoppingToken,
                    timeoutCancellation))
         {
             _logger.LogInformation(
@@ -135,38 +164,37 @@ internal sealed class BackgroundTaskWorker
             {
                 await _dispatcher.ExecuteAsync(
                     execution,
-                    attemptCancellation.Token);
+                    attemptCancellation?.Token ??
+                    execution.CancellationToken);
 
                 execution.TrySucceed(_timeProvider.GetUtcNow());
 
-                if (execution.State == BackgroundTaskState.Succeeded)
-                    _metrics.Succeeded(execution);
-                else if (execution.State == BackgroundTaskState.Canceled)
-                    _metrics.Canceled(execution);
-
                 _logger.LogInformation(
                     "Worker {WorkerId} completed background task " +
-                    "{TaskId} of type {TaskType}",
+                    "{TaskId} of type {TaskType} with outcome {Outcome}",
                     workerId,
                     execution.Id,
-                    taskType);
+                    taskType,
+                    execution.State);
+
+                return null;
             }
             catch (OperationCanceledException)
-                when (stoppingToken.IsCancellationRequested ||
-                      execution.CancellationToken.IsCancellationRequested)
+                when (execution.CancellationToken.IsCancellationRequested)
             {
                 execution.TryCancel(_timeProvider.GetUtcNow());
-                _metrics.Canceled(execution);
 
                 _logger.LogInformation(
                     "Background task {TaskId} of type {TaskType} was canceled",
                     execution.Id,
                     taskType);
+
+                return null;
             }
             catch (OperationCanceledException exception)
                 when (timeoutCancellation?.IsCancellationRequested == true)
             {
-                HandleFailure(
+                return HandleFailure(
                     execution,
                     new TimeoutException(
                         $"Background task '{taskType}' exceeded " +
@@ -175,7 +203,7 @@ internal sealed class BackgroundTaskWorker
             }
             catch (Exception exception)
             {
-                HandleFailure(execution, exception);
+                return HandleFailure(execution, exception);
             }
             finally
             {
@@ -186,7 +214,7 @@ internal sealed class BackgroundTaskWorker
         }
     }
 
-    private void HandleFailure(
+    private RetryPlan? HandleFailure(
         BackgroundTaskExecution execution,
         Exception exception)
     {
@@ -197,46 +225,93 @@ internal sealed class BackgroundTaskWorker
         if (canRetry)
         {
             var retryDelay = CalculateRetryDelay(execution);
-            var nextAttemptAt = now + retryDelay;
+            var nextAttemptAt = AddClamped(now, retryDelay);
 
             if (execution.TryScheduleRetry(exception, nextAttemptAt))
-            {
-                _rescheduler.Schedule(execution, nextAttemptAt);
-                _metrics.Retried(execution);
-
-                _logger.LogWarning(
-                    exception,
-                    "Background task {TaskId} failed on attempt {Attempt}; " +
-                    "next attempt is scheduled at {NextAttemptAt}",
-                    execution.Id,
+                return new RetryPlan(
                     execution.AttemptCount,
-                    nextAttemptAt);
-
-                return;
-            }
+                    nextAttemptAt,
+                    exception.GetType().FullName);
         }
 
-        if (execution.TryFail(exception, now))
-            _metrics.Failed(execution);
+        if (!execution.TryFail(exception, now))
+            return null;
+
+        if (execution.State == BackgroundTaskState.Canceled)
+        {
+            _logger.LogInformation(
+                "Background task {TaskId} of type {TaskType} was canceled",
+                execution.Id,
+                execution.BackgroundTask.GetType().FullName);
+            return null;
+        }
 
         _logger.LogError(
-            exception,
-            "Background task {TaskId} failed permanently after {AttemptCount} attempts",
+            "Background task {TaskId} failed permanently after " +
+            "{AttemptCount} attempts; failure type: {FailureType}",
             execution.Id,
-            execution.AttemptCount);
+            execution.AttemptCount,
+            exception.GetType().FullName);
+
+        return null;
     }
 
-    private static CancellationTokenSource CreateAttemptCancellation(
+    private void PublishRetry(
         BackgroundTaskExecution execution,
-        CancellationToken stoppingToken,
+        RetryPlan retryPlan)
+    {
+        if (execution.IsTerminal)
+            return;
+
+        _rescheduler.Schedule(execution, retryPlan.NextAttemptAt);
+
+        // Cancellation may win between the state transition and publication.
+        // The terminal finalizer removes any just-published delayed entry.
+        if (execution.IsTerminal)
+            return;
+
+        _metrics.Retried(execution);
+
+        _logger.LogWarning(
+            "Background task {TaskId} failed on attempt {Attempt}; " +
+            "next attempt is scheduled at {NextAttemptAt}; " +
+            "failure type: {FailureType}",
+            execution.Id,
+            retryPlan.Attempt,
+            retryPlan.NextAttemptAt,
+            retryPlan.FailureType);
+    }
+
+    private void HandleInfrastructureFailure(
+        BackgroundTaskExecution execution,
+        Exception exception,
+        CancellationToken stoppingToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        if (stoppingToken.IsCancellationRequested ||
+            execution.CancellationToken.IsCancellationRequested)
+            execution.TryCancel(now);
+        else
+            execution.TryFail(exception, now);
+
+        _logger.LogError(
+            "Worker infrastructure failed while processing background task " +
+            "{TaskId} of type {TaskType}; terminal state: {State}; " +
+            "failure type: {FailureType}",
+            execution.Id,
+            execution.BackgroundTask.GetType().FullName,
+            execution.State,
+            exception.GetType().FullName);
+    }
+
+    private static CancellationTokenSource? CreateAttemptCancellation(
+        BackgroundTaskExecution execution,
         CancellationTokenSource? timeoutCancellation)
     {
         return timeoutCancellation is null
-            ? CancellationTokenSource.CreateLinkedTokenSource(
-                stoppingToken,
-                execution.CancellationToken)
+            ? null
             : CancellationTokenSource.CreateLinkedTokenSource(
-                stoppingToken,
                 execution.CancellationToken,
                 timeoutCancellation.Token);
     }
@@ -249,10 +324,33 @@ internal sealed class BackgroundTaskWorker
             execution.Options.RetryBackoffFactor,
             exponent);
 
-        var ticks = Math.Min(
-            execution.Options.RetryDelay.Ticks * multiplier,
-            execution.Options.MaxRetryDelay.Ticks);
+        var calculatedTicks =
+            execution.Options.RetryDelay.Ticks * multiplier;
+        var maximumTicks = execution.Options.MaxRetryDelay.Ticks;
+        var ticks = double.IsNaN(calculatedTicks) || calculatedTicks <= 0
+            ? 0
+            : calculatedTicks >= maximumTicks
+                ? maximumTicks
+                : (long)calculatedTicks;
 
-        return TimeSpan.FromTicks((long)ticks);
+        return TimeSpan.FromTicks(ticks);
     }
+
+    private static DateTimeOffset AddClamped(
+        DateTimeOffset value,
+        TimeSpan delay)
+    {
+        var remainingTicks =
+            DateTimeOffset.MaxValue.UtcTicks - value.UtcTicks;
+        var delayTicks = Math.Min(delay.Ticks, remainingTicks);
+
+        return new DateTimeOffset(
+            value.UtcTicks + delayTicks,
+            TimeSpan.Zero);
+    }
+
+    private readonly record struct RetryPlan(
+        int Attempt,
+        DateTimeOffset NextAttemptAt,
+        string? FailureType);
 }

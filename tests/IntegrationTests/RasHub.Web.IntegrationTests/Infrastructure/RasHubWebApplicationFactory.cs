@@ -62,6 +62,15 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         return client;
     }
 
+    public HttpClient CreateIdentityClient()
+    {
+        return CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true
+        });
+    }
+
     public async Task SeedIdentityUserAsync(string email, string password)
     {
         using var scope = Services.CreateScope();

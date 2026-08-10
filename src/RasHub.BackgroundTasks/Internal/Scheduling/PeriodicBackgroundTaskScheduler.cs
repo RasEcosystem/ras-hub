@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Exceptions;
@@ -16,7 +17,7 @@ internal sealed class PeriodicBackgroundTaskScheduler
     private static readonly TimeSpan MaximumTimerSlice =
         TimeSpan.FromDays(1);
 
-    private readonly SemaphoreSlim _changed = new(0);
+    private readonly Channel<byte> _changed = CreateChangeChannel();
     private readonly IBackgroundTaskEngine _engine;
     private readonly ILogger<PeriodicBackgroundTaskScheduler> _logger;
 
@@ -28,6 +29,8 @@ internal sealed class PeriodicBackgroundTaskScheduler
 
     private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
+    private bool _accepting = true;
+    private long _nextRegistrationGeneration;
 
     public PeriodicBackgroundTaskScheduler(
         IBackgroundTaskEngine engine,
@@ -64,33 +67,117 @@ internal sealed class PeriodicBackgroundTaskScheduler
             : taskOptions;
 
         var now = _timeProvider.GetUtcNow();
+
+        if (!TryAddInterval(now, interval, out var firstRegularRunAt))
+            throw new ArgumentOutOfRangeException(
+                nameof(interval),
+                "The interval places the next run outside the supported UTC range.");
+
+        var registrationGeneration =
+            Interlocked.Increment(ref _nextRegistrationGeneration);
         var registration = new ScheduleRegistration(
             scheduleId,
+            registrationGeneration,
             typeof(TTask),
             () => taskFactory(),
             effectiveOptions,
             interval,
-            runImmediately ? now : now + interval);
+            runImmediately ? now : firstRegularRunAt);
 
-        if (!_registrations.TryAdd(scheduleId, registration))
-            throw new InvalidOperationException(
-                $"Background task schedule '{scheduleId}' already exists.");
+        lock (_sync)
+        {
+            if (!_accepting)
+                throw new BackgroundTaskRejectedException(
+                    typeof(TTask),
+                    "the background task scheduler is stopping");
 
-        EnqueueRegistration(registration);
+            if (!_registrations.TryAdd(scheduleId, registration))
+                throw new InvalidOperationException(
+                    $"Background task schedule '{scheduleId}' already exists.");
 
-        return new BackgroundTaskScheduleHandle(scheduleId, Remove);
+            _scheduled.Enqueue(registration, registration.NextRunAt);
+        }
+
+        SignalChanged();
+        var handleRemoval = new ScheduleHandleRemoval(
+            this,
+            registrationGeneration);
+
+        return new BackgroundTaskScheduleHandle(
+            scheduleId,
+            handleRemoval.Remove);
+    }
+
+    /// <summary>
+    ///     Atomically closes schedule admission and drops all retained registrations without waiting for user factories.
+    /// </summary>
+    public void StopAcceptingAndClear()
+    {
+        lock (_sync)
+        {
+            if (!_accepting)
+                return;
+
+            _accepting = false;
+
+            foreach (var registration in _registrations.Values)
+                registration.MarkRemoved();
+
+            _registrations.Clear();
+            _scheduled.Clear();
+        }
+
+        SignalChanged();
     }
 
     public bool Remove(string scheduleId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scheduleId);
 
-        var removed = _registrations.TryRemove(scheduleId, out _);
+        if (!_registrations.TryRemove(scheduleId, out var registration))
+            return false;
 
-        if (removed)
-            _changed.Release();
+        CompleteRemoval(registration);
+        return true;
+    }
 
-        return removed;
+    private bool Remove(
+        string scheduleId,
+        long generation)
+    {
+        if (!_registrations.TryGetValue(scheduleId, out var registration) ||
+            registration.Generation != generation ||
+            !_registrations.TryRemove(
+                new KeyValuePair<string, ScheduleRegistration>(
+                    scheduleId,
+                    registration)))
+            return false;
+
+        CompleteRemoval(registration);
+        return true;
+    }
+
+    private void CompleteRemoval(ScheduleRegistration registration)
+    {
+        // A successful Remove is a synchronization boundary: if a dispatch
+        // already owns this registration, wait for it to finish. Otherwise
+        // mark it removed before it can start.
+        lock (registration.DispatchSync)
+        {
+            registration.MarkRemoved();
+
+            lock (_sync)
+            {
+                while (_scheduled.Remove(
+                           registration,
+                           out _,
+                           out _))
+                {
+                }
+            }
+        }
+
+        SignalChanged();
     }
 
     public IReadOnlyList<BackgroundTaskScheduleSnapshot> GetSchedules()
@@ -120,7 +207,7 @@ internal sealed class PeriodicBackgroundTaskScheduler
 
             if (registration is null)
             {
-                await _changed.WaitAsync(stoppingToken);
+                await _changed.Reader.ReadAsync(stoppingToken);
                 continue;
             }
 
@@ -140,26 +227,78 @@ internal sealed class PeriodicBackgroundTaskScheduler
                     _timeProvider,
                     waitCancellation.Token);
 
-                var changedTask = _changed.WaitAsync(waitCancellation.Token);
+                var changedTask = _changed.Reader
+                    .ReadAsync(waitCancellation.Token)
+                    .AsTask();
+
                 await Task.WhenAny(delayTask, changedTask);
                 await waitCancellation.CancelAsync();
+
+                try
+                {
+                    await Task.WhenAll(delayTask, changedTask);
+                }
+                catch (OperationCanceledException)
+                    when (!stoppingToken.IsCancellationRequested)
+                {
+                    // The losing wait must finish before the loop installs its
+                    // next waiter, otherwise it can consume a later signal.
+                }
+
                 continue;
             }
 
             lock (_sync)
             {
-                _scheduled.Dequeue();
+                _scheduled.TryDequeue(out registration, out dueAt);
             }
 
-            if (!_registrations.TryGetValue(registration.Id, out var active) ||
-                !ReferenceEquals(active, registration))
+            if (registration is null)
                 continue;
 
-            registration.NextRunAt =
-                _timeProvider.GetUtcNow() + registration.Interval;
+            var now = _timeProvider.GetUtcNow();
 
-            EnqueueRegistration(registration);
-            RunScheduledTask(registration);
+            // GetUtcNow is deliberately not assumed to be monotonic.
+            if (dueAt > now)
+            {
+                TryEnqueueRegistration(registration, dueAt);
+                continue;
+            }
+
+            lock (registration.DispatchSync)
+            {
+                if (registration.IsRemoved ||
+                    !_registrations.TryGetValue(registration.Id, out var active) ||
+                    !ReferenceEquals(active, registration))
+                    continue;
+
+                if (TryAddInterval(
+                        now,
+                        registration.Interval,
+                        out var nextRunAt))
+                {
+                    registration.NextRunAt = nextRunAt;
+                    if (!TryEnqueueRegistration(registration, nextRunAt))
+                        continue;
+                }
+                else
+                {
+                    registration.MarkRemoved();
+                    _registrations.TryRemove(
+                        new KeyValuePair<string, ScheduleRegistration>(
+                            registration.Id,
+                            registration));
+
+                    _logger.LogWarning(
+                        "Background task schedule {ScheduleId} reached the supported UTC range and was removed",
+                        registration.Id);
+                }
+
+                if (!Volatile.Read(ref _accepting))
+                    continue;
+
+                RunScheduledTask(registration);
+            }
         }
     }
 
@@ -171,19 +310,20 @@ internal sealed class PeriodicBackgroundTaskScheduler
 
             EnqueueRuntimeTask(task, registration.Options);
         }
-        catch (BackgroundTaskRejectedException exception)
+        catch (BackgroundTaskRejectedException)
         {
             _logger.LogWarning(
-                exception,
-                "Scheduled background task {ScheduleId} was rejected",
-                registration.Id);
+                "Scheduled background task {ScheduleId} of type {TaskType} was rejected",
+                registration.Id,
+                registration.TaskType.FullName);
         }
         catch (Exception exception)
         {
             _logger.LogError(
-                exception,
-                "Factory for background task schedule {ScheduleId} failed",
-                registration.Id);
+                "Factory for background task schedule {ScheduleId} of type {TaskType} failed with {FailureType}",
+                registration.Id,
+                registration.TaskType.FullName,
+                exception.GetType().FullName);
         }
     }
 
@@ -194,28 +334,84 @@ internal sealed class PeriodicBackgroundTaskScheduler
         _engine.Enqueue(task, options);
     }
 
-    private void EnqueueRegistration(ScheduleRegistration registration)
+    private bool TryEnqueueRegistration(
+        ScheduleRegistration registration,
+        DateTimeOffset dueAt)
     {
-        lock (_sync)
+        lock (registration.DispatchSync)
         {
-            _scheduled.Enqueue(registration, registration.NextRunAt);
+            if (registration.IsRemoved)
+                return false;
+
+            lock (_sync)
+            {
+                if (!_accepting ||
+                    registration.IsRemoved ||
+                    !_registrations.TryGetValue(
+                        registration.Id,
+                        out var active) ||
+                    !ReferenceEquals(active, registration))
+                    return false;
+
+                _scheduled.Enqueue(registration, dueAt);
+            }
         }
 
-        _changed.Release();
+        SignalChanged();
+        return true;
+    }
+
+    private static Channel<byte> CreateChangeChannel()
+    {
+        return Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
+        {
+            AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.DropWrite,
+            SingleReader = true,
+            SingleWriter = false
+        });
+    }
+
+    private void SignalChanged()
+    {
+        _changed.Writer.TryWrite(0);
+    }
+
+    private static bool TryAddInterval(
+        DateTimeOffset timestamp,
+        TimeSpan interval,
+        out DateTimeOffset result)
+    {
+        try
+        {
+            result = timestamp + interval;
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            result = default;
+            return false;
+        }
     }
 
     /// <summary>Stores one active schedule and its atomically updated next-run timestamp.</summary>
     private sealed class ScheduleRegistration(
         string id,
+        long generation,
         Type taskType,
         Func<IBackgroundTask> taskFactory,
         BackgroundTaskOptions options,
         TimeSpan interval,
         DateTimeOffset nextRunAt)
     {
+        private int _isRemoved;
         private long _nextRunAtUtcTicks = nextRunAt.UtcTicks;
 
+        public object DispatchSync { get; } = new();
         public string Id { get; } = id;
+        public long Generation { get; } = generation;
+
+        public bool IsRemoved => Volatile.Read(ref _isRemoved) != 0;
         public Type TaskType { get; } = taskType;
         public Func<IBackgroundTask> TaskFactory { get; } = taskFactory;
         public BackgroundTaskOptions Options { get; } = options;
@@ -229,6 +425,22 @@ internal sealed class PeriodicBackgroundTaskScheduler
             set => Interlocked.Exchange(
                 ref _nextRunAtUtcTicks,
                 value.UtcTicks);
+        }
+
+        public void MarkRemoved()
+        {
+            Interlocked.Exchange(ref _isRemoved, 1);
+        }
+    }
+
+    /// <summary>Keeps a schedule handle independent from the registration's task factory closure.</summary>
+    private sealed class ScheduleHandleRemoval(
+        PeriodicBackgroundTaskScheduler scheduler,
+        long generation)
+    {
+        public bool Remove(string scheduleId)
+        {
+            return scheduler.Remove(scheduleId, generation);
         }
     }
 }

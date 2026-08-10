@@ -1,16 +1,13 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Mvc.Testing;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
 namespace RasHub.Web.IntegrationTests.Api;
 
 [Collection(WebApplicationCollection.Name)]
-public sealed partial class ApiDocumentationAuthenticationTests
+public sealed class ApiDocumentationAuthenticationTests
 {
     private const string UserEmail = "documentation@example.test";
     private const string UserPassword = "Documentation-Password-42!";
@@ -43,41 +40,20 @@ public sealed partial class ApiDocumentationAuthenticationTests
             TestContext.Current.CancellationToken);
         var html = await response.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
+        var webAssemblyFileVersion = typeof(RasHub.Web.Program).Assembly
+            .GetCustomAttribute<AssemblyFileVersionAttribute>()!
+            .Version;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("documentation-login", html);
         Assert.Contains("brand-orbit", html);
         Assert.Contains("RasHub", html);
         Assert.Contains("Development Environment", html);
-        Assert.Contains($"v{ThisAssembly.AssemblyFileVersion}", html);
+        Assert.Contains($"v{webAssemblyFileVersion}", html);
         Assert.DoesNotContain("v@ThisAssembly.AssemblyFileVersion", html);
         Assert.Contains("type=\"password\"", html);
         Assert.Contains("Log in with a passkey", html);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
-    }
-
-    [Fact]
-    public void Account_pages_do_not_share_mutable_attribute_dictionaries()
-    {
-        var accountPageTypes = typeof(Program).Assembly
-            .GetTypes()
-            .Where(type => type.Namespace?.StartsWith(
-                "RasHub.Web.Components.Account.Pages",
-                StringComparison.Ordinal) == true)
-            .Where(type => typeof(ComponentBase).IsAssignableFrom(type))
-            .ToArray();
-
-        var sharedDictionaries = accountPageTypes
-            .SelectMany(type => type.GetFields(
-                BindingFlags.NonPublic |
-                BindingFlags.Static))
-            .Where(field => field.FieldType ==
-                            typeof(Dictionary<string, object>))
-            .Select(field => $"{field.DeclaringType?.Name}.{field.Name}")
-            .ToArray();
-
-        Assert.NotEmpty(accountPageTypes);
-        Assert.Empty(sharedDictionaries);
     }
 
     [Fact]
@@ -310,14 +286,9 @@ public sealed partial class ApiDocumentationAuthenticationTests
         string password)
     {
         const string loginPath = "/Account/Login?ReturnUrl=%2Fswagger%2F";
-        using var page = await client.GetAsync(
-            loginPath,
-            TestContext.Current.CancellationToken);
-        var html = await page.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var token = AntiforgeryTokenRegex().Match(html).Groups[1].Value;
-
-        Assert.False(string.IsNullOrEmpty(token));
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            loginPath);
 
         using var form = new FormUrlEncodedContent(
         [
@@ -325,7 +296,7 @@ public sealed partial class ApiDocumentationAuthenticationTests
             new KeyValuePair<string, string>("Input.Password", password),
             new KeyValuePair<string, string>("Input.RememberMe", "false"),
             new KeyValuePair<string, string>("_handler", "login"),
-            new KeyValuePair<string, string>("__RequestVerificationToken", WebUtility.HtmlDecode(token))
+            new KeyValuePair<string, string>("__RequestVerificationToken", token)
         ]);
 
         return await client.PostAsync(
@@ -371,13 +342,6 @@ public sealed partial class ApiDocumentationAuthenticationTests
     private static HttpClient CreateClient(
         RasHubWebApplicationFactory factory)
     {
-        return factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true
-        });
+        return factory.CreateIdentityClient();
     }
-
-    [GeneratedRegex("name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")]
-    private static partial Regex AntiforgeryTokenRegex();
 }

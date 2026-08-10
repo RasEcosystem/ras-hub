@@ -7,6 +7,7 @@ using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Domain.Enums;
 using RasHub.Web.IntegrationTests.Infrastructure;
+using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
 
 namespace RasHub.Web.IntegrationTests.Api;
 
@@ -393,13 +394,4 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         };
     }
 
-    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response)
-    {
-        await using var stream = await response.Content.ReadAsStreamAsync(
-            TestContext.Current.CancellationToken);
-        using var document = await JsonDocument.ParseAsync(
-            stream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        return document.RootElement.Clone();
-    }
 }

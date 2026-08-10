@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using RasHub.BackgroundTasks.Configuration;
+using RasHub.BackgroundTasks.Internal.Diagnostics;
 using RasHub.BackgroundTasks.Internal.Engine;
 using RasHub.BackgroundTasks.Internal.Queues;
 using RasHub.BackgroundTasks.Internal.Scheduling;
@@ -14,36 +15,102 @@ namespace RasHub.BackgroundTasks.Internal.Processing;
 internal sealed class BackgroundTaskHostedService : BackgroundService
 {
     private readonly BackgroundTaskEngine _engine;
+    private readonly IHostApplicationLifetime _hostApplicationLifetime;
+    private readonly IBackgroundTaskEngineLifecycle _lifecycle;
     private readonly BackgroundTaskEngineOptions _options;
     private readonly BackgroundTaskRescheduler _rescheduler;
+    private readonly BackgroundTaskRuntimeState _runtimeState;
     private readonly PeriodicBackgroundTaskScheduler _scheduler;
     private readonly TimeProvider _timeProvider;
     private readonly BackgroundTaskWorker _worker;
+    private readonly TaskCompletionSource _runtimeCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _runtimeStarted;
+    private int _shutdownStarted;
 
     public BackgroundTaskHostedService(
         BackgroundTaskWorker worker,
         BackgroundTaskRescheduler rescheduler,
         BackgroundTaskEngine engine,
+        IBackgroundTaskEngineLifecycle lifecycle,
         PeriodicBackgroundTaskScheduler scheduler,
         IOptions<BackgroundTaskEngineOptions> options,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        BackgroundTaskRuntimeState runtimeState,
+        IHostApplicationLifetime hostApplicationLifetime)
     {
         _worker = worker;
         _rescheduler = rescheduler;
         _engine = engine;
+        _lifecycle = lifecycle;
         _scheduler = scheduler;
         _options = options.Value;
         _timeProvider = timeProvider;
+        _runtimeState = runtimeState;
+        _hostApplicationLifetime = hostApplicationLifetime;
     }
 
-    protected override async Task ExecuteAsync(
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        await base.StartAsync(cancellationToken);
+
+        if (Volatile.Read(ref _shutdownStarted) != 0)
+            await WaitForRuntimeCompletionAsync(cancellationToken);
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        InitiateShutdown();
+        await base.StopAsync(cancellationToken);
+        await WaitForRuntimeCompletionAsync(cancellationToken);
+    }
+
+    protected override Task ExecuteAsync(
         CancellationToken stoppingToken)
     {
+        Volatile.Write(ref _runtimeStarted, 1);
+        return ObserveRuntimeCompletionAsync(RunAsync(stoppingToken));
+    }
+
+    private async Task RunAsync(CancellationToken stoppingToken)
+    {
+        if (stoppingToken.IsCancellationRequested ||
+            !_runtimeState.TryInitialize(GetExpectedProcessCount()))
+        {
+            try
+            {
+                InitiateShutdown();
+            }
+            finally
+            {
+                await DrainCancellationSignalsAsync();
+                _runtimeState.MarkStopped();
+            }
+
+            return;
+        }
+
+        using var processCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var shutdownRegistration = stoppingToken.Register(
+            static state =>
+                ((BackgroundTaskHostedService)state!).InitiateShutdown(),
+            this);
+
         var processes = new List<Task>
         {
-            _rescheduler.RunAsync(stoppingToken),
-            _scheduler.RunAsync(stoppingToken),
-            RunRegistryCleanupAsync(stoppingToken)
+            StartProcess(
+                "rescheduler",
+                _rescheduler.RunAsync,
+                processCancellation.Token),
+            StartProcess(
+                "scheduler",
+                _scheduler.RunAsync,
+                processCancellation.Token),
+            StartProcess(
+                "registry-cleanup",
+                RunRegistryCleanupAsync,
+                processCancellation.Token)
         };
 
         var workerId = 0;
@@ -52,35 +119,97 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
             BackgroundTaskQueue.Interactive,
             _options.InteractiveWorkerCount,
             ref workerId,
-            stoppingToken);
+            processCancellation.Token);
 
         AddWorkers(
             processes,
             BackgroundTaskQueue.Synchronization,
             _options.SynchronizationWorkerCount,
             ref workerId,
-            stoppingToken);
+            processCancellation.Token);
 
         AddWorkers(
             processes,
             BackgroundTaskQueue.Maintenance,
             _options.MaintenanceWorkerCount,
             ref workerId,
-            stoppingToken);
+            processCancellation.Token);
+
+        _runtimeState.MarkRunning();
+
+        var allProcesses = Task.WhenAll(processes);
+        var childFaultDetected = false;
 
         try
         {
-            await Task.WhenAll(processes);
+            var completedExecution = await Task.WhenAny(processes);
+
+            if (!stoppingToken.IsCancellationRequested ||
+                completedExecution.IsFaulted)
+            {
+                childFaultDetected = true;
+
+                SignalHostStopping();
+                InitiateShutdown();
+                await ContainFailureAsync(processCancellation.CancelAsync());
+                await ContainFailureAsync(allProcesses);
+
+                // Await the process that made the supervisor wake up only
+                // after every sibling has stopped. This preserves its original
+                // exception and stack while preventing attempt scopes from
+                // surviving host disposal.
+                await completedExecution;
+
+                throw new InvalidOperationException(
+                    "A background task process stopped unexpectedly.");
+            }
+
+            await allProcesses;
         }
         catch (OperationCanceledException)
-            when (stoppingToken.IsCancellationRequested)
+            when (stoppingToken.IsCancellationRequested &&
+                  !childFaultDetected)
         {
             // Normal engine shutdown.
         }
         finally
         {
-            _engine.CancelAll();
+            try
+            {
+                InitiateShutdown();
+            }
+            finally
+            {
+                try
+                {
+                    await DrainCancellationSignalsAsync();
+                }
+                finally
+                {
+                    _runtimeState.MarkStopped();
+                }
+            }
         }
+    }
+
+    private async Task ObserveRuntimeCompletionAsync(Task runtime)
+    {
+        try
+        {
+            await runtime;
+        }
+        finally
+        {
+            _runtimeCompleted.TrySetResult();
+        }
+    }
+
+    private Task WaitForRuntimeCompletionAsync(
+        CancellationToken cancellationToken)
+    {
+        return Volatile.Read(ref _runtimeStarted) == 0
+            ? Task.CompletedTask
+            : _runtimeCompleted.Task.WaitAsync(cancellationToken);
     }
 
     private void AddWorkers(
@@ -91,11 +220,129 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
         CancellationToken stoppingToken)
     {
         for (var index = 0; index < count; index++)
-            processes.Add(
-                _worker.RunAsync(
-                    ++workerId,
+        {
+            var currentWorkerId = ++workerId;
+            processes.Add(StartProcess(
+                $"worker:{currentWorkerId}:{queue}",
+                cancellationToken => _worker.RunAsync(
+                    currentWorkerId,
                     queue,
-                    stoppingToken));
+                    cancellationToken),
+                stoppingToken));
+        }
+    }
+
+    private Task StartProcess(
+        string processName,
+        Func<CancellationToken, Task> run,
+        CancellationToken stoppingToken)
+    {
+        return ObserveProcessAsync(processName, run, stoppingToken);
+    }
+
+    private async Task ObserveProcessAsync(
+        string processName,
+        Func<CancellationToken, Task> run,
+        CancellationToken stoppingToken)
+    {
+        _runtimeState.ProcessStarted(processName);
+
+        try
+        {
+            // Every loop must return control to the supervisor before it can
+            // consume work. A preloaded lane with synchronously completing
+            // handlers must not prevent the remaining loops from starting.
+            await Task.Yield();
+
+            if (stoppingToken.IsCancellationRequested)
+                return;
+
+            await run(stoppingToken);
+
+            if (!stoppingToken.IsCancellationRequested)
+                throw new InvalidOperationException(
+                    $"Background task process '{processName}' stopped unexpectedly.");
+        }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal process shutdown.
+        }
+        catch (Exception)
+        {
+            _runtimeState.MarkFaulted(processName);
+            throw;
+        }
+        finally
+        {
+            _runtimeState.ProcessStopped(processName);
+        }
+    }
+
+    private int GetExpectedProcessCount()
+    {
+        return 3 +
+               _options.InteractiveWorkerCount +
+               _options.SynchronizationWorkerCount +
+               _options.MaintenanceWorkerCount;
+    }
+
+    private void InitiateShutdown()
+    {
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+            return;
+
+        _runtimeState.MarkStopping();
+
+        try
+        {
+            _scheduler.StopAcceptingAndClear();
+            _lifecycle.StopAcceptingAndCancelAll();
+        }
+        catch (Exception)
+        {
+            _runtimeState.MarkFaulted("lifecycle");
+            throw;
+        }
+    }
+
+    private void SignalHostStopping()
+    {
+        try
+        {
+            _hostApplicationLifetime.StopApplication();
+        }
+        catch (Exception)
+        {
+            // Host-lifetime callbacks must not replace the process failure or
+            // prevent sibling processes from being joined.
+        }
+    }
+
+    private static async Task ContainFailureAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception)
+        {
+            // The first process failure is rethrown after every sibling has
+            // reached a terminal state. Awaiting here observes later faults.
+        }
+    }
+
+    private async Task DrainCancellationSignalsAsync()
+    {
+        try
+        {
+            await _lifecycle.DrainCancellationSignalsAsync();
+        }
+        catch (Exception)
+        {
+            _runtimeState.MarkFaulted("cancellation-drain");
+            throw;
+        }
     }
 
     private async Task RunRegistryCleanupAsync(

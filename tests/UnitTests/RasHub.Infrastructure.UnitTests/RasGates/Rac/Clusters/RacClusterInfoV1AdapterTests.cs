@@ -94,7 +94,7 @@ public sealed class RacClusterInfoV1AdapterTests
     }
 
     [Fact]
-    public void Parse_failed_execution_includes_RAC_error_output()
+    public void Parse_failed_execution_does_not_expose_RAC_error_output()
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
@@ -108,7 +108,10 @@ public sealed class RacClusterInfoV1AdapterTests
                 execution,
                 ClusterId));
 
-        Assert.Contains("Cluster was not found.", exception.Message);
+        Assert.Equal(
+            "RAC cluster info command failed with exit code -1.",
+            exception.Message);
+        Assert.DoesNotContain("Cluster was not found.", exception.Message);
     }
 
     [Fact]

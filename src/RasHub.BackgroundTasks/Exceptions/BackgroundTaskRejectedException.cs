@@ -1,7 +1,8 @@
 namespace RasHub.BackgroundTasks.Exceptions;
 
 /// <summary>
-///     Indicates that the Engine could not accept a task because a configured in-memory limit was reached.
+///     Indicates that the engine could not accept a task because it is stopping
+///     or an in-memory admission limit was reached.
 /// </summary>
 public sealed class BackgroundTaskRejectedException
     : InvalidOperationException

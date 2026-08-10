@@ -25,6 +25,8 @@
         <PackageReference Include="MudBlazor" Version="9.8.0"/>
         <PackageReference Include="Extensions.MudBlazor.StaticInput" Version="4.1.0"/>
         <PackageReference Include="Nava.Settings" Version="0.2.0"/>
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0"/>
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0"/>
         <PackageReference Include="Scalar.AspNetCore" Version="2.16.17"/>
         <PackageReference Include="Serilog.AspNetCore" Version="10.0.0"/>
         <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>

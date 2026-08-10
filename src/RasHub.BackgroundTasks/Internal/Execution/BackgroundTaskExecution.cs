@@ -8,13 +8,16 @@ namespace RasHub.BackgroundTasks.Internal.Execution;
 /// </summary>
 internal sealed class BackgroundTaskExecution
 {
+    private const int MaximumLastErrorLength = 2_000;
+
     private readonly CancellationTokenSource _cancellation = new();
     private readonly TaskCompletionSource<BackgroundTaskResult> _completion;
+    private readonly Action<BackgroundTaskExecution> _terminalFinalizer;
     private readonly object _sync = new();
     private int _attemptCount;
     private bool _cancellationRequested;
     private DateTimeOffset? _completedAt;
-    private Exception? _lastException;
+    private string? _lastError;
     private DateTimeOffset? _nextAttemptAt;
     private DateTimeOffset? _startedAt;
 
@@ -24,17 +27,20 @@ internal sealed class BackgroundTaskExecution
         IBackgroundTask backgroundTask,
         IBackgroundTaskInvoker invoker,
         BackgroundTaskOptions options,
-        DateTimeOffset createdAt)
+        DateTimeOffset createdAt,
+        Action<BackgroundTaskExecution> terminalFinalizer)
     {
         ArgumentNullException.ThrowIfNull(backgroundTask);
         ArgumentNullException.ThrowIfNull(invoker);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(terminalFinalizer);
 
         Id = Guid.NewGuid();
         BackgroundTask = backgroundTask;
         Invoker = invoker;
         Options = options;
         CreatedAt = createdAt;
+        _terminalFinalizer = terminalFinalizer;
         _state = BackgroundTaskState.Pending;
 
         _completion = new TaskCompletionSource<BackgroundTaskResult>(
@@ -115,54 +121,93 @@ internal sealed class BackgroundTaskExecution
 
     public bool TrySucceed(DateTimeOffset completedAt)
     {
+        BackgroundTaskResult result;
+
         lock (_sync)
         {
             if (_state != BackgroundTaskState.Running)
                 return false;
 
             if (_cancellationRequested)
-                return CompleteCanceled(completedAt);
+            {
+                result = CompleteCanceled(completedAt);
+            }
+            else
+            {
+                _state = BackgroundTaskState.Succeeded;
+                _completedAt = completedAt;
+                _lastError = null;
 
-            _state = BackgroundTaskState.Succeeded;
-            _completedAt = completedAt;
-
-            return _completion.TrySetResult(
-                new BackgroundTaskResult(
+                result = new BackgroundTaskResult(
                     Id,
                     BackgroundTaskOutcome.Succeeded,
                     _attemptCount,
-                    null));
+                    null);
+            }
+        }
+
+        PublishTerminal(result);
+        return true;
+    }
+
+    public CancellationRequest PrepareCancellation(DateTimeOffset requestedAt)
+    {
+        BackgroundTaskResult? result = null;
+
+        lock (_sync)
+        {
+            if (IsTerminalState(_state))
+                return default;
+
+            if (_cancellationRequested)
+                return default;
+
+            _cancellationRequested = true;
+            if (_state == BackgroundTaskState.Pending)
+                result = CompleteCanceled(requestedAt);
+        }
+
+        return new CancellationRequest(true, result);
+    }
+
+    public Task SignalCancellationAsync(CancellationRequest request)
+    {
+        if (!request.IsAccepted)
+            return Task.CompletedTask;
+
+        return SignalCancellationCoreAsync(request);
+    }
+
+    private async Task SignalCancellationCoreAsync(CancellationRequest request)
+    {
+        // Cancellation callbacks are user code and must never run while the
+        // execution state lock is held or synchronously block engine APIs.
+        try
+        {
+            await _cancellation.CancelAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            if (request.TerminalResult is not null)
+                PublishTerminal(request.TerminalResult);
         }
     }
 
-    public bool RequestCancellation(DateTimeOffset requestedAt)
+    public bool TryCancel(DateTimeOffset completedAt)
     {
+        BackgroundTaskResult result;
+
         lock (_sync)
         {
             if (IsTerminalState(_state))
                 return false;
 
             _cancellationRequested = true;
-            if (_state == BackgroundTaskState.Pending)
-                CompleteCanceled(requestedAt);
+            result = CompleteCanceled(completedAt);
         }
 
-        // Cancellation callbacks are user code and must never run while the
-        // execution state lock is held.
-        _cancellation.Cancel();
-
+        PublishTerminal(result);
         return true;
-    }
-
-    public bool TryCancel(DateTimeOffset completedAt)
-    {
-        lock (_sync)
-        {
-            if (IsTerminalState(_state))
-                return false;
-
-            return CompleteCanceled(completedAt);
-        }
     }
 
     public bool TryScheduleRetry(
@@ -170,6 +215,7 @@ internal sealed class BackgroundTaskExecution
         DateTimeOffset nextAttemptAt)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        var lastError = GetExceptionMessage(exception);
 
         lock (_sync)
         {
@@ -178,7 +224,7 @@ internal sealed class BackgroundTaskExecution
                 return false;
 
             _state = BackgroundTaskState.Pending;
-            _lastException = exception;
+            _lastError = lastError;
             _nextAttemptAt = nextAttemptAt;
             return true;
         }
@@ -189,23 +235,35 @@ internal sealed class BackgroundTaskExecution
         DateTimeOffset completedAt)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        var lastError = GetExceptionMessage(exception);
+
+        BackgroundTaskResult result;
 
         lock (_sync)
         {
-            if (_state != BackgroundTaskState.Running)
+            if (IsTerminalState(_state))
                 return false;
 
-            _state = BackgroundTaskState.Failed;
-            _completedAt = completedAt;
-            _lastException = exception;
+            if (_cancellationRequested)
+            {
+                result = CompleteCanceled(completedAt);
+            }
+            else
+            {
+                _state = BackgroundTaskState.Failed;
+                _completedAt = completedAt;
+                _lastError = lastError;
 
-            return _completion.TrySetResult(
-                new BackgroundTaskResult(
+                result = new BackgroundTaskResult(
                     Id,
                     BackgroundTaskOutcome.Failed,
                     _attemptCount,
-                    exception));
+                    exception);
+            }
         }
+
+        PublishTerminal(result);
+        return true;
     }
 
     public BackgroundTaskSnapshot CreateSnapshot()
@@ -224,23 +282,57 @@ internal sealed class BackgroundTaskExecution
                 _completedAt,
                 _nextAttemptAt,
                 _cancellationRequested,
-                _lastException?.Message,
+                _lastError,
                 Options.DeduplicationKey,
                 Options.ConcurrencyKey);
         }
     }
 
-    private bool CompleteCanceled(DateTimeOffset completedAt)
+    private BackgroundTaskResult CompleteCanceled(DateTimeOffset completedAt)
     {
         _state = BackgroundTaskState.Canceled;
         _completedAt = completedAt;
 
-        return _completion.TrySetResult(
-            new BackgroundTaskResult(
-                Id,
-                BackgroundTaskOutcome.Canceled,
-                _attemptCount,
-                null));
+        return new BackgroundTaskResult(
+            Id,
+            BackgroundTaskOutcome.Canceled,
+            _attemptCount,
+            null);
+    }
+
+    private void PublishTerminal(BackgroundTaskResult result)
+    {
+        try
+        {
+            _terminalFinalizer(this);
+        }
+        finally
+        {
+            // Caller-visible completion is published only after the engine
+            // has released capacity and recorded the terminal execution.
+            _completion.TrySetResult(result);
+        }
+    }
+
+    private static string GetExceptionMessage(Exception exception)
+    {
+        string? message;
+
+        try
+        {
+            message = exception.Message;
+        }
+        catch (Exception)
+        {
+            return exception.GetType().FullName ?? exception.GetType().Name;
+        }
+
+        if (string.IsNullOrEmpty(message))
+            return exception.GetType().FullName ?? exception.GetType().Name;
+
+        return message.Length <= MaximumLastErrorLength
+            ? message
+            : message[..MaximumLastErrorLength];
     }
 
     private static bool IsTerminalState(BackgroundTaskState state)
@@ -250,4 +342,8 @@ internal sealed class BackgroundTaskExecution
             BackgroundTaskState.Failed or
             BackgroundTaskState.Canceled;
     }
+
+    public readonly record struct CancellationRequest(
+        bool IsAccepted,
+        BackgroundTaskResult? TerminalResult);
 }

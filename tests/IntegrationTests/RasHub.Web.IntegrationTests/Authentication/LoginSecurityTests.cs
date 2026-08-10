@@ -1,7 +1,5 @@
 using System.Net;
-using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using RasHub.Web.Data;
 using RasHub.Web.IntegrationTests.Infrastructure;
@@ -19,8 +17,10 @@ public sealed class LoginSecurityTests
         using var factory = new RasHubWebApplicationFactory(false);
         var email = $"lockout-{Guid.NewGuid():N}@example.test";
         await factory.SeedIdentityUserAsync(email, Password);
-        using var client = CreateClient(factory);
-        var token = await GetLoginTokenAsync(client);
+        using var client = factory.CreateIdentityClient();
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            "/Account/Login");
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
@@ -57,8 +57,10 @@ public sealed class LoginSecurityTests
     public async Task Login_more_than_ten_posts_per_minute_returns_too_many_requests()
     {
         using var factory = new RasHubWebApplicationFactory(false);
-        using var client = CreateClient(factory);
-        var token = await GetLoginTokenAsync(client);
+        using var client = factory.CreateIdentityClient();
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            "/Account/Login");
 
         for (var attempt = 0; attempt < 10; attempt++)
         {
@@ -80,33 +82,6 @@ public sealed class LoginSecurityTests
             HttpStatusCode.TooManyRequests,
             rejectedResponse.StatusCode);
         Assert.True(rejectedResponse.Headers.RetryAfter?.Delta > TimeSpan.Zero);
-    }
-
-    private static HttpClient CreateClient(RasHubWebApplicationFactory factory)
-    {
-        return factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true
-        });
-    }
-
-    private static async Task<string> GetLoginTokenAsync(HttpClient client)
-    {
-        using var page = await client.GetAsync(
-            "/Account/Login",
-            TestContext.Current.CancellationToken);
-        var html = await page.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var token = Regex.Match(
-                html,
-                "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")
-            .Groups[1]
-            .Value;
-
-        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
-        Assert.False(string.IsNullOrEmpty(token));
-        return WebUtility.HtmlDecode(token);
     }
 
     private static async Task<HttpResponseMessage> PostLoginAsync(

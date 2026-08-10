@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using RasHub.BackgroundTasks.Internal.Execution;
 
 namespace RasHub.BackgroundTasks.Internal.Queues;
@@ -7,18 +8,18 @@ namespace RasHub.BackgroundTasks.Internal.Queues;
 /// </summary>
 internal sealed class BackgroundTaskRescheduler
 {
-    private static readonly TimeSpan QueueRetryDelay =
-        TimeSpan.FromMilliseconds(100);
-
     private static readonly TimeSpan MaximumTimerSlice =
         TimeSpan.FromDays(1);
 
-    private readonly SemaphoreSlim _changed = new(0);
+    private readonly Channel<byte> _changed = CreateChangeChannel();
     private readonly IBackgroundTaskQueue _queue;
 
-    private readonly PriorityQueue<BackgroundTaskExecution, DateTimeOffset> _scheduled =
+    private readonly PriorityQueue<
+        BackgroundTaskExecution,
+        (DateTimeOffset DueAt, long Sequence)> _scheduled =
         new();
 
+    private long _nextSequence;
     private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
 
@@ -43,16 +44,55 @@ internal sealed class BackgroundTaskRescheduler
         }
     }
 
+    public int GetOverdueExecutionCount(DateTimeOffset now)
+    {
+        lock (_sync)
+        {
+            return _scheduled.UnorderedItems.Count(item =>
+                item.Priority.DueAt <= now &&
+                !item.Element.IsTerminal);
+        }
+    }
+
     public void Schedule(
         BackgroundTaskExecution execution,
         DateTimeOffset dueAt)
     {
+        ArgumentNullException.ThrowIfNull(execution);
+
         lock (_sync)
         {
-            _scheduled.Enqueue(execution, dueAt);
+            // TryRemove uses the same lock after publishing a terminal state.
+            // Either it removes this entry, or this recheck prevents the entry.
+            if (execution.IsTerminal)
+                return;
+
+            _scheduled.Enqueue(
+                execution,
+                (dueAt, _nextSequence++));
         }
 
-        _changed.Release();
+        SignalChanged();
+    }
+
+    public bool TryRemove(BackgroundTaskExecution execution)
+    {
+        ArgumentNullException.ThrowIfNull(execution);
+
+        bool removed;
+
+        lock (_sync)
+        {
+            removed = _scheduled.Remove(
+                execution,
+                out _,
+                out _);
+        }
+
+        if (removed)
+            SignalChanged();
+
+        return removed;
     }
 
     public async Task RunAsync(CancellationToken stoppingToken)
@@ -60,21 +100,21 @@ internal sealed class BackgroundTaskRescheduler
         while (!stoppingToken.IsCancellationRequested)
         {
             BackgroundTaskExecution? execution;
-            DateTimeOffset dueAt;
+            (DateTimeOffset DueAt, long Sequence) priority;
 
             lock (_sync)
             {
-                if (!_scheduled.TryPeek(out execution, out dueAt))
+                if (!_scheduled.TryPeek(out execution, out priority))
                     execution = null;
             }
 
             if (execution is null)
             {
-                await _changed.WaitAsync(stoppingToken);
+                await _changed.Reader.ReadAsync(stoppingToken);
                 continue;
             }
 
-            var delay = dueAt - _timeProvider.GetUtcNow();
+            var delay = priority.DueAt - _timeProvider.GetUtcNow();
 
             if (delay > TimeSpan.Zero)
             {
@@ -91,8 +131,9 @@ internal sealed class BackgroundTaskRescheduler
                     _timeProvider,
                     waitCancellation.Token);
 
-                var changedTask = _changed.WaitAsync(
-                    waitCancellation.Token);
+                var changedTask = _changed.Reader
+                    .ReadAsync(waitCancellation.Token)
+                    .AsTask();
 
                 await Task.WhenAny(delayTask, changedTask);
                 await waitCancellation.CancelAsync();
@@ -113,16 +154,38 @@ internal sealed class BackgroundTaskRescheduler
 
             lock (_sync)
             {
-                execution = _scheduled.Dequeue();
+                _scheduled.TryDequeue(out execution, out priority);
             }
 
-            if (execution.IsTerminal)
+            if (execution is null)
                 continue;
 
-            if (!_queue.TryEnqueue(execution))
-                Schedule(
-                    execution,
-                    _timeProvider.GetUtcNow() + QueueRetryDelay);
+            // UTC can move backwards between the due check and dequeue. Put the
+            // actual entry back instead of dispatching it before its due time.
+            if (priority.DueAt > _timeProvider.GetUtcNow())
+            {
+                Schedule(execution, priority.DueAt);
+                continue;
+            }
+
+            if (!execution.IsTerminal)
+                _queue.EnqueueAccepted(execution);
         }
+    }
+
+    private static Channel<byte> CreateChangeChannel()
+    {
+        return Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
+        {
+            AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.DropWrite,
+            SingleReader = true,
+            SingleWriter = false
+        });
+    }
+
+    private void SignalChanged()
+    {
+        _changed.Writer.TryWrite(0);
     }
 }

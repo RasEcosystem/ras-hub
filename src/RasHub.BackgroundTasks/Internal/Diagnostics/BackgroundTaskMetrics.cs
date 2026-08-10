@@ -1,6 +1,10 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using RasHub.BackgroundTasks;
 using RasHub.BackgroundTasks.Internal.Execution;
+using RasHub.BackgroundTasks.Internal.Processing;
+using RasHub.BackgroundTasks.Internal.Queues;
+using RasHub.BackgroundTasks.Models;
 
 namespace RasHub.BackgroundTasks.Internal.Diagnostics;
 
@@ -10,23 +14,40 @@ namespace RasHub.BackgroundTasks.Internal.Diagnostics;
 internal sealed class BackgroundTaskMetrics : IDisposable
 {
     private readonly Histogram<double> _attemptDuration;
+    private readonly UpDownCounter<long> _active;
     private readonly Counter<long> _canceled;
+    private readonly BackgroundTaskConcurrencyGate _concurrencyGate;
     private readonly Counter<long> _deduplicated;
 
     private readonly Counter<long> _enqueued;
     private readonly Counter<long> _failed;
 
     private readonly Meter _meter = new(
-        "RasHub.BackgroundTasks",
+        BackgroundTaskTelemetry.MeterName,
         "1.0.0");
+    private readonly BackgroundTaskRescheduler _rescheduler;
+    private readonly BackgroundTaskRuntimeState _runtimeState;
+    private readonly IBackgroundTaskQueue _queue;
+    private readonly TimeProvider _timeProvider;
 
     private readonly Counter<long> _rejected;
     private readonly Counter<long> _retried;
     private readonly Counter<long> _started;
     private readonly Counter<long> _succeeded;
 
-    public BackgroundTaskMetrics()
+    public BackgroundTaskMetrics(
+        IBackgroundTaskQueue queue,
+        BackgroundTaskRescheduler rescheduler,
+        BackgroundTaskConcurrencyGate concurrencyGate,
+        BackgroundTaskRuntimeState runtimeState,
+        TimeProvider timeProvider)
     {
+        _queue = queue;
+        _rescheduler = rescheduler;
+        _concurrencyGate = concurrencyGate;
+        _runtimeState = runtimeState;
+        _timeProvider = timeProvider;
+
         _enqueued = _meter.CreateCounter<long>(
             "rashub.background_tasks.enqueued");
         _deduplicated = _meter.CreateCounter<long>(
@@ -46,6 +67,42 @@ internal sealed class BackgroundTaskMetrics : IDisposable
         _attemptDuration = _meter.CreateHistogram<double>(
             "rashub.background_tasks.attempt.duration",
             "s");
+        _active = _meter.CreateUpDownCounter<long>(
+            "rashub.background_tasks.active",
+            "{execution}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.queue.length",
+            ObserveQueueLengths,
+            "{task}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.queue.oldest.age",
+            ObserveOldestQueueAges,
+            "s");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.delayed",
+            () => _rescheduler.DelayedExecutionCount,
+            "{execution}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.delayed.overdue",
+            () => _rescheduler.GetOverdueExecutionCount(
+                _timeProvider.GetUtcNow()),
+            "{execution}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.concurrency.keys.active",
+            () => _concurrencyGate.ActiveKeyCount,
+            "{key}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.concurrency.waiters",
+            () => _concurrencyGate.WaitingExecutionCount,
+            "{execution}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.processes.live",
+            () => _runtimeState.CreateSnapshot().LiveProcessCount,
+            "{process}");
+        _meter.CreateObservableGauge(
+            "rashub.background_tasks.processes.expected",
+            () => _runtimeState.CreateSnapshot().ExpectedProcessCount,
+            "{process}");
     }
 
     public void Dispose()
@@ -55,53 +112,77 @@ internal sealed class BackgroundTaskMetrics : IDisposable
 
     public void Enqueued(BackgroundTaskExecution execution)
     {
-        _enqueued.Add(1, CreateTags(execution));
+        // Publish the active balance first. MeterListener callbacks execute
+        // synchronously and may re-enter the engine (for example, by
+        // canceling this execution from the enqueued measurement). Recording
+        // the balance first keeps that terminal -1 ordered after this +1.
+        RecordSafely(() => _active.Add(1, CreateTags(execution)));
+        RecordSafely(() => _enqueued.Add(1, CreateTags(execution)));
     }
 
     public void Deduplicated(BackgroundTaskExecution execution)
     {
-        _deduplicated.Add(1, CreateTags(execution));
+        RecordSafely(() => _deduplicated.Add(1, CreateTags(execution)));
     }
 
     public void Rejected(Type taskType)
     {
-        _rejected.Add(1, new KeyValuePair<string, object?>(
-            "task.type",
-            taskType.FullName));
+        RecordSafely(() => _rejected.Add(
+            1,
+            new KeyValuePair<string, object?>(
+                "task.type",
+                taskType.FullName)));
     }
 
     public void Started(BackgroundTaskExecution execution)
     {
-        _started.Add(1, CreateTags(execution));
+        RecordSafely(() => _started.Add(1, CreateTags(execution)));
     }
 
     public void Retried(BackgroundTaskExecution execution)
     {
-        _retried.Add(1, CreateTags(execution));
+        RecordSafely(() => _retried.Add(1, CreateTags(execution)));
     }
 
     public void Succeeded(BackgroundTaskExecution execution)
     {
-        _succeeded.Add(1, CreateTags(execution));
+        RecordSafely(() => _succeeded.Add(1, CreateTags(execution)));
+        RecordSafely(() => _active.Add(-1, CreateTags(execution)));
     }
 
     public void Failed(BackgroundTaskExecution execution)
     {
-        _failed.Add(1, CreateTags(execution));
+        RecordSafely(() => _failed.Add(1, CreateTags(execution)));
+        RecordSafely(() => _active.Add(-1, CreateTags(execution)));
     }
 
     public void Canceled(BackgroundTaskExecution execution)
     {
-        _canceled.Add(1, CreateTags(execution));
+        RecordSafely(() => _canceled.Add(1, CreateTags(execution)));
+        RecordSafely(() => _active.Add(-1, CreateTags(execution)));
     }
 
     public void RecordAttemptDuration(
         BackgroundTaskExecution execution,
         TimeSpan duration)
     {
-        _attemptDuration.Record(
+        RecordSafely(() => _attemptDuration.Record(
             duration.TotalSeconds,
-            CreateTags(execution));
+            CreateTags(execution)));
+    }
+
+    private static void RecordSafely(Action record)
+    {
+        try
+        {
+            record();
+        }
+        catch (Exception)
+        {
+            // MeterListener callbacks execute synchronously on the producer's
+            // thread. Observability must never reject admitted work, change an
+            // execution outcome, or stop a worker because a listener failed.
+        }
     }
 
     private static TagList CreateTags(BackgroundTaskExecution execution)
@@ -111,5 +192,48 @@ internal sealed class BackgroundTaskMetrics : IDisposable
             { "task.type", execution.BackgroundTask.GetType().FullName },
             { "queue", execution.Options.Queue.ToString() }
         };
+    }
+
+    private IEnumerable<Measurement<int>> ObserveQueueLengths()
+    {
+        yield return CreateQueueMeasurement(BackgroundTaskQueue.Interactive);
+        yield return CreateQueueMeasurement(BackgroundTaskQueue.Synchronization);
+        yield return CreateQueueMeasurement(BackgroundTaskQueue.Maintenance);
+    }
+
+    private Measurement<int> CreateQueueMeasurement(BackgroundTaskQueue queue)
+    {
+        return new Measurement<int>(
+            _queue.GetCount(queue),
+            new KeyValuePair<string, object?>("queue", queue.ToString()));
+    }
+
+    private IEnumerable<Measurement<double>> ObserveOldestQueueAges()
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        yield return CreateQueueAgeMeasurement(
+            BackgroundTaskQueue.Interactive,
+            now);
+        yield return CreateQueueAgeMeasurement(
+            BackgroundTaskQueue.Synchronization,
+            now);
+        yield return CreateQueueAgeMeasurement(
+            BackgroundTaskQueue.Maintenance,
+            now);
+    }
+
+    private Measurement<double> CreateQueueAgeMeasurement(
+        BackgroundTaskQueue queue,
+        DateTimeOffset now)
+    {
+        var enqueuedAt = _queue.GetOldestEnqueuedAt(queue);
+        var age = enqueuedAt is null || enqueuedAt >= now
+            ? 0
+            : (now - enqueuedAt.Value).TotalSeconds;
+
+        return new Measurement<double>(
+            age,
+            new KeyValuePair<string, object?>("queue", queue.ToString()));
     }
 }

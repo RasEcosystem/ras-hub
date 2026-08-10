@@ -33,6 +33,6 @@ public sealed record BackgroundTaskOptions
     /// <summary>Causes equivalent active tasks of the same type to share one execution.</summary>
     public string? DeduplicationKey { get; init; }
 
-    /// <summary>Prevents executions with the same key from running simultaneously in this process.</summary>
+    /// <summary>Serializes executions with the same key using process-local FIFO handoff.</summary>
     public string? ConcurrencyKey { get; init; }
 }
