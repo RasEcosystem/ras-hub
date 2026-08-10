@@ -129,6 +129,7 @@ internal static class WebApplicationConfigurationExtensions
                 ApiDocumentationAuthenticationDefaults.Policy);
         }
 
+        app.UseRateLimiter();
         app.UseStaticFiles();
         app.UseAuthentication();
         app.UseAuthorization();

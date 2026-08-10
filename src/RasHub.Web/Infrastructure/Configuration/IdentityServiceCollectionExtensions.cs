@@ -67,6 +67,9 @@ internal static class IdentityServiceCollectionExtensions
             {
                 options.SignIn.RequireConfirmedAccount = false;
                 options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
                 options.Password.RequiredLength = 8;
                 options.Password.RequireDigit = false;
                 options.Password.RequireLowercase = false;

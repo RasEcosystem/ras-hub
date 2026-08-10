@@ -70,7 +70,7 @@ internal static class RasGateApiResponses
     {
         return ApiResponse<RasGateStatusResponse>.Fail(
             HttpStatusCode.ServiceUnavailable,
-            "ras_gate_status_check_unavailable",
+            "ras_gate_status_sync_unavailable",
             "RasGate status synchronization could not be scheduled.");
     }
 
@@ -80,7 +80,7 @@ internal static class RasGateApiResponses
         if (result.Outcome == BackgroundTaskOutcome.Canceled)
             return ApiResponse<RasGateStatusResponse>.Fail(
                 HttpStatusCode.ServiceUnavailable,
-                "ras_gate_status_check_canceled",
+                "ras_gate_status_sync_canceled",
                 "RasGate status synchronization was canceled.");
 
         if (result.Exception is RasGateInactiveException inactiveException)

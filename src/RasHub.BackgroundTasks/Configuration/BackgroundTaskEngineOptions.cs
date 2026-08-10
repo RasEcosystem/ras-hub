@@ -1,7 +1,7 @@
 namespace RasHub.BackgroundTasks.Configuration;
 
 /// <summary>
-///     Configures queue capacities, worker quotas, fairness, and completed-task retention.
+///     Configures queue capacities, worker quotas, and completed-task retention.
 /// </summary>
 public sealed class BackgroundTaskEngineOptions
 {
@@ -29,9 +29,6 @@ public sealed class BackgroundTaskEngineOptions
 
     /// <summary>Workers reserved for low-priority maintenance work.</summary>
     public int MaintenanceWorkerCount { get; set; } = 2;
-
-    /// <summary>How often a lane selects its oldest task instead of its highest-priority task.</summary>
-    public int PriorityFairnessInterval { get; set; } = 16;
 
     /// <summary>How long terminal task snapshots remain queryable.</summary>
     public TimeSpan CompletedTaskRetention { get; set; } =

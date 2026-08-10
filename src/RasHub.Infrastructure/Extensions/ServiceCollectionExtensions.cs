@@ -8,6 +8,7 @@ using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Interceptors;
 using RasHub.Infrastructure.Database.Queries;
+using RasHub.Infrastructure.Database.Security;
 using RasHub.Infrastructure.RasGates.Client;
 using RasHub.Infrastructure.RasGates.Endpoints;
 using RasHub.Infrastructure.RasGates.Rac;
@@ -31,13 +32,17 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<AuditSoftDeleteInterceptor>();
         services.AddSingleton<RasGateConfigurationRevisionInterceptor>();
+        services.AddSingleton<RasGateApiKeyProtector>();
+        services.AddSingleton<RasGateApiKeyProtectionInterceptor>();
 
         services.AddDbContext<RasHubDbContext>((serviceProvider, options) =>
         {
             options.AddInterceptors(
                 serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
                 serviceProvider.GetRequiredService<
-                    RasGateConfigurationRevisionInterceptor>());
+                    RasGateConfigurationRevisionInterceptor>(),
+                serviceProvider.GetRequiredService<
+                    RasGateApiKeyProtectionInterceptor>());
 
             options.UseNpgsql(connectionString, npgsql =>
             {
@@ -51,6 +56,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRasGateSyncPublisher, RasGateSyncPublisher>();
         services.AddScoped<RasClusterQueries>();
         services.AddScoped<RasGateQueries>();
+        services.AddScoped<RasGateApiKeyProtectionMigrator>();
 
         services.AddSingleton<IRasGateEndpointFactory, RasGateEndpointFactory>();
         services.AddSingleton<RasGateHttpClientTransport>();
@@ -93,5 +99,16 @@ public static class ServiceCollectionExtensions
         logger.LogInformation("Applying RasHub database migrations");
         await dbContext.Database.MigrateAsync(cancellationToken);
         logger.LogInformation("RasHub database migrations completed");
+    }
+
+    public static async Task ProtectLegacyRasGateApiKeysAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var migrator = scope.ServiceProvider
+            .GetRequiredService<RasGateApiKeyProtectionMigrator>();
+
+        await migrator.ProtectLegacyKeysAsync(cancellationToken);
     }
 }

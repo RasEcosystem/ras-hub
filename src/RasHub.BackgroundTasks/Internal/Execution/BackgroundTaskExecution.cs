@@ -217,7 +217,6 @@ internal sealed class BackgroundTaskExecution
                 BackgroundTask.GetType(),
                 _state,
                 Options.Queue,
-                Options.Priority,
                 _attemptCount,
                 Options.MaxAttempts,
                 CreatedAt,

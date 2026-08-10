@@ -245,18 +245,14 @@ public sealed class BackgroundTaskEngineBehaviorTests
     }
 
     [Fact]
-    public async Task Higher_priority_task_is_dequeued_first()
+    public async Task Tasks_in_the_same_lane_are_dequeued_in_fifo_order()
     {
-        using var host = CreateHost();
+        using var host = CreateHost(
+            configure: options => options.SynchronizationWorkerCount = 1);
         var engine = GetEngine(host);
 
-        var low = engine.Enqueue(
-            new RecordedTask(1),
-            new BackgroundTaskOptions { Priority = -100 });
-
-        var high = engine.Enqueue(
-            new RecordedTask(2),
-            new BackgroundTaskOptions { Priority = 100 });
+        var first = engine.Enqueue(new RecordedTask(1));
+        var second = engine.Enqueue(new RecordedTask(2));
 
         var cancellationToken = TestContext.Current.CancellationToken;
         await host.StartAsync(cancellationToken);
@@ -264,14 +260,14 @@ public sealed class BackgroundTaskEngineBehaviorTests
         try
         {
             await Task.WhenAll(
-                Await(low, cancellationToken),
-                Await(high, cancellationToken));
+                Await(first, cancellationToken),
+                Await(second, cancellationToken));
 
             var values = host.Services
                 .GetRequiredService<RecordingProbe>()
                 .Values;
 
-            Assert.Equal([2, 1], values);
+            Assert.Equal([1, 2], values);
         }
         finally
         {
@@ -305,33 +301,6 @@ public sealed class BackgroundTaskEngineBehaviorTests
 
             Assert.Contains(7, probe.Values);
             Assert.Single(scheduler.GetSchedules());
-        }
-        finally
-        {
-            await host.StopAsync(cancellationToken);
-        }
-    }
-
-    [Fact]
-    public async Task Recovery_source_can_restore_work_when_host_starts()
-    {
-        using var host = CreateHost(services =>
-            services.AddScoped<
-                IBackgroundTaskRecoverySource,
-                TestRecoverySource>());
-
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await host.StartAsync(cancellationToken);
-
-        try
-        {
-            var probe = host.Services.GetRequiredService<RecordingProbe>();
-
-            await probe.Recorded.Task.WaitAsync(
-                TimeSpan.FromSeconds(5),
-                cancellationToken);
-
-            Assert.Contains(99, probe.Values);
         }
         finally
         {
@@ -786,16 +755,5 @@ internal sealed class ConcurrencyProbe
     public void Exit()
     {
         Interlocked.Decrement(ref _current);
-    }
-}
-
-internal sealed class TestRecoverySource : IBackgroundTaskRecoverySource
-{
-    public Task RecoverAsync(
-        IBackgroundTaskEngine engine,
-        CancellationToken cancellationToken)
-    {
-        engine.Enqueue(new RecordedTask(99));
-        return Task.CompletedTask;
     }
 }

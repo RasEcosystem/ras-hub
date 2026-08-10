@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -144,6 +145,16 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 TestContext.Current.CancellationToken);
     }
 
+    public async Task<string?> FindStoredRasGateApiKeyAsync(Guid id)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+
+        return await db.Database
+            .SqlQuery<string>($"SELECT api_key AS \"Value\" FROM ras_gates WHERE id = {id}")
+            .SingleOrDefaultAsync(TestContext.Current.CancellationToken);
+    }
+
     public async Task<IReadOnlyList<RasCluster>> FindRasClustersAsync(
         Guid rasGateId,
         bool includeDeleted = false)
@@ -203,10 +214,14 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             services.AddDbContext<RasHubDbContext>((serviceProvider, options) =>
             {
                 options.UseSqlite(_connection);
+                options.ConfigureWarnings(warnings => warnings.Ignore(
+                    CoreEventId.ManyServiceProvidersCreatedWarning));
                 options.AddInterceptors(
                     serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
                     serviceProvider.GetRequiredService<
-                        RasGateConfigurationRevisionInterceptor>());
+                        RasGateConfigurationRevisionInterceptor>(),
+                    serviceProvider.GetRequiredService<
+                        RasGateApiKeyProtectionInterceptor>());
             });
 
             services.AddDbContext<ApplicationDbContext>(options =>
@@ -286,6 +301,8 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public int StatusRequestCount => Volatile.Read(ref _statusRequestCount);
 
+    public string? LastApiKey { get; private set; }
+
     public IReadOnlyList<RasClusterSnapshot> Clusters { get; set; } = [];
 
     public RasClusterSnapshot? Cluster { get; set; }
@@ -306,6 +323,7 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public IRasGateClient Create(RasGate rasGate)
     {
+        LastApiKey = rasGate.ApiKey;
         return new FakeRasGateClient(this);
     }
 
@@ -338,6 +356,7 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         Volatile.Write(ref _clusterInfoRequestCount, 0);
         Volatile.Write(ref _clusterRequestCount, 0);
         Volatile.Write(ref _statusRequestCount, 0);
+        LastApiKey = null;
         Clusters = [];
         Cluster = null;
         ClusterSnapshotCompleteness = SnapshotCompleteness.Complete;

@@ -7,7 +7,6 @@ using RasHub.BackgroundTasks.Internal.Engine;
 using RasHub.BackgroundTasks.Internal.Execution;
 using RasHub.BackgroundTasks.Internal.Processing;
 using RasHub.BackgroundTasks.Internal.Queues;
-using RasHub.BackgroundTasks.Internal.Recovery;
 using RasHub.BackgroundTasks.Internal.Scheduling;
 
 namespace RasHub.BackgroundTasks.Configuration;
@@ -42,9 +41,6 @@ public static class BackgroundTaskServiceCollectionExtensions
                            options.MaintenanceWorkerCount > 0,
                 "All background task worker counts must be greater than zero.")
             .Validate(
-                options => options.PriorityFairnessInterval > 0,
-                "Priority fairness interval must be greater than zero.")
-            .Validate(
                 options => options.CompletedTaskRetention >= TimeSpan.Zero &&
                            options.RegistryCleanupInterval > TimeSpan.Zero,
                 "Task retention cannot be negative and cleanup interval must be positive.")
@@ -69,7 +65,6 @@ public static class BackgroundTaskServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskMetrics>();
         services.AddSingleton<BackgroundTaskRescheduler>();
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
-        services.AddSingleton<BackgroundTaskRecoveryRunner>();
         services.AddSingleton<BackgroundTaskWorker>();
 
         services.AddSingleton<BackgroundTaskEngine>();

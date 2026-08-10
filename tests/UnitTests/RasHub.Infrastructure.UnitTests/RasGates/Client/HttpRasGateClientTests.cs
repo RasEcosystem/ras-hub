@@ -67,6 +67,29 @@ public sealed class HttpRasGateClientTests
     }
 
     [Fact]
+    public async Task GetStatusAsync_remote_error_preserves_error_code()
+    {
+        using var httpClient = CreateHttpClient(_ => JsonResponse(
+            """
+            {
+              "success": false,
+              "error": {
+                "code": "gate_unavailable"
+              }
+            }
+            """));
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        var exception = await Assert.ThrowsAsync<RasGateClientException>(() =>
+            client.GetStatusAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("gate_unavailable", exception.Message);
+    }
+
+    [Fact]
     public async Task GetStatusAsync_rejects_unsuccessful_http_response()
     {
         using var httpClient = CreateHttpClient(_ =>

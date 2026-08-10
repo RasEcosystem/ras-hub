@@ -6,7 +6,6 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
 {
     public const int NameMaxLength = 200;
     public const int UrlMaxLength = 2_048;
-    public const int ApiKeyMaxLength = 512;
 
     public required string Name { get; set; }
 

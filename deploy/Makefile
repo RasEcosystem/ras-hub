@@ -26,7 +26,7 @@ help:
 	@echo ""
 	@echo "Development targets:"
 	@echo "  make dev-up             Start PostgreSQL and Seq for local IDE development"
-	@echo "  make dev-stack-up       Build and start PostgreSQL and RasHub"
+	@echo "  make dev-stack-up       Build and start PostgreSQL, Seq, and RasHub"
 	@echo "  make dev-down           Stop the development stack"
 	@echo ""
 	@echo "Production targets:"

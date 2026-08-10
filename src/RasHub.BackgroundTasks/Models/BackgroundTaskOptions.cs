@@ -9,9 +9,6 @@ public sealed record BackgroundTaskOptions
     public BackgroundTaskQueue Queue { get; init; } =
         BackgroundTaskQueue.Synchronization;
 
-    /// <summary>Higher values are selected first inside the chosen queue.</summary>
-    public int Priority { get; init; }
-
     /// <summary>Maximum number of execution attempts, including the first attempt.</summary>
     public int MaxAttempts { get; init; } = 3;
 

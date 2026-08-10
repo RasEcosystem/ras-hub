@@ -52,6 +52,7 @@ public class Program
         builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
         builder.Services.AddSingleton<ApplicationDiagnostics>();
         builder.Services.AddRasHubDataProtection(builder.Configuration);
+        builder.Services.AddAuthenticationRateLimiting();
 
         builder.Host.UseSerilog((context, services, configuration) =>
         {

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RasHub.Infrastructure.Database;
@@ -11,9 +12,11 @@ using RasHub.Infrastructure.Database;
 namespace RasHub.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(RasHubDbContext))]
-    partial class RasHubDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810162159_ProtectRasGateApiKeysAtRest")]
+    partial class ProtectRasGateApiKeysAtRest
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Extensions;
 using RasHub.Web.Data;
 
@@ -24,11 +25,15 @@ internal static class ApplicationDatabaseStartupExtensions
         }
         else
         {
-            await app.Services.EnsureNonNpgsqlIdentityDatabaseAsync(
+            await app.Services.EnsureNonNpgsqlDatabasesAsync(
                 cancellationToken);
         }
 
-        return !migrateOnly;
+        if (migrateOnly)
+            return false;
+
+        await app.Services.ProtectLegacyRasGateApiKeysAsync(cancellationToken);
+        return true;
     }
 
     private static async Task MigrateIdentityDatabaseAsync(
@@ -45,13 +50,18 @@ internal static class ApplicationDatabaseStartupExtensions
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    private static async Task EnsureNonNpgsqlIdentityDatabaseAsync(
+    private static async Task EnsureNonNpgsqlDatabasesAsync(
         this IServiceProvider services,
         CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
+        var rasHubDbContext = scope.ServiceProvider
+            .GetRequiredService<RasHubDbContext>();
         var dbContext = scope.ServiceProvider
             .GetRequiredService<ApplicationDbContext>();
+
+        if (!rasHubDbContext.Database.IsNpgsql())
+            await rasHubDbContext.Database.EnsureCreatedAsync(cancellationToken);
 
         if (!dbContext.Database.IsNpgsql())
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);

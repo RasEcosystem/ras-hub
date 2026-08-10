@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using RasHub.BackgroundTasks.Configuration;
 using RasHub.BackgroundTasks.Internal.Engine;
 using RasHub.BackgroundTasks.Internal.Queues;
-using RasHub.BackgroundTasks.Internal.Recovery;
 using RasHub.BackgroundTasks.Internal.Scheduling;
 using RasHub.BackgroundTasks.Models;
 
@@ -16,7 +15,6 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
 {
     private readonly BackgroundTaskEngine _engine;
     private readonly BackgroundTaskEngineOptions _options;
-    private readonly BackgroundTaskRecoveryRunner _recoveryRunner;
     private readonly BackgroundTaskRescheduler _rescheduler;
     private readonly PeriodicBackgroundTaskScheduler _scheduler;
     private readonly TimeProvider _timeProvider;
@@ -27,7 +25,6 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
         BackgroundTaskRescheduler rescheduler,
         BackgroundTaskEngine engine,
         PeriodicBackgroundTaskScheduler scheduler,
-        BackgroundTaskRecoveryRunner recoveryRunner,
         IOptions<BackgroundTaskEngineOptions> options,
         TimeProvider timeProvider)
     {
@@ -35,7 +32,6 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
         _rescheduler = rescheduler;
         _engine = engine;
         _scheduler = scheduler;
-        _recoveryRunner = recoveryRunner;
         _options = options.Value;
         _timeProvider = timeProvider;
     }
@@ -74,7 +70,6 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
 
         try
         {
-            await _recoveryRunner.RunAsync(stoppingToken);
             await Task.WhenAll(processes);
         }
         catch (OperationCanceledException)

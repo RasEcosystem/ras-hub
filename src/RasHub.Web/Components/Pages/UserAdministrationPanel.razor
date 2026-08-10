@@ -1,0 +1,274 @@
+@using Microsoft.AspNetCore.Identity
+@using RasHub.Web.Infrastructure.Authorization
+@inject UserAdministrationService UserAdministrationService
+@inject ISnackbar Snackbar
+@inject ILogger<UserAdministrationPanel> Logger
+@inject IJSRuntime JsRuntime
+
+<MudPaper Class="pa-6" Elevation="1">
+    <MudStack Spacing="4">
+        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+            <MudIcon Icon="@Icons.Material.Outlined.AdminPanelSettings"
+                     Size="Size.Small"
+                     Color="Color.Primary"/>
+            <MudText Typo="Typo.h5">Users</MudText>
+        </MudStack>
+
+        @if (_loadingUsers)
+        {
+            <MudProgressLinear Indeterminate Color="Color.Primary"/>
+        }
+        else
+        {
+            <MudTable T="UserAdministrationItem"
+                      Items="@_users"
+                      Hover
+                      Striped
+                      Bordered>
+                <HeaderContent>
+                    <MudTh>User</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Role</MudTh>
+                    <MudTh>API key</MudTh>
+                    <MudTh Class="text-right">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="User">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                            @if (context.IsCurrentUser)
+                            {
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="Color.Info"
+                                         Variant="Variant.Outlined">
+                                    You
+                                </MudChip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@(context.IsBlocked ? Color.Error : Color.Success)"
+                                 Variant="Variant.Outlined">
+                            @(context.IsBlocked ? "Blocked" : "Active")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Role">
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@(context.IsAdmin ? Color.Primary : Color.Default)"
+                                 Variant="Variant.Outlined">
+                            @(context.IsAdmin ? "Admin" : "User")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="API key">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@(context.ApiKey is null
+                                               ? Icons.Material.Outlined.KeyOff
+                                               : Icons.Material.Outlined.Key)"
+                                     Size="Size.Small"
+                                     Color="@(context.ApiKey is null
+                                                ? Color.Default
+                                                : Color.Success)"/>
+                            <MudText Typo="Typo.body2"
+                                     Color="@(context.ApiKey is null
+                                                ? Color.Secondary
+                                                : Color.Default)">
+                                @(context.ApiKey is null ? "Not generated" : "Generated")
+                            </MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Class="text-right">
+                        @if (_updatingUserId == context.Id)
+                        {
+                            <MudProgressCircular Indeterminate
+                                                 Size="Size.Small"
+                                                 Color="Color.Primary"/>
+                        }
+                        else
+                        {
+                            <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                     Size="Size.Small"
+                                     Dense
+                                     AnchorOrigin="Origin.BottomRight"
+                                     TransformOrigin="Origin.TopRight"
+                                     Disabled="@(_updatingUserId is not null)"
+                                     AriaLabel="@($"Actions for {context.DisplayName}")">
+                                <MudMenuItem Icon="@(context.IsAdmin
+                                                       ? Icons.Material.Outlined.PersonOutline
+                                                       : Icons.Material.Outlined.AdminPanelSettings)"
+                                             Disabled="@context.IsCurrentUser"
+                                             OnClick="@(() => SetAdminAsync(context, !context.IsAdmin))">
+                                    @(context.IsAdmin
+                                        ? "Revoke administrator"
+                                        : "Grant administrator")
+                                </MudMenuItem>
+
+                                <MudMenuItem Icon="@(context.IsBlocked
+                                                       ? Icons.Material.Outlined.LockOpen
+                                                       : Icons.Material.Outlined.Block)"
+                                             IconColor="@(context.IsBlocked
+                                                            ? Color.Success
+                                                            : Color.Error)"
+                                             Disabled="@context.IsCurrentUser"
+                                             OnClick="@(() => SetBlockedAsync(context, !context.IsBlocked))">
+                                    @(context.IsBlocked ? "Unblock user" : "Block user")
+                                </MudMenuItem>
+
+                                <MudDivider/>
+
+                                @if (context.ApiKey is not null)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy"
+                                                 OnClick="@(() => CopyApiKeyAsync(context))">
+                                        Copy API key
+                                    </MudMenuItem>
+                                }
+
+                                <MudMenuItem Icon="@Icons.Material.Outlined.Key"
+                                             OnClick="@(() => GenerateApiKeyAsync(context))">
+                                    @(context.ApiKey is null
+                                        ? "Generate API key"
+                                        : "Regenerate API key")
+                                </MudMenuItem>
+
+                                @if (context.ApiKey is not null)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.KeyOff"
+                                                 IconColor="Color.Error"
+                                                 OnClick="@(() => ClearApiKeyAsync(context))">
+                                        Revoke API key
+                                    </MudMenuItem>
+                                }
+                            </MudMenu>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        No users found.
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<UserAdministrationItem> _users = [];
+    private bool _loadingUsers;
+    private string? _updatingUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            _loadingUsers = true;
+            _users = await UserAdministrationService.GetUsersAsync();
+        }
+        finally
+        {
+            _loadingUsers = false;
+        }
+    }
+
+    private async Task SetAdminAsync(UserAdministrationItem user, bool isAdmin)
+    {
+        await UpdateUserAsync(
+            user,
+            () => UserAdministrationService.SetAdminAsync(user.Id, isAdmin),
+            isAdmin
+                ? $"{user.DisplayName} is now an administrator. The change takes effect after the next sign-in."
+                : $"{user.DisplayName} is no longer an administrator. The change takes effect after the next sign-in.",
+            "Unable to update administrator access.");
+    }
+
+    private async Task GenerateApiKeyAsync(UserAdministrationItem user)
+    {
+        await UpdateUserAsync(
+            user,
+            () => UserAdministrationService.GenerateApiKeyAsync(user.Id),
+            $"API key for {user.DisplayName} was generated.",
+            "Unable to generate the API key.");
+    }
+
+    private async Task SetBlockedAsync(UserAdministrationItem user, bool isBlocked)
+    {
+        await UpdateUserAsync(
+            user,
+            () => UserAdministrationService.SetBlockedAsync(user.Id, isBlocked),
+            isBlocked
+                ? $"{user.DisplayName} was blocked. Login and API access were revoked."
+                : $"{user.DisplayName} was unblocked.",
+            "Unable to update user status.");
+    }
+
+    private async Task ClearApiKeyAsync(UserAdministrationItem user)
+    {
+        await UpdateUserAsync(
+            user,
+            () => UserAdministrationService.ClearApiKeyAsync(user.Id),
+            $"API access for {user.DisplayName} was revoked.",
+            "Unable to clear the API key.");
+    }
+
+    private async Task CopyApiKeyAsync(UserAdministrationItem user)
+    {
+        if (user.ApiKey is null)
+            return;
+
+        try
+        {
+            await JsRuntime.InvokeVoidAsync(
+                "navigator.clipboard.writeText",
+                user.ApiKey);
+            Snackbar.Add(
+                $"API key for {user.DisplayName} was copied.",
+                Severity.Success);
+        }
+        catch (JSException exception)
+        {
+            Logger.LogError(
+                exception,
+                "Unable to copy the API key for user {UserId}.",
+                user.Id);
+            Snackbar.Add("Unable to copy the API key.", Severity.Error);
+        }
+    }
+
+    private async Task UpdateUserAsync(
+        UserAdministrationItem user,
+        Func<Task<IdentityResult>> update,
+        string successMessage,
+        string failureMessage)
+    {
+        try
+        {
+            _updatingUserId = user.Id;
+            var result = await update();
+            Snackbar.Add(
+                result.Succeeded
+                    ? successMessage
+                    : string.Join(" ", result.Errors.Select(error => error.Description)),
+                result.Succeeded ? Severity.Success : Severity.Error);
+            await LoadUsersAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to update user {UserId}.", user.Id);
+            Snackbar.Add(failureMessage, Severity.Error);
+        }
+        finally
+        {
+            _updatingUserId = null;
+        }
+    }
+
+}

@@ -126,7 +126,6 @@
                         <MudTh>Task</MudTh>
                         <MudTh>Lane</MudTh>
                         <MudTh>State</MudTh>
-                        <MudTh>Priority</MudTh>
                         <MudTh>Attempt</MudTh>
                         <MudTh>Age</MudTh>
                         <MudTh>Runtime / wait</MudTh>
@@ -144,7 +143,6 @@
                             <MudChip T="string" Size="Size.Small"
                                      Color="@StateColor(context.State)">@context.State</MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Priority">@context.Priority</MudTd>
                         <MudTd DataLabel="Attempt">@context.AttemptCount / @context.MaxAttempts</MudTd>
                         <MudTd DataLabel="Age">@FormatDuration(Now - context.CreatedAt)</MudTd>
                         <MudTd DataLabel="Runtime / wait">@FormatTaskTiming(context)</MudTd>

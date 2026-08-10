@@ -9,6 +9,7 @@ using RasHub.Application.RasGates.Tasks;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
+using RasHub.Infrastructure.Database.Security;
 using RasHub.Web.Authentication;
 using RasHub.Web.Data;
 using RasHub.Web.IntegrationTests.Infrastructure;
@@ -132,6 +133,14 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.NotNull(stored);
         Assert.Equal(request.ApiKey, stored.ApiKey);
         Assert.True(stored.IsActive);
+
+        var storedApiKey = await _factory.FindStoredRasGateApiKeyAsync(id);
+        using var scope = _factory.Services.CreateScope();
+        var protector = scope.ServiceProvider
+            .GetRequiredService<RasGateApiKeyProtector>();
+        Assert.NotNull(storedApiKey);
+        Assert.NotEqual(request.ApiKey, storedApiKey);
+        Assert.True(protector.IsProtected(storedApiKey));
     }
 
     [Fact]
@@ -262,6 +271,7 @@ public sealed class RasGatesApiTests : IClassFixture<RasHubWebApplicationFactory
         Assert.Equal("2.3.4", data.GetProperty("version").GetString());
         Assert.NotEqual(JsonValueKind.Null, data.GetProperty("observedAt").ValueKind);
         Assert.Equal(1, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal("stored-secret", _factory.RasGateClientFactory.LastApiKey);
 
         var stored = await _factory.FindRasGateAsync(rasGate.Id);
         Assert.NotNull(stored);

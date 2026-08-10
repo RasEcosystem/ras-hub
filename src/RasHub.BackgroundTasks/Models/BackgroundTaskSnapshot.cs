@@ -8,7 +8,6 @@ public sealed record BackgroundTaskSnapshot(
     Type TaskType,
     BackgroundTaskState State,
     BackgroundTaskQueue Queue,
-    int Priority,
     int AttemptCount,
     int MaxAttempts,
     DateTimeOffset CreatedAt,

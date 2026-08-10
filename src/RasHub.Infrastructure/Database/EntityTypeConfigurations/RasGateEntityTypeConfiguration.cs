@@ -6,6 +6,8 @@ namespace RasHub.Infrastructure.Database.EntityTypeConfigurations;
 
 public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<RasGate>
 {
+    private const int ProtectedApiKeyMaxLength = 4_096;
+
     public void Configure(EntityTypeBuilder<RasGate> builder)
     {
         builder.ToTable("ras_gates", tableBuilder =>
@@ -33,7 +35,7 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
 
         builder.Property(rasGate => rasGate.ApiKey)
             .HasColumnName("api_key")
-            .HasMaxLength(RasGate.ApiKeyMaxLength)
+            .HasMaxLength(ProtectedApiKeyMaxLength)
             .IsRequired();
 
         builder.Property(rasGate => rasGate.ConfigurationRevision)

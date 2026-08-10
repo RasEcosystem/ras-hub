@@ -15,7 +15,46 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore RasHub.sln
+
+      - name: Verify formatting
+        run: dotnet format RasHub.sln --no-restore --verify-no-changes
+
+      - name: Build
+        run: >-
+          dotnet build RasHub.sln
+          --configuration Release
+          --no-restore
+          --warnaserror
+          -m:1
+
+      - name: Test
+        run: >-
+          dotnet test RasHub.sln
+          --configuration Release
+          --no-build
+          --no-restore
+          -m:1
+
   build:
+    needs:
+      - verify
     runs-on: ubuntu-latest
     concurrency:
       group: build-development
