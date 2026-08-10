@@ -26,6 +26,7 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
     private readonly TaskCompletionSource _runtimeCompleted =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _runtimeStarted;
+    private int _startRequested;
     private int _shutdownStarted;
 
     public BackgroundTaskHostedService(
@@ -52,7 +53,19 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
 
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
-        await base.StartAsync(cancellationToken);
+        Volatile.Write(ref _startRequested, 1);
+
+        try
+        {
+            await base.StartAsync(cancellationToken);
+        }
+        catch
+        {
+            if (Volatile.Read(ref _runtimeStarted) == 0)
+                _runtimeCompleted.TrySetResult();
+
+            throw;
+        }
 
         if (Volatile.Read(ref _shutdownStarted) != 0)
             await WaitForRuntimeCompletionAsync(cancellationToken);
@@ -62,6 +75,18 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
     {
         InitiateShutdown();
         await base.StopAsync(cancellationToken);
+
+        if (ExecuteTask is null)
+        {
+            _runtimeState.MarkStopped();
+            return;
+        }
+
+        // .NET 10 can cancel the scheduled ExecuteAsync task before its
+        // delegate enters, so no runtime finally block exists to publish Stopped.
+        if (Volatile.Read(ref _runtimeStarted) == 0)
+            await CompleteUnstartedRuntimeAsync();
+
         await WaitForRuntimeCompletionAsync(cancellationToken);
     }
 
@@ -204,10 +229,23 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
         }
     }
 
+    private async Task CompleteUnstartedRuntimeAsync()
+    {
+        try
+        {
+            await DrainCancellationSignalsAsync();
+        }
+        finally
+        {
+            _runtimeState.MarkStopped();
+            _runtimeCompleted.TrySetResult();
+        }
+    }
+
     private Task WaitForRuntimeCompletionAsync(
         CancellationToken cancellationToken)
     {
-        return Volatile.Read(ref _runtimeStarted) == 0
+        return Volatile.Read(ref _startRequested) == 0
             ? Task.CompletedTask
             : _runtimeCompleted.Task.WaitAsync(cancellationToken);
     }

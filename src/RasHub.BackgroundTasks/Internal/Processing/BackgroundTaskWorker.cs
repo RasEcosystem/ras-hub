@@ -247,6 +247,7 @@ internal sealed class BackgroundTaskWorker
         }
 
         _logger.LogError(
+            exception,
             "Background task {TaskId} failed permanently after " +
             "{AttemptCount} attempts; failure type: {FailureType}",
             execution.Id,
@@ -296,6 +297,7 @@ internal sealed class BackgroundTaskWorker
             execution.TryFail(exception, now);
 
         _logger.LogError(
+            exception,
             "Worker infrastructure failed while processing background task " +
             "{TaskId} of type {TaskType}; terminal state: {State}; " +
             "failure type: {FailureType}",
