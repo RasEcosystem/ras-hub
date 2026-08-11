@@ -37,22 +37,22 @@
     place-items: center;
     padding: 24px;
     background: radial-gradient(
-            90% 60% at 80% 0%,
-            color-mix(
-                    in srgb,
-                    var(--mud-palette-primary, #5d8fcf) 14%,
-                    transparent
-            ),
-            transparent 62%
+        90% 60% at 80% 0%,
+        color-mix(
+            in srgb,
+            var(--mud-palette-primary, #5d8fcf) 14%,
+            transparent
+        ),
+        transparent 62%
     ),
     radial-gradient(
-            80% 55% at 0% 100%,
-            color-mix(
-                    in srgb,
-                    var(--mud-palette-info, #4e8fc5) 16%,
-                    transparent
-            ),
-            transparent 64%
+        80% 55% at 0% 100%,
+        color-mix(
+            in srgb,
+            var(--mud-palette-info, #4e8fc5) 16%,
+            transparent
+        ),
+        transparent 64%
     ),
     rgba(10, 14, 20, 0.68);
     backdrop-filter: blur(6px);
@@ -62,9 +62,9 @@
     width: min(460px, 100%);
     padding: 24px;
     border: 1px solid color-mix(
-            in srgb,
-            var(--mud-palette-lines-default, #ced6df) 76%,
-            transparent
+        in srgb,
+        var(--mud-palette-lines-default, #ced6df) 76%,
+        transparent
     );
     border-radius: var(--mud-default-borderradius, 8px);
     background: var(--mud-palette-surface, #ffffff);
@@ -105,9 +105,9 @@
     place-items: center;
     border-radius: 50%;
     background: color-mix(
-            in srgb,
-            var(--mud-palette-primary, #5d8fcf) 18%,
-            transparent
+        in srgb,
+        var(--mud-palette-primary, #5d8fcf) 18%,
+        transparent
     );
     color: var(--mud-palette-primary, #5d8fcf);
 }
@@ -271,9 +271,9 @@ dialog[open].components-resume-failed
 #components-resume-button:hover {
     filter: brightness(1.06);
     box-shadow: 0 4px 12px color-mix(
-            in srgb,
-            var(--mud-palette-primary, #5d8fcf) 28%,
-            transparent
+        in srgb,
+        var(--mud-palette-primary, #5d8fcf) 28%,
+        transparent
     );
 }
 
@@ -285,9 +285,9 @@ dialog[open].components-resume-failed
 #components-reconnect-button:focus-visible,
 #components-resume-button:focus-visible {
     outline: 3px solid color-mix(
-            in srgb,
-            var(--mud-palette-primary, #5d8fcf) 32%,
-            transparent
+        in srgb,
+        var(--mud-palette-primary, #5d8fcf) 32%,
+        transparent
     );
     outline-offset: 2px;
 }

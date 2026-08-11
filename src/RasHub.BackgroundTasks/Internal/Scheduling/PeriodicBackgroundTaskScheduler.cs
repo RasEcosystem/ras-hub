@@ -108,6 +108,29 @@ internal sealed class PeriodicBackgroundTaskScheduler
             handleRemoval.Remove);
     }
 
+    public bool Remove(string scheduleId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scheduleId);
+
+        if (!_registrations.TryRemove(scheduleId, out var registration))
+            return false;
+
+        CompleteRemoval(registration);
+        return true;
+    }
+
+    public IReadOnlyList<BackgroundTaskScheduleSnapshot> GetSchedules()
+    {
+        return _registrations.Values
+            .Select(registration => new BackgroundTaskScheduleSnapshot(
+                registration.Id,
+                registration.TaskType,
+                registration.Interval,
+                registration.NextRunAt))
+            .OrderBy(snapshot => snapshot.NextRunAt)
+            .ToArray();
+    }
+
     /// <summary>
     ///     Atomically closes schedule admission and drops all retained registrations without waiting for user factories.
     /// </summary>
@@ -128,17 +151,6 @@ internal sealed class PeriodicBackgroundTaskScheduler
         }
 
         SignalChanged();
-    }
-
-    public bool Remove(string scheduleId)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(scheduleId);
-
-        if (!_registrations.TryRemove(scheduleId, out var registration))
-            return false;
-
-        CompleteRemoval(registration);
-        return true;
     }
 
     private bool Remove(
@@ -178,18 +190,6 @@ internal sealed class PeriodicBackgroundTaskScheduler
         }
 
         SignalChanged();
-    }
-
-    public IReadOnlyList<BackgroundTaskScheduleSnapshot> GetSchedules()
-    {
-        return _registrations.Values
-            .Select(registration => new BackgroundTaskScheduleSnapshot(
-                registration.Id,
-                registration.TaskType,
-                registration.Interval,
-                registration.NextRunAt))
-            .OrderBy(snapshot => snapshot.NextRunAt)
-            .ToArray();
     }
 
     public async Task RunAsync(CancellationToken stoppingToken)

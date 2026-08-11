@@ -1,1 +1,110 @@
-@import "styles.css";
+html {
+    background: var(--mud-palette-background);
+    scrollbar-gutter: stable;
+}
+
+/* =========================================================
+   BRAND
+========================================================= */
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.brand-home-link,
+.brand-home-link:hover,
+.brand-home-link:focus {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* =========================================================
+   APP BAR
+========================================================= */
+
+.mud-appbar {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+/* =========================================================
+   MUD OVERRIDES
+========================================================= */
+
+.mud-tooltip {
+    background: rgba(22, 27, 38, 0.72) !important;
+
+    border: 1px solid rgba(255, 255, 255, .05);
+    border-radius: 6px;
+
+    backdrop-filter: blur(14px);
+
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .18);
+}
+
+#mud-snackbar-container {
+    z-index: 99999 !important;
+}
+
+/* =========================================================
+   PAGE-SCOPED MUD COMPONENTS
+========================================================= */
+
+.background-tasks-page .lane-card {
+    height: 100%;
+    border-top: 3px solid var(--mud-palette-primary);
+}
+
+.background-tasks-page .state-summary {
+    flex-wrap: wrap;
+}
+
+.background-tasks-page .executions-card {
+    width: 100%;
+    min-width: 0;
+}
+
+.health-events-page .events-card {
+    width: 100%;
+    min-width: 0;
+}
+
+.health-events-page .event-filters {
+    align-items: center;
+}
+
+.health-events-page .event-range-label {
+    text-align: right;
+}
+
+.health-events-page .event-time {
+    white-space: nowrap;
+}
+
+.health-events-page .event-message {
+    min-width: 280px;
+    max-width: 760px;
+    overflow-wrap: anywhere;
+}
+
+.home-page .health-panel {
+    min-width: 0;
+}
+
+@media (max-width: 960px) {
+    .health-events-page .event-range-label {
+        text-align: left;
+    }
+
+    .health-events-page .event-message {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .background-tasks-page .executions-header {
+        align-items: flex-start !important;
+        flex-direction: column !important;
+    }
+}

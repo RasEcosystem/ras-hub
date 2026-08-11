@@ -5,9 +5,14 @@ using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.RasGates.Rac.Clusters;
 
-public sealed class RacClusterOutputDeserializer(
+public sealed class RacClusterOutputV1Deserializer(
     RacKeyValueOutputDeserializer keyValueDeserializer)
+    : IRacClusterOutputDeserializer
 {
+    public int SchemaVersion => 1;
+
+    public Version MinimumVersion { get; } = new(8, 3, 27, 2214);
+
     public IReadOnlyList<RasClusterSnapshot> Deserialize(string standardOutput)
     {
         var records = keyValueDeserializer.Deserialize(standardOutput);

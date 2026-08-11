@@ -5,7 +5,7 @@
 @inject ILogger<UserAdministrationPanel> Logger
 @inject IJSRuntime JsRuntime
 
-<MudPaper Class="pa-4 app-data-table-card" Elevation="1">
+<MudPaper Class="pa-4" Elevation="1">
     @if (_loadingUsers)
     {
         <MudProgressLinear Indeterminate Color="Color.Primary"/>
@@ -13,137 +13,134 @@
     else
     {
         <MudTable T="UserAdministrationItem"
-                      Items="@_users"
-                      Hover
-                      Class="app-data-table">
-                <HeaderContent>
-                    <MudTh>User</MudTh>
-                    <MudTh Style="width: 112px;">Status</MudTh>
-                    <MudTh Style="width: 96px;">Role</MudTh>
-                    <MudTh>API key</MudTh>
-                    <MudTh Class="text-right" Style="width: 64px;">Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="User">
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                            <MudText Typo="Typo.body2">@context.DisplayName</MudText>
-                            @if (context.IsCurrentUser)
+                  Items="@_users"
+                  Hover>
+            <HeaderContent>
+                <MudTh>User</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>API key</MudTh>
+                <MudTh Class="text-right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="User">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                        @if (context.IsCurrentUser)
+                        {
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Color="Color.Info"
+                                     Variant="Variant.Outlined">
+                                You
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="@(context.IsBlocked ? Color.Error : Color.Success)"
+                             Variant="Variant.Outlined">
+                        @(context.IsBlocked ? "Blocked" : "Active")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Role">
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="@(context.IsAdmin ? Color.Primary : Color.Default)"
+                             Variant="Variant.Outlined">
+                        @(context.IsAdmin ? "Admin" : "User")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="API key">
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@(context.ApiKey is null
+                                           ? Icons.Material.Outlined.KeyOff
+                                           : Icons.Material.Outlined.Key)"
+                                 Size="Size.Small"
+                                 Color="@(context.ApiKey is null
+                                            ? Color.Default
+                                            : Color.Success)"/>
+                        <MudText Typo="Typo.body2"
+                                 Color="@(context.ApiKey is null
+                                            ? Color.Secondary
+                                            : Color.Default)">
+                            @(context.ApiKey is null ? "Not generated" : "Generated")
+                        </MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Actions" Class="text-right">
+                    @if (_updatingUserId == context.Id)
+                    {
+                        <MudProgressCircular Indeterminate
+                                             Size="Size.Small"
+                                             Color="Color.Primary"/>
+                    }
+                    else
+                    {
+                        <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                 Size="Size.Small"
+                                 Dense
+                                 AnchorOrigin="Origin.BottomRight"
+                                 TransformOrigin="Origin.TopRight"
+                                 Disabled="@(_updatingUserId is not null)"
+                                 AriaLabel="@($"Actions for {context.DisplayName}")">
+                            <MudMenuItem Icon="@(context.IsAdmin
+                                                   ? Icons.Material.Outlined.PersonOutline
+                                                   : Icons.Material.Outlined.AdminPanelSettings)"
+                                         Disabled="@context.IsCurrentUser"
+                                         OnClick="@(() => SetAdminAsync(context, !context.IsAdmin))">
+                                @(context.IsAdmin
+                                    ? "Revoke administrator"
+                                    : "Grant administrator")
+                            </MudMenuItem>
+
+                            <MudMenuItem Icon="@(context.IsBlocked
+                                                   ? Icons.Material.Outlined.LockOpen
+                                                   : Icons.Material.Outlined.Block)"
+                                         IconColor="@(context.IsBlocked
+                                                        ? Color.Success
+                                                        : Color.Error)"
+                                         Disabled="@context.IsCurrentUser"
+                                         OnClick="@(() => SetBlockedAsync(context, !context.IsBlocked))">
+                                @(context.IsBlocked ? "Unblock user" : "Block user")
+                            </MudMenuItem>
+
+                            <MudDivider/>
+
+                            @if (context.ApiKey is not null)
                             {
-                                <MudChip T="string"
-                                         Size="Size.Small"
-                                         Color="Color.Info"
-                                         Variant="Variant.Outlined">
-                                    You
-                                </MudChip>
+                                <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy"
+                                             OnClick="@(() => CopyApiKeyAsync(context))">
+                                    Copy API key
+                                </MudMenuItem>
                             }
-                        </MudStack>
-                    </MudTd>
-                    <MudTd DataLabel="Status" Style="width: 112px;">
-                        <MudChip T="string"
-                                 Size="Size.Small"
-                                 Color="@(context.IsBlocked ? Color.Error : Color.Success)"
-                                 Variant="Variant.Outlined"
-                                 Class="app-status-chip">
-                            @(context.IsBlocked ? "Blocked" : "Active")
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Role" Style="width: 96px;">
-                        <MudChip T="string"
-                                 Size="Size.Small"
-                                 Color="@(context.IsAdmin ? Color.Primary : Color.Default)"
-                                 Variant="Variant.Outlined"
-                                 Class="app-role-chip">
-                            @(context.IsAdmin ? "Admin" : "User")
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="API key">
-                        <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@(context.ApiKey is null
-                                               ? Icons.Material.Outlined.KeyOff
-                                               : Icons.Material.Outlined.Key)"
-                                     Size="Size.Small"
-                                     Color="@(context.ApiKey is null
-                                                ? Color.Default
-                                                : Color.Success)"/>
-                            <MudText Typo="Typo.body2"
-                                     Color="@(context.ApiKey is null
-                                                ? Color.Secondary
-                                                : Color.Default)">
-                                @(context.ApiKey is null ? "Not generated" : "Generated")
-                            </MudText>
-                        </MudStack>
-                    </MudTd>
-                    <MudTd DataLabel="Actions" Class="text-right" Style="width: 64px;">
-                        @if (_updatingUserId == context.Id)
-                        {
-                            <MudProgressCircular Indeterminate
-                                                 Size="Size.Small"
-                                                 Color="Color.Primary"/>
-                        }
-                        else
-                        {
-                            <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
-                                     Size="Size.Small"
-                                     Dense
-                                     AnchorOrigin="Origin.BottomRight"
-                                     TransformOrigin="Origin.TopRight"
-                                     Disabled="@(_updatingUserId is not null)"
-                                     AriaLabel="@($"Actions for {context.DisplayName}")">
-                                <MudMenuItem Icon="@(context.IsAdmin
-                                                       ? Icons.Material.Outlined.PersonOutline
-                                                       : Icons.Material.Outlined.AdminPanelSettings)"
-                                             Disabled="@context.IsCurrentUser"
-                                             OnClick="@(() => SetAdminAsync(context, !context.IsAdmin))">
-                                    @(context.IsAdmin
-                                        ? "Revoke administrator"
-                                        : "Grant administrator")
+
+                            <MudMenuItem Icon="@Icons.Material.Outlined.Key"
+                                         OnClick="@(() => GenerateApiKeyAsync(context))">
+                                @(context.ApiKey is null
+                                    ? "Generate API key"
+                                    : "Regenerate API key")
+                            </MudMenuItem>
+
+                            @if (context.ApiKey is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Outlined.KeyOff"
+                                             IconColor="Color.Error"
+                                             OnClick="@(() => ClearApiKeyAsync(context))">
+                                    Revoke API key
                                 </MudMenuItem>
-
-                                <MudMenuItem Icon="@(context.IsBlocked
-                                                       ? Icons.Material.Outlined.LockOpen
-                                                       : Icons.Material.Outlined.Block)"
-                                             IconColor="@(context.IsBlocked
-                                                            ? Color.Success
-                                                            : Color.Error)"
-                                             Disabled="@context.IsCurrentUser"
-                                             OnClick="@(() => SetBlockedAsync(context, !context.IsBlocked))">
-                                    @(context.IsBlocked ? "Unblock user" : "Block user")
-                                </MudMenuItem>
-
-                                <MudDivider/>
-
-                                @if (context.ApiKey is not null)
-                                {
-                                    <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy"
-                                                 OnClick="@(() => CopyApiKeyAsync(context))">
-                                        Copy API key
-                                    </MudMenuItem>
-                                }
-
-                                <MudMenuItem Icon="@Icons.Material.Outlined.Key"
-                                             OnClick="@(() => GenerateApiKeyAsync(context))">
-                                    @(context.ApiKey is null
-                                        ? "Generate API key"
-                                        : "Regenerate API key")
-                                </MudMenuItem>
-
-                                @if (context.ApiKey is not null)
-                                {
-                                    <MudMenuItem Icon="@Icons.Material.Outlined.KeyOff"
-                                                 IconColor="Color.Error"
-                                                 OnClick="@(() => ClearApiKeyAsync(context))">
-                                        Revoke API key
-                                    </MudMenuItem>
-                                }
-                            </MudMenu>
-                        }
-                    </MudTd>
-                </RowTemplate>
-                <NoRecordsContent>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        No users found.
-                    </MudText>
-                </NoRecordsContent>
+                            }
+                        </MudMenu>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    No users found.
+                </MudText>
+            </NoRecordsContent>
         </MudTable>
     }
 </MudPaper>

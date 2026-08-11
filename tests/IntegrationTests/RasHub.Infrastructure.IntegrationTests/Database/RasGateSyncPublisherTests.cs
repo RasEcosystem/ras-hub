@@ -141,6 +141,48 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         Assert.Null(storedGate.LastSeenAt);
     }
 
+    [Fact]
+    public async Task Remove_cluster_when_revision_changed_rolls_back_removal()
+    {
+        var rasGate = RasGateTestData.Create();
+        var existingCluster = RasClusterTestData.Create(rasGate.Id);
+
+        await using (var seedDb = _database.CreateContext())
+        {
+            seedDb.AddRange(rasGate, existingCluster);
+            await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var publicationDb = _database.CreateContext();
+        _ = await publicationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        await ChangeGateAsync(rasGate.Id, "reconfigured");
+        var publisher = CreatePublisher(publicationDb);
+
+        var published = await publisher.TryRemoveClusterAsync(
+            rasGate.Id,
+            1,
+            existingCluster.ExternalId,
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+
+        await using var verificationDb = _database.CreateContext();
+        var storedCluster = await verificationDb.RasClusters.SingleAsync(
+            item => item.RasGateId == rasGate.Id &&
+                    item.ExternalId == existingCluster.ExternalId,
+            TestContext.Current.CancellationToken);
+        var storedGate = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(storedCluster.IsDeleted);
+        Assert.Null(storedGate.LastSeenAt);
+    }
+
     private async Task SeedGateAsync(RasGate rasGate)
     {
         await using var db = _database.CreateContext();

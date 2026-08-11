@@ -85,4 +85,92 @@ public sealed partial class RasGatesApiTests
         Assert.Equal("forbidden", GetErrorCode(json));
         AssertTraceId(response);
     }
+
+    [Fact]
+    public async Task Non_admin_api_key_cannot_remove_cluster()
+    {
+        var apiKey = $"non-admin-{Guid.NewGuid():N}";
+        var email = $"non-admin-{Guid.NewGuid():N}@example.test";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var result = await userManager.CreateAsync(new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                ApiKey = apiKey
+            });
+            Assert.True(result.Succeeded);
+        }
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            ApiKeyAuthenticationDefaults.HeaderName,
+            apiKey);
+
+        using var response = await client.DeleteAsync(
+            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("forbidden", GetErrorCode(json));
+        AssertTraceId(response);
+    }
+
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    public async Task Non_admin_api_key_cannot_create_or_update_cluster(
+        string method)
+    {
+        var apiKey = $"non-admin-{Guid.NewGuid():N}";
+        var email = $"non-admin-{Guid.NewGuid():N}@example.test";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var result = await userManager.CreateAsync(new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                ApiKey = apiKey
+            });
+            Assert.True(result.Succeeded);
+        }
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            ApiKeyAuthenticationDefaults.HeaderName,
+            apiKey);
+        var gateId = Guid.NewGuid();
+        var path = $"/api/v1/ras-gates/{gateId}/clusters";
+        object body;
+
+        if (method == "PUT")
+        {
+            path += $"/{Guid.NewGuid()}";
+            body = new UpdateRasClusterRequest("Updated");
+        }
+        else
+        {
+            body = new CreateRasClusterRequest("localhost", 1587);
+        }
+
+        using var request = new HttpRequestMessage(new HttpMethod(method), path)
+        {
+            Content = JsonContent.Create(body)
+        };
+        using var response = await client.SendAsync(
+            request,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("forbidden", GetErrorCode(json));
+        AssertTraceId(response);
+    }
 }

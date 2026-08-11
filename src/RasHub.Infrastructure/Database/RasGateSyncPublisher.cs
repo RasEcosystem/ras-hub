@@ -77,6 +77,28 @@ public sealed class RasGateSyncPublisher(
         return await TrySaveAsync(cancellationToken);
     }
 
+    public async Task<bool> TryRemoveClusterAsync(
+        Guid rasGateId,
+        long expectedConfigurationRevision,
+        Guid clusterId,
+        DateTime observedAt,
+        CancellationToken cancellationToken)
+    {
+        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
+
+        if (rasGate is null)
+            return false;
+
+        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
+        await snapshotStore.RemoveAsync(
+            rasGateId,
+            clusterId,
+            cancellationToken);
+        rasGate.LastSeenAt = observedAt;
+
+        return await TrySaveAsync(cancellationToken);
+    }
+
     private async Task<RasGate?> GetTrackedGateAsync(
         Guid rasGateId,
         CancellationToken cancellationToken)

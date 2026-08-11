@@ -5,22 +5,20 @@ using RasHub.Infrastructure.RasGates.Rac.Adapters;
 namespace RasHub.Infrastructure.RasGates.Rac.Clusters;
 
 public sealed class RacClusterInfoV1Adapter(
-    RacClusterOutputDeserializer deserializer)
+    RacClusterOutputDeserializerResolver deserializerResolver)
     : IRacResourceAdapter<RasClusterSnapshot>
 {
-    private static readonly Version BaselineVersion = new(8, 3, 27, 2214);
-    private static readonly Version NextPlatformFamilyVersion = new(8, 4, 0, 0);
-
     public string Resource => "clusters";
 
     public string Operation => "info";
 
     public int SchemaVersion => 1;
 
-    public bool Supports(Version racVersion)
+    public Version MinimumVersion { get; } = new(8, 3, 27, 2214);
+
+    public int GetSchemaVersion(Version racVersion)
     {
-        return racVersion >= BaselineVersion &&
-               racVersion < NextPlatformFamilyVersion;
+        return deserializerResolver.Resolve(racVersion).SchemaVersion;
     }
 
     public IReadOnlyList<string> CreateCommand(Guid? externalId = null)
@@ -37,20 +35,13 @@ public sealed class RacClusterInfoV1Adapter(
     {
         var clusterId = GetRequiredExternalId(externalId);
 
-        if (!Supports(racVersion))
-            throw new ArgumentOutOfRangeException(
-                nameof(racVersion),
-                racVersion,
-                "The RAC version is not supported by this adapter.");
+        RacExecutionGuard.EnsureSucceeded(
+            racVersion,
+            MinimumVersion,
+            execution,
+            "cluster info");
 
-        if (execution.TimedOut)
-            throw new RasGateClientException(
-                "RAC cluster info command timed out.");
-
-        if (execution.ExitCode != 0)
-            throw new RasGateClientException(
-                $"RAC cluster info command failed with exit code {execution.ExitCode}.");
-
+        var deserializer = deserializerResolver.Resolve(racVersion);
         var items = deserializer.Deserialize(execution.StandardOutput);
 
         if (items.Count != 1)
@@ -63,7 +54,7 @@ public sealed class RacClusterInfoV1Adapter(
 
         return new RasResourceSnapshot<RasClusterSnapshot>
         {
-            SchemaVersion = SchemaVersion,
+            SchemaVersion = deserializer.SchemaVersion,
             SourceVersion = racVersion.ToString(),
             Completeness = SnapshotCompleteness.Complete,
             Items = items
@@ -79,5 +70,4 @@ public sealed class RacClusterInfoV1Adapter(
             "A non-empty cluster external ID is required.",
             nameof(externalId));
     }
-
 }

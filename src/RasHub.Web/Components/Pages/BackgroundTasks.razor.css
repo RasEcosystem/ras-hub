@@ -1,12 +1,3 @@
-.monitor-updated {
-    white-space: nowrap;
-}
-
-.lane-card {
-    height: 100%;
-    border-top: 3px solid var(--mud-palette-primary);
-}
-
 .task-key {
     display: -webkit-box;
     max-width: 220px;
@@ -19,24 +10,4 @@
     font-family: monospace;
     font-size: .75rem;
     line-height: 1.25;
-}
-
-.state-summary {
-    flex-wrap: wrap;
-}
-
-.executions-card {
-    width: 100%;
-    min-width: 0;
-}
-
-.executions-table {
-    width: 100%;
-}
-
-@media (max-width: 600px) {
-    .executions-header {
-        align-items: flex-start !important;
-        flex-direction: column !important;
-    }
 }

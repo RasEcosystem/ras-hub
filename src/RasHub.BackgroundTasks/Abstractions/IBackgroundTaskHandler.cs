@@ -10,3 +10,14 @@ public interface IBackgroundTaskHandler<in TTask>
         TTask task,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+///     Contains business logic for one result-producing background task type.
+/// </summary>
+public interface IBackgroundTaskHandler<in TTask, TResult>
+    where TTask : IBackgroundTask<TResult>
+{
+    Task<TResult> ExecuteAsync(
+        TTask task,
+        CancellationToken cancellationToken);
+}

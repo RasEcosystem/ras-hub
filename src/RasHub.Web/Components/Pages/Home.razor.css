@@ -1,7 +1,3 @@
-.health-panel {
-    min-width: 0;
-}
-
 .health-header {
     display: flex;
     align-items: flex-start;

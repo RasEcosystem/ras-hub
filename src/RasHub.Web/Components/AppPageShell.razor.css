@@ -50,6 +50,10 @@
     gap: .75rem;
 }
 
+.app-page-title-row ::deep h1:focus {
+    outline: none;
+}
+
 .app-page-header-actions {
     display: flex;
     align-items: center;
@@ -80,7 +84,7 @@
         justify-content: flex-start;
     }
 
-    .app-page-title-row h1 {
+    .app-page-title-row ::deep h1 {
         font-size: 2rem;
         line-height: 1.15;
     }

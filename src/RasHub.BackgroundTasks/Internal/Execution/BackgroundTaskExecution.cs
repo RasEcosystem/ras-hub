@@ -12,8 +12,8 @@ internal sealed class BackgroundTaskExecution
 
     private readonly CancellationTokenSource _cancellation = new();
     private readonly TaskCompletionSource<BackgroundTaskResult> _completion;
-    private readonly Action<BackgroundTaskExecution> _terminalFinalizer;
     private readonly object _sync = new();
+    private readonly Action<BackgroundTaskExecution> _terminalFinalizer;
     private int _attemptCount;
     private bool _cancellationRequested;
     private DateTimeOffset? _completedAt;
@@ -119,7 +119,9 @@ internal sealed class BackgroundTaskExecution
         }
     }
 
-    public bool TrySucceed(DateTimeOffset completedAt)
+    public bool TrySucceed(
+        DateTimeOffset completedAt,
+        object? value = null)
     {
         BackgroundTaskResult result;
 
@@ -142,7 +144,8 @@ internal sealed class BackgroundTaskExecution
                     Id,
                     BackgroundTaskOutcome.Succeeded,
                     _attemptCount,
-                    null);
+                    null,
+                    value);
             }
         }
 
@@ -258,7 +261,8 @@ internal sealed class BackgroundTaskExecution
                     Id,
                     BackgroundTaskOutcome.Failed,
                     _attemptCount,
-                    exception);
+                    exception,
+                    null);
             }
         }
 
@@ -297,6 +301,7 @@ internal sealed class BackgroundTaskExecution
             Id,
             BackgroundTaskOutcome.Canceled,
             _attemptCount,
+            null,
             null);
     }
 

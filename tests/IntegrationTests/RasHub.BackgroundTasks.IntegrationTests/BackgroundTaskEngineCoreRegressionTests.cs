@@ -148,7 +148,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         {
             var engine = GetEngine(host);
             var handle = engine.Enqueue(
-                new CancellationFanOutTask(0, BlocksCallback: true),
+                new CancellationFanOutTask(0, true),
                 new BackgroundTaskOptions { Timeout = null });
             await probe.AllStarted.Task.WaitAsync(
                 TimeSpan.FromSeconds(5),
@@ -205,10 +205,10 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var engine = GetEngine(host);
         var options = new BackgroundTaskOptions { Timeout = null };
         var blocking = engine.Enqueue(
-            new CancellationFanOutTask(0, BlocksCallback: true),
+            new CancellationFanOutTask(0, true),
             options);
         var observing = engine.Enqueue(
-            new CancellationFanOutTask(1, BlocksCallback: false),
+            new CancellationFanOutTask(1, false),
             options);
         await probe.AllStarted.Task.WaitAsync(
             TimeSpan.FromSeconds(5),
@@ -289,9 +289,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
             while (engine.GetTask(handle.Id)?.State !=
                    BackgroundTaskState.Pending)
-            {
                 await Task.Delay(10, pendingTimeout.Token);
-            }
 
             Assert.True(engine.Cancel(handle.Id));
             await probe.CallbackEntered.Task.WaitAsync(
@@ -550,15 +548,11 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                 await start.Task;
 
                 while (!scanningCancellation.IsCancellationRequested)
-                {
                     foreach (var snapshot in engine.GetTasks())
-                    {
                         if (snapshot.Id != filler.Id &&
                             engine.Cancel(snapshot.Id))
                             Interlocked.Increment(
                                 ref canceledRejectedAdmissions);
-                    }
-                }
             }))
             .ToArray();
 
@@ -570,7 +564,6 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                 for (var attempt = 0;
                      attempt < attemptsPerProducer;
                      attempt++)
-                {
                     try
                     {
                         var handle = engine.Enqueue(
@@ -581,7 +574,6 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                     catch (BackgroundTaskRejectedException)
                     {
                     }
-                }
             }))
             .ToArray();
 
@@ -615,19 +607,16 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                 instrument.Name == "rashub.background_tasks.canceled")
                 meterListener.EnableMeasurementEvents(instrument);
         };
-        listener.SetMeasurementEventCallback<long>(
-            (instrument, measurement, tags, state) =>
-            {
-                foreach (var tag in tags)
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
+        {
+            foreach (var tag in tags)
+                if (tag.Key == "task.type" &&
+                    Equals(tag.Value, taskType.FullName))
                 {
-                    if (tag.Key == "task.type" &&
-                        Equals(tag.Value, taskType.FullName))
-                    {
-                        recordMeasurement();
-                        break;
-                    }
+                    recordMeasurement();
+                    break;
                 }
-            });
+        });
         listener.Start();
         return listener;
     }
@@ -719,8 +708,7 @@ internal sealed class CancellationFanOutTaskHandler(
         CancellationFanOutTask task,
         CancellationToken cancellationToken)
     {
-        using var registration = cancellationToken.Register(
-            () => probe.OnCancellation(task));
+        using var registration = cancellationToken.Register(() => probe.OnCancellation(task));
         probe.MarkStarted();
         await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }
@@ -752,6 +740,11 @@ internal sealed class PendingCancellationProbe : IDisposable
     public TaskCompletionSource CallbackRegistered { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    public void Dispose()
+    {
+        _callbackRelease.Dispose();
+    }
+
     public void BlockCallback()
     {
         CallbackEntered.TrySetResult();
@@ -761,11 +754,6 @@ internal sealed class PendingCancellationProbe : IDisposable
     public void ReleaseCallback()
     {
         _callbackRelease.Set();
-    }
-
-    public void Dispose()
-    {
-        _callbackRelease.Dispose();
     }
 }
 
@@ -783,9 +771,8 @@ internal sealed class ThrowingCancellationCallbackTaskHandler(
         ThrowingCancellationCallbackTask task,
         CancellationToken cancellationToken)
     {
-        using var registration = cancellationToken.Register(
-            static () => throw new InvalidOperationException(
-                "Cancellation callback failed."));
+        using var registration = cancellationToken.Register(static () => throw new InvalidOperationException(
+            "Cancellation callback failed."));
         probe.Started.TrySetResult();
         await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
     }

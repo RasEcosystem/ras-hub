@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Models;
 
 namespace RasHub.BackgroundTasks.IntegrationTests;

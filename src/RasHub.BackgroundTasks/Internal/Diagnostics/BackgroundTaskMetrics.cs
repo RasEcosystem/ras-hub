@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using RasHub.BackgroundTasks;
 using RasHub.BackgroundTasks.Internal.Execution;
 using RasHub.BackgroundTasks.Internal.Processing;
 using RasHub.BackgroundTasks.Internal.Queues;
@@ -13,8 +12,8 @@ namespace RasHub.BackgroundTasks.Internal.Diagnostics;
 /// </summary>
 internal sealed class BackgroundTaskMetrics : IDisposable
 {
-    private readonly Histogram<double> _attemptDuration;
     private readonly UpDownCounter<long> _active;
+    private readonly Histogram<double> _attemptDuration;
     private readonly Counter<long> _canceled;
     private readonly BackgroundTaskConcurrencyGate _concurrencyGate;
     private readonly Counter<long> _deduplicated;
@@ -25,15 +24,16 @@ internal sealed class BackgroundTaskMetrics : IDisposable
     private readonly Meter _meter = new(
         BackgroundTaskTelemetry.MeterName,
         "1.0.0");
-    private readonly BackgroundTaskRescheduler _rescheduler;
-    private readonly BackgroundTaskRuntimeState _runtimeState;
+
     private readonly IBackgroundTaskQueue _queue;
-    private readonly TimeProvider _timeProvider;
 
     private readonly Counter<long> _rejected;
+    private readonly BackgroundTaskRescheduler _rescheduler;
     private readonly Counter<long> _retried;
+    private readonly BackgroundTaskRuntimeState _runtimeState;
     private readonly Counter<long> _started;
     private readonly Counter<long> _succeeded;
+    private readonly TimeProvider _timeProvider;
 
     public BackgroundTaskMetrics(
         IBackgroundTaskQueue queue,

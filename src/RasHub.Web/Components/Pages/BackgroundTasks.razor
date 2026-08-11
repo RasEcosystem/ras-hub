@@ -14,9 +14,10 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="Tasks"
               Subtitle="Live workload, workers and task execution state"
-              Icon="@Icons.Material.Filled.DoubleArrow">
+              Icon="@Icons.Material.Filled.DoubleArrow"
+              Class="background-tasks-page">
     <HeaderActions>
-        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="monitor-updated">
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: nowrap;">
             Updated @LastUpdated.ToLocalTime().ToString("HH:mm:ss")
         </MudText>
         <MudIconButton Icon="@Icons.Material.Outlined.Refresh" OnClick="Refresh" aria-label="Refresh"/>
@@ -121,7 +122,7 @@
                 </MudStack>
 
                 <MudTable Items="@VisibleTasks" Dense Hover FixedHeader Height="460px"
-                          Breakpoint="Breakpoint.Md" Class="executions-table">
+                          Breakpoint="Breakpoint.Md">
                     <HeaderContent>
                         <MudTh>Task</MudTh>
                         <MudTh>Lane</MudTh>

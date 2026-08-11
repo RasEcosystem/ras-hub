@@ -19,9 +19,10 @@ internal sealed class BackgroundTaskRescheduler
         (DateTimeOffset DueAt, long Sequence)> _scheduled =
         new();
 
-    private long _nextSequence;
     private readonly object _sync = new();
     private readonly TimeProvider _timeProvider;
+
+    private long _nextSequence;
 
     public BackgroundTaskRescheduler(
         IBackgroundTaskQueue queue,

@@ -137,6 +137,42 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Remove_soft_deletes_requested_cluster_only()
+    {
+        var rasGate = RasGateTestData.Create();
+        var first = RasClusterTestData.Create(rasGate.Id, name: "First");
+        var second = RasClusterTestData.Create(rasGate.Id, name: "Second");
+
+        await using (var db = _database.CreateContext())
+        {
+            db.AddRange(rasGate, first, second);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var store = new RasClusterSnapshotStore(db);
+            await store.RemoveAsync(
+                rasGate.Id,
+                first.ExternalId,
+                TestContext.Current.CancellationToken);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var db = _database.CreateContext())
+        {
+            var active = await db.RasClusters
+                .SingleAsync(TestContext.Current.CancellationToken);
+            var removed = await db.RasClusters
+                .IgnoreQueryFilters()
+                .SingleAsync(
+                    cluster => cluster.ExternalId == first.ExternalId,
+                    TestContext.Current.CancellationToken);
+
+            Assert.Equal(second.ExternalId, active.ExternalId);
+            Assert.True(removed.IsDeleted);
+            Assert.NotNull(removed.DeletedAt);
+        }
+    }
+
     private static RasClusterSnapshot CreateSnapshot(Guid externalId, string name)
     {
         return new RasClusterSnapshot

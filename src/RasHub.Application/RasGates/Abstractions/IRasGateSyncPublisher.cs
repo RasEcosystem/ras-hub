@@ -24,4 +24,11 @@ public interface IRasGateSyncPublisher
         RasClusterSnapshot snapshot,
         DateTime observedAt,
         CancellationToken cancellationToken);
+
+    Task<bool> TryRemoveClusterAsync(
+        Guid rasGateId,
+        long expectedConfigurationRevision,
+        Guid clusterId,
+        DateTime observedAt,
+        CancellationToken cancellationToken);
 }

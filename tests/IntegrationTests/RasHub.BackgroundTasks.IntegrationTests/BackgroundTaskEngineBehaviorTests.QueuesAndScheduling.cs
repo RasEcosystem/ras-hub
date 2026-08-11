@@ -381,19 +381,18 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             }
         };
 
-        listener.SetMeasurementEventCallback<double>(
-            (_, _, tags, _) =>
-            {
-                if (GetTag(tags, "task.type") != keyedTaskType ||
-                    Interlocked.CompareExchange(
-                        ref blockedMeasurement,
-                        1,
-                        0) != 0)
-                    return;
+        listener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
+        {
+            if (GetTag(tags, "task.type") != keyedTaskType ||
+                Interlocked.CompareExchange(
+                    ref blockedMeasurement,
+                    1,
+                    0) != 0)
+                return;
 
-                durationReached.TrySetResult();
-                durationRelease.Wait(TimeSpan.FromSeconds(5));
-            });
+            durationReached.TrySetResult();
+            durationRelease.Wait(TimeSpan.FromSeconds(5));
+        });
         listener.Start();
 
         using var host = CreateHost(
@@ -496,19 +495,18 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                     meterListener.EnableMeasurementEvents(instrument);
             }
         };
-        listener.SetMeasurementEventCallback<double>(
-            (_, _, tags, _) =>
-            {
-                if (GetTag(tags, "task.type") != retryTaskType ||
-                    Interlocked.CompareExchange(
-                        ref blockedMeasurement,
-                        1,
-                        0) != 0)
-                    return;
+        listener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
+        {
+            if (GetTag(tags, "task.type") != retryTaskType ||
+                Interlocked.CompareExchange(
+                    ref blockedMeasurement,
+                    1,
+                    0) != 0)
+                return;
 
-                attemptDurationReached.TrySetResult();
-                attemptDurationRelease.Wait(TimeSpan.FromSeconds(5));
-            });
+            attemptDurationReached.TrySetResult();
+            attemptDurationRelease.Wait(TimeSpan.FromSeconds(5));
+        });
         listener.Start();
 
         using var host = CreateHost(
@@ -836,8 +834,8 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
     private sealed class KeyedOrderProbe
     {
-        private readonly object _sync = new();
         private readonly List<int> _startOrder = [];
+        private readonly object _sync = new();
 
         public TaskCompletionSource FirstStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);

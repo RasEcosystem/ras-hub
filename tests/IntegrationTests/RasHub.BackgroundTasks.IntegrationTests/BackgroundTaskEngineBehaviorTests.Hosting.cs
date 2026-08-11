@@ -3,7 +3,6 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Configuration;
 using RasHub.BackgroundTasks.Models;
 
 namespace RasHub.BackgroundTasks.IntegrationTests;
@@ -253,17 +252,13 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             probe.ReleaseCallback();
 
             if (stopTask is not null)
-            {
                 await stopTask.WaitAsync(
                     TimeSpan.FromSeconds(5),
                     cancellationToken);
-            }
             else
-            {
                 await host.StopAsync(CancellationToken.None).WaitAsync(
                     TimeSpan.FromSeconds(5),
                     cancellationToken);
-            }
         }
     }
 
@@ -339,8 +334,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                 TimeSpan.FromSeconds(5),
                 cancellationToken);
 
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-                async () => await executeTask);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await executeTask);
             Assert.Equal("Expected controlled timer failure.", exception.Message);
             Assert.Equal(
                 BackgroundTaskOutcome.Canceled,
@@ -359,17 +353,13 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             probe.ReleaseHandler();
 
             if (stopTask is not null)
-            {
                 await stopTask.WaitAsync(
                     TimeSpan.FromSeconds(5),
                     cancellationToken);
-            }
             else
-            {
                 await host.StopAsync(CancellationToken.None).WaitAsync(
                     TimeSpan.FromSeconds(5),
                     cancellationToken);
-            }
         }
     }
 
@@ -390,8 +380,8 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             options.MaintenanceWorkerCount = maintenanceWorkers;
         });
 
-        await Assert.ThrowsAsync<OptionsValidationException>(
-            () => host.StartAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            host.StartAsync(TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -403,8 +393,8 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         using var host = CreateHost(configure: options =>
             options.RegistryCleanupInterval = TimeSpan.FromTicks(intervalTicks));
 
-        await Assert.ThrowsAsync<OptionsValidationException>(
-            () => host.StartAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            host.StartAsync(TestContext.Current.CancellationToken));
     }
 
     private static Task<HealthReport> GetBackgroundTaskHealthAsync(
@@ -454,10 +444,10 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
     private sealed class CleanupFaultTimeProvider
         : TimeProvider,
-          IDisposable
+            IDisposable
     {
-        private ControlledOneShotTimer? _timer;
         private int _failNextUtcNow;
+        private ControlledOneShotTimer? _timer;
 
         public TaskCompletionSource TimerCreationStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -476,12 +466,10 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         public override DateTimeOffset GetUtcNow()
         {
             if (Interlocked.Exchange(ref _failNextUtcNow, 0) == 1)
-            {
                 throw new InvalidOperationException(
                     "Expected controlled timer failure.");
-            }
 
-            return TimeProvider.System.GetUtcNow();
+            return System.GetUtcNow();
         }
 
         public override ITimer CreateTimer(
@@ -592,6 +580,11 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         public TaskCompletionSource ScopeDisposed { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public void Dispose()
+        {
+            _callbackRelease.Dispose();
+        }
+
         public void BlockCallback()
         {
             CallbackEntered.TrySetResult();
@@ -601,11 +594,6 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         public void ReleaseCallback()
         {
             _callbackRelease.Set();
-        }
-
-        public void Dispose()
-        {
-            _callbackRelease.Dispose();
         }
     }
 

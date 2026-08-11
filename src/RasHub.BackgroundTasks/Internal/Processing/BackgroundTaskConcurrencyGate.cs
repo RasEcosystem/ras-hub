@@ -244,7 +244,9 @@ internal sealed class BackgroundTaskConcurrencyGate(
         OwnerPhase phase)
     {
         public long Generation { get; set; } = 1;
+
         public BackgroundTaskExecution Owner { get; set; } = owner;
+
         public OwnerPhase Phase { get; set; } = phase;
 
         public LinkedList<BackgroundTaskExecution> Waiters { get; } = [];

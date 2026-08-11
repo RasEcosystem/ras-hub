@@ -85,10 +85,12 @@ internal sealed class InMemoryBackgroundTaskQueue : IBackgroundTaskQueue
         private readonly Channel<byte> _availableItems = CreateAvailabilityChannel();
         private readonly int _capacity;
         private readonly LinkedList<QueueEntry> _items = [];
+
         private readonly Dictionary<
             BackgroundTaskExecution,
             LinkedListNode<QueueEntry>> _nodes =
             new(ReferenceEqualityComparer.Instance);
+
         private readonly object _sync = new();
         private readonly TimeProvider _timeProvider;
         private int _highWaterMark;

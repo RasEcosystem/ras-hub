@@ -5,6 +5,8 @@ using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.RasGates.Rac;
 using RasHub.Infrastructure.RasGates.Rac.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.RasGates.Client;
 
@@ -22,7 +24,21 @@ public sealed class HttpRasGateClient : IRasGateClient
     private readonly RacResourceAdapterResolver<RasClusterSnapshot>
         _clusterAdapterResolver;
 
+    private readonly RacResultCommandAdapterResolver<
+        RasClusterCreationOptions,
+        Guid> _clusterInsertAdapterResolver;
+
+    private readonly RacCommandAdapterResolver<RemoveRasClusterCommand>
+        _clusterRemoveAdapterResolver;
+
+    private readonly RacCommandAdapterResolver<UpdateRasClusterCommand>
+        _clusterUpdateAdapterResolver;
+
+    private readonly long _configurationRevision;
+
     private readonly HttpClient _httpClient;
+    private readonly RacVersionCache _racVersionCache;
+    private readonly Guid _rasGateId;
     private readonly RacVersionParser _versionParser;
     private Version? _racVersion;
 
@@ -30,16 +46,31 @@ public sealed class HttpRasGateClient : IRasGateClient
         HttpClient httpClient,
         Uri baseAddress,
         string apiKey,
+        Guid rasGateId,
+        long configurationRevision,
+        RacVersionCache racVersionCache,
         RacVersionParser versionParser,
         RacCapabilityResolver capabilityResolver,
-        RacResourceAdapterResolver<RasClusterSnapshot> clusterAdapterResolver)
+        RacResourceAdapterResolver<RasClusterSnapshot> clusterAdapterResolver,
+        RacResultCommandAdapterResolver<RasClusterCreationOptions, Guid>
+            clusterInsertAdapterResolver,
+        RacCommandAdapterResolver<UpdateRasClusterCommand>
+            clusterUpdateAdapterResolver,
+        RacCommandAdapterResolver<RemoveRasClusterCommand>
+            clusterRemoveAdapterResolver)
     {
         _httpClient = httpClient;
         _baseAddress = baseAddress;
         _apiKey = apiKey;
+        _rasGateId = rasGateId;
+        _configurationRevision = configurationRevision;
+        _racVersionCache = racVersionCache;
         _versionParser = versionParser;
         _capabilityResolver = capabilityResolver;
         _clusterAdapterResolver = clusterAdapterResolver;
+        _clusterInsertAdapterResolver = clusterInsertAdapterResolver;
+        _clusterUpdateAdapterResolver = clusterUpdateAdapterResolver;
+        _clusterRemoveAdapterResolver = clusterRemoveAdapterResolver;
     }
 
     public async Task<RasGateStatus> GetStatusAsync(
@@ -84,7 +115,7 @@ public sealed class HttpRasGateClient : IRasGateClient
             adapter.CreateCommand(),
             cancellationToken);
 
-        return adapter.Parse(racVersion, execution);
+        return ParseRacOutput(() => adapter.Parse(racVersion, execution));
     }
 
     public async Task<RasClusterSnapshot> GetClusterAsync(
@@ -99,10 +130,10 @@ public sealed class HttpRasGateClient : IRasGateClient
         var execution = await ExecuteRacAsync(
             adapter.CreateCommand(clusterId),
             cancellationToken);
-        var snapshot = adapter.Parse(
+        var snapshot = ParseRacOutput(() => adapter.Parse(
             racVersion,
             execution,
-            clusterId);
+            clusterId));
 
         if (snapshot.Completeness != SnapshotCompleteness.Complete ||
             snapshot.Items.Count != 1)
@@ -112,11 +143,77 @@ public sealed class HttpRasGateClient : IRasGateClient
         return snapshot.Items[0];
     }
 
+    public async Task RemoveClusterAsync(
+        Guid clusterId,
+        string? clusterUser,
+        string? clusterPassword,
+        CancellationToken cancellationToken)
+    {
+        var racVersion = await GetRacVersionAsync(cancellationToken);
+        var adapter = _clusterRemoveAdapterResolver.Resolve(
+            "clusters",
+            "remove",
+            racVersion);
+        var command = new RemoveRasClusterCommand(
+            clusterId,
+            clusterUser,
+            clusterPassword);
+        var execution = await ExecuteRacAsync(
+            adapter.CreateCommand(command),
+            cancellationToken);
+
+        adapter.Validate(racVersion, execution, command);
+    }
+
+    public async Task<Guid> CreateClusterAsync(
+        RasClusterCreationOptions options,
+        CancellationToken cancellationToken)
+    {
+        var racVersion = await GetRacVersionAsync(cancellationToken);
+        var adapter = _clusterInsertAdapterResolver.Resolve(
+            "clusters",
+            "insert",
+            racVersion);
+        var execution = await ExecuteRacAsync(
+            adapter.CreateCommand(options),
+            cancellationToken);
+
+        return ParseRacOutput(() =>
+            adapter.Parse(racVersion, execution, options));
+    }
+
+    public async Task UpdateClusterAsync(
+        Guid clusterId,
+        RasClusterUpdateOptions options,
+        CancellationToken cancellationToken)
+    {
+        var racVersion = await GetRacVersionAsync(cancellationToken);
+        var adapter = _clusterUpdateAdapterResolver.Resolve(
+            "clusters",
+            "update",
+            racVersion);
+        var command = new UpdateRasClusterCommand(clusterId, options);
+        var execution = await ExecuteRacAsync(
+            adapter.CreateCommand(command),
+            cancellationToken);
+
+        adapter.Validate(racVersion, execution, command);
+    }
+
     private async Task<Version> GetRacVersionAsync(
         CancellationToken cancellationToken)
     {
         if (_racVersion is not null)
             return _racVersion;
+
+        if (_racVersionCache.TryGet(
+                _rasGateId,
+                _configurationRevision,
+                out var cachedVersion))
+        {
+            _racVersion = cachedVersion;
+            return cachedVersion;
+        }
 
         using var request = CreateRequest(HttpMethod.Get, "rac/status");
         var data = await SendAsync<RacStatusData>(request, cancellationToken);
@@ -125,7 +222,36 @@ public sealed class HttpRasGateClient : IRasGateClient
             throw new RasGateClientException("RAC is unavailable through RasGate.");
 
         _racVersion = _versionParser.Parse(data.Version);
+        _racVersionCache.Set(
+            _rasGateId,
+            _configurationRevision,
+            _racVersion);
         return _racVersion;
+    }
+
+    private T ParseRacOutput<T>(Func<T> parse)
+    {
+        try
+        {
+            return parse();
+        }
+        catch (RacOutputDeserializationException)
+        {
+            InvalidateRacVersion();
+            throw;
+        }
+        catch (RasGateClientException exception)
+            when (exception.InnerException is RacOutputDeserializationException)
+        {
+            InvalidateRacVersion();
+            throw;
+        }
+    }
+
+    private void InvalidateRacVersion()
+    {
+        _racVersion = null;
+        _racVersionCache.Remove(_rasGateId, _configurationRevision);
     }
 
     private async Task<RacExecutionResult> ExecuteRacAsync(
@@ -251,7 +377,7 @@ public sealed class HttpRasGateClient : IRasGateClient
 
     private sealed record RasGateApiResponse<T>
     {
-        public bool Success { get; init; }
+        public required bool Success { get; init; }
 
         public T? Data { get; init; }
 
@@ -260,35 +386,33 @@ public sealed class HttpRasGateClient : IRasGateClient
 
     private sealed record RasGateApiError
     {
-        // Keep init: System.Text.Json must populate this private transport DTO.
-        public string Code { get; init; } = string.Empty;
+        public required string Code { get; init; }
     }
 
     private sealed record RasGateStatusData
     {
-        // Keep init accessors: System.Text.Json must populate this private transport DTO.
-        public string InstanceName { get; init; } = string.Empty;
+        public required string InstanceName { get; init; }
 
-        public string Version { get; init; } = string.Empty;
+        public required string Version { get; init; }
     }
 
     private sealed record RacStatusData
     {
-        public bool Available { get; init; }
+        public required bool Available { get; init; }
 
-        public string? Version { get; init; }
+        public required string? Version { get; init; }
     }
 
     private sealed record ExecuteRacData
     {
-        public int? ExitCode { get; init; }
+        public required int? ExitCode { get; init; }
 
-        public string? StandardOutput { get; init; }
+        public required string? StandardOutput { get; init; }
 
-        public string? StandardError { get; init; }
+        public required string? StandardError { get; init; }
 
-        public long? DurationMilliseconds { get; init; }
+        public required long? DurationMilliseconds { get; init; }
 
-        public bool? TimedOut { get; init; }
+        public required bool? TimedOut { get; init; }
     }
 }

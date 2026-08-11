@@ -16,19 +16,24 @@ internal sealed class BackgroundTaskEngine :
     IBackgroundTaskEngine,
     IBackgroundTaskEngineLifecycle
 {
+    private readonly ConcurrentDictionary<Guid, BackgroundTaskExecution> _activeExecutions =
+        new();
+
     private readonly object _admissionSync = new();
-    private readonly LinkedList<Guid> _completedHistory = [];
-    private readonly Dictionary<Guid, LinkedListNode<Guid>> _completedHistoryNodes = [];
-    private readonly Dictionary<Guid, BackgroundTaskSnapshot> _completedSnapshots = [];
-    private readonly object _completedHistorySync = new();
 
     private readonly ConcurrentDictionary<long, Task> _cancellationSignals =
         new();
 
+    private readonly LinkedList<Guid> _completedHistory = [];
+    private readonly Dictionary<Guid, LinkedListNode<Guid>> _completedHistoryNodes = [];
+    private readonly object _completedHistorySync = new();
+    private readonly Dictionary<Guid, BackgroundTaskSnapshot> _completedSnapshots = [];
+
+    private readonly BackgroundTaskConcurrencyGate _concurrencyGate;
+
     private readonly ConcurrentDictionary<string, BackgroundTaskExecution> _deduplicated =
         new(StringComparer.Ordinal);
 
-    private readonly BackgroundTaskConcurrencyGate _concurrencyGate;
     private readonly BackgroundTaskEngineOptions _engineOptions;
     private readonly TimingAccumulator _interactiveTiming = new();
 
@@ -40,9 +45,6 @@ internal sealed class BackgroundTaskEngine :
     private readonly BackgroundTaskRescheduler _rescheduler;
     private readonly DateTimeOffset _startedAt;
     private readonly TimingAccumulator _synchronizationTiming = new();
-
-    private readonly ConcurrentDictionary<Guid, BackgroundTaskExecution> _activeExecutions =
-        new();
 
     private readonly TimeProvider _timeProvider;
     private bool _accepting = true;
@@ -90,11 +92,9 @@ internal sealed class BackgroundTaskEngine :
         lock (_admissionSync)
         {
             if (!_accepting)
-            {
                 Reject(
                     taskType,
                     "the background task engine is stopping");
-            }
 
             while (true)
             {
@@ -117,11 +117,9 @@ internal sealed class BackgroundTaskEngine :
                 }
 
                 if (!TryReserveActiveTask())
-                {
                     Reject(
                         taskType,
                         "the active task count reached its configured limit");
-                }
 
                 BackgroundTaskExecution? execution = null;
                 var reservationOwned = true;
@@ -268,6 +266,78 @@ internal sealed class BackgroundTaskEngine :
             .ToArray();
     }
 
+    public BackgroundTaskEngineStatistics GetStatistics()
+    {
+        return new BackgroundTaskEngineStatistics(
+            Volatile.Read(ref _activeTasks),
+            Volatile.Read(ref _completedHistoryCount),
+            _queue.GetCount(BackgroundTaskQueue.Interactive),
+            _queue.GetCount(BackgroundTaskQueue.Synchronization),
+            _queue.GetCount(BackgroundTaskQueue.Maintenance),
+            Interlocked.Read(ref _interactiveCompletedTasks),
+            Interlocked.Read(ref _synchronizationCompletedTasks),
+            Interlocked.Read(ref _maintenanceCompletedTasks),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Interactive),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Synchronization),
+            _queue.GetHighWaterMark(BackgroundTaskQueue.Maintenance),
+            _overallTiming.CreateSnapshot(),
+            _interactiveTiming.CreateSnapshot(),
+            _synchronizationTiming.CreateSnapshot(),
+            _maintenanceTiming.CreateSnapshot(),
+            _startedAt);
+    }
+
+    public void StopAcceptingAndCancelAll()
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        lock (_admissionSync)
+        {
+            if (!_accepting)
+                return;
+
+            _accepting = false;
+            var requests = new List<(
+                BackgroundTaskExecution Execution,
+                BackgroundTaskExecution.CancellationRequest Request)>();
+
+            // Cancellation of a callback-free pending execution can finalize
+            // synchronously and remove it from _activeExecutions. Snapshot and
+            // prepare every execution before starting any signal so weak
+            // ConcurrentDictionary enumeration cannot skip admitted work.
+            foreach (var execution in _activeExecutions.Values.ToArray())
+            {
+                var request = execution.PrepareCancellation(now);
+                if (request.IsAccepted)
+                    requests.Add((execution, request));
+            }
+
+            foreach (var (execution, request) in requests)
+                StartCancellationSignal(execution, request);
+        }
+    }
+
+    public async Task DrainCancellationSignalsAsync()
+    {
+        while (true)
+        {
+            Task[] signals;
+
+            lock (_admissionSync)
+            {
+                signals = _cancellationSignals.Values.ToArray();
+            }
+
+            if (signals.Length == 0)
+                return;
+
+            // Observer tasks contain callback failures. The loop also covers
+            // signals that completed while this snapshot was being created but
+            // whose exact-removal continuation has not run yet.
+            await Task.WhenAll(signals).ConfigureAwait(false);
+        }
+    }
+
     internal bool TryStartExecution(
         BackgroundTaskExecution execution,
         DateTimeOffset startedAt)
@@ -294,27 +364,6 @@ internal sealed class BackgroundTaskEngine :
 
             return false;
         }
-    }
-
-    public BackgroundTaskEngineStatistics GetStatistics()
-    {
-        return new BackgroundTaskEngineStatistics(
-            Volatile.Read(ref _activeTasks),
-            Volatile.Read(ref _completedHistoryCount),
-            _queue.GetCount(BackgroundTaskQueue.Interactive),
-            _queue.GetCount(BackgroundTaskQueue.Synchronization),
-            _queue.GetCount(BackgroundTaskQueue.Maintenance),
-            Interlocked.Read(ref _interactiveCompletedTasks),
-            Interlocked.Read(ref _synchronizationCompletedTasks),
-            Interlocked.Read(ref _maintenanceCompletedTasks),
-            _queue.GetHighWaterMark(BackgroundTaskQueue.Interactive),
-            _queue.GetHighWaterMark(BackgroundTaskQueue.Synchronization),
-            _queue.GetHighWaterMark(BackgroundTaskQueue.Maintenance),
-            _overallTiming.CreateSnapshot(),
-            _interactiveTiming.CreateSnapshot(),
-            _synchronizationTiming.CreateSnapshot(),
-            _maintenanceTiming.CreateSnapshot(),
-            _startedAt);
     }
 
     private void FinalizeExecution(
@@ -477,66 +526,13 @@ internal sealed class BackgroundTaskEngine :
                     execution));
 
             while (_completedSnapshots.Count >
-                       _engineOptions.MaxCompletedTaskHistory &&
+                   _engineOptions.MaxCompletedTaskHistory &&
                    _completedHistory.First is { } first)
-            {
                 RemoveCompletedSnapshot(first.Value);
-            }
 
             Volatile.Write(
                 ref _completedHistoryCount,
                 _completedSnapshots.Count);
-        }
-    }
-
-    public void StopAcceptingAndCancelAll()
-    {
-        var now = _timeProvider.GetUtcNow();
-
-        lock (_admissionSync)
-        {
-            if (!_accepting)
-                return;
-
-            _accepting = false;
-            var requests = new List<(
-                BackgroundTaskExecution Execution,
-                BackgroundTaskExecution.CancellationRequest Request)>();
-
-            // Cancellation of a callback-free pending execution can finalize
-            // synchronously and remove it from _activeExecutions. Snapshot and
-            // prepare every execution before starting any signal so weak
-            // ConcurrentDictionary enumeration cannot skip admitted work.
-            foreach (var execution in _activeExecutions.Values.ToArray())
-            {
-                var request = execution.PrepareCancellation(now);
-                if (request.IsAccepted)
-                    requests.Add((execution, request));
-            }
-
-            foreach (var (execution, request) in requests)
-                StartCancellationSignal(execution, request);
-        }
-    }
-
-    public async Task DrainCancellationSignalsAsync()
-    {
-        while (true)
-        {
-            Task[] signals;
-
-            lock (_admissionSync)
-            {
-                signals = _cancellationSignals.Values.ToArray();
-            }
-
-            if (signals.Length == 0)
-                return;
-
-            // Observer tasks contain callback failures. The loop also covers
-            // signals that completed while this snapshot was being created but
-            // whose exact-removal continuation has not run yet.
-            await Task.WhenAll(signals).ConfigureAwait(false);
         }
     }
 

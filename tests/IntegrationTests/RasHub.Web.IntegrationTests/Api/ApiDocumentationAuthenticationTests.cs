@@ -40,7 +40,7 @@ public sealed class ApiDocumentationAuthenticationTests
             TestContext.Current.CancellationToken);
         var html = await response.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
-        var webAssemblyFileVersion = typeof(RasHub.Web.Program).Assembly
+        var webAssemblyFileVersion = typeof(Program).Assembly
             .GetCustomAttribute<AssemblyFileVersionAttribute>()!
             .Version;
 

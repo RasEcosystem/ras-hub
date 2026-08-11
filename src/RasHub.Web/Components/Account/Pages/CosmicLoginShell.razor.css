@@ -138,13 +138,13 @@
     animation: mark-three 25s linear infinite;
 }
 
-.brand-title {
+.documentation-login ::deep .brand-title {
     color: var(--login-text);
     font-weight: 500;
     letter-spacing: -.035em;
 }
 
-.subtitle {
+.documentation-login ::deep .subtitle {
     margin-top: 8px;
     color: var(--login-text-secondary);
     font-weight: 300;
@@ -167,11 +167,6 @@
 
 .motto span:last-child {
     background: linear-gradient(90deg, var(--login-lines), transparent);
-}
-
-.login-error {
-    width: 100%;
-    margin-bottom: 12px;
 }
 
 .login-card {

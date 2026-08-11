@@ -80,6 +80,39 @@ public sealed class BackgroundTaskEngineTests
             await host.StopAsync(cancellationToken);
         }
     }
+
+    [Fact]
+    public async Task Result_task_returns_typed_value_to_waiting_caller()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<ResultBackgroundTask, Guid>,
+            ResultBackgroundTaskHandler>();
+        builder.Services.AddRasHubBackgroundTasks();
+        using var host = builder.Build();
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var engine = host.Services
+                .GetRequiredService<IBackgroundTaskEngine>();
+            var expected = Guid.NewGuid();
+            var result = await engine.Enqueue(
+                    new ResultBackgroundTask(expected))
+                .WaitAsync(cancellationToken);
+
+            Assert.True(result.IsSucceeded);
+            Assert.Equal(expected, result.GetValue<Guid>());
+            Assert.Throws<InvalidOperationException>(() =>
+                result.GetValue<string>());
+            Assert.Null(engine.GetTask(result.TaskId)?.LastError);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
+    }
 }
 
 internal sealed record TestBackgroundTask(Guid Value)
@@ -113,5 +146,19 @@ internal sealed class ExecutionProbe
 
         Interlocked.Increment(
             ref _invocationCount);
+    }
+}
+
+internal sealed record ResultBackgroundTask(Guid Value)
+    : IBackgroundTask<Guid>;
+
+internal sealed class ResultBackgroundTaskHandler
+    : IBackgroundTaskHandler<ResultBackgroundTask, Guid>
+{
+    public Task<Guid> ExecuteAsync(
+        ResultBackgroundTask task,
+        CancellationToken cancellationToken)
+    {
+        return Task.FromResult(task.Value);
     }
 }

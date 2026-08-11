@@ -17,8 +17,7 @@
 <AppPageShell Width="AppPageWidth.Wide"
               Title="RasGates"
               Subtitle="Gateway connections, availability and remote status"
-              Icon="@Icons.Material.Filled.SettingsEthernet"
-              Class="ras-gates-page">
+              Icon="@Icons.Material.Filled.SettingsEthernet">
     <HeaderActions>
         <MudButton Variant="Variant.Outlined"
                    Color="Color.Primary"
@@ -29,7 +28,7 @@
         </MudButton>
     </HeaderActions>
     <ChildContent>
-        <MudPaper Class="pa-4 app-data-table-card ras-gates-table-card" Elevation="1">
+        <MudPaper Class="pa-4" Elevation="1">
             <div class="ras-gates-table-toolbar">
                 <MudSwitch T="bool"
                            Value="@_showDeleted"
@@ -58,13 +57,11 @@
             <MudTable T="RasGateAdministrationItem"
                       Items="@_items"
                       Hover
-                      FixedHeader
-                      Height="100%"
+                      Elevation="0"
                       Breakpoint="Breakpoint.Md"
-                      RowsPerPage="@int.MaxValue"
-                      Class="app-data-table ras-gates-table">
+                      RowsPerPage="@int.MaxValue">
                 <HeaderContent>
-                    <MudTh Style="width: 112px;">Status</MudTh>
+                    <MudTh>Status</MudTh>
                     <MudTh>RasGate</MudTh>
                     <MudTh>Endpoint</MudTh>
                     <MudTh>Remote instance</MudTh>
@@ -74,13 +71,12 @@
                     <MudTh Class="text-right">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Status" Style="width: 112px;">
+                    <MudTd DataLabel="Status">
                         <MudChip T="string"
                                  Size="Size.Small"
                                  Variant="Variant.Outlined"
                                  Icon="@StatusIcon(context)"
-                                 Color="@StatusColor(context)"
-                                 Class="app-status-chip">
+                                 Color="@StatusColor(context)">
                             @StatusLabel(context)
                         </MudChip>
                     </MudTd>
@@ -91,7 +87,7 @@
                         </MudText>
                     </MudTd>
                     <MudTd DataLabel="Endpoint">
-                        <MudText Typo="Typo.body2" Class="ras-gate-endpoint">
+                        <MudText Typo="Typo.body2">
                             @FormatEndpoint(context)
                         </MudText>
                     </MudTd>
@@ -188,6 +184,7 @@
 </AppPageShell>
 
 @code {
+
     private static readonly DialogOptions EditorDialogOptions = new()
     {
         MaxWidth = MaxWidth.Small,
@@ -336,7 +333,7 @@
             "Delete RasGate?",
             $"Delete {item.Name}? The connection will disappear from regular queries, " +
             "but its record is retained through soft deletion.",
-            yesText: "Delete",
+            "Delete",
             cancelText: "Cancel");
 
         if (confirmed != true)
@@ -471,4 +468,5 @@
             _disposeToken.Dispose();
         }
     }
+
 }

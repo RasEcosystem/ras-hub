@@ -60,11 +60,18 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IRasGateEndpointFactory, RasGateEndpointFactory>();
         services.AddSingleton<RasGateHttpClientTransport>();
+        services.AddSingleton<RacVersionCache>();
         services.AddSingleton<RacVersionParser>();
         services.AddSingleton<RacKeyValueOutputDeserializer>();
-        services.AddSingleton<RacClusterOutputDeserializer>();
+        services.AddSingleton<RacClusterOutputV1Deserializer>();
+        services.AddSingleton<IRacClusterOutputDeserializer>(serviceProvider =>
+            serviceProvider.GetRequiredService<RacClusterOutputV1Deserializer>());
+        services.AddSingleton<RacClusterOutputDeserializerResolver>();
         services.AddSingleton<RacClusterSnapshotV1Adapter>();
         services.AddSingleton<RacClusterInfoV1Adapter>();
+        services.AddSingleton<RacClusterInsertV1Adapter>();
+        services.AddSingleton<RacClusterUpdateV1Adapter>();
+        services.AddSingleton<RacClusterRemoveV1Adapter>();
         services.AddSingleton<IRacResourceAdapter<RasClusterSnapshot>>(serviceProvider => serviceProvider
             .GetRequiredService<
                 RacClusterSnapshotV1Adapter>());
@@ -75,8 +82,22 @@ public static class ServiceCollectionExtensions
             RacClusterSnapshotV1Adapter>());
         services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider.GetRequiredService<
             RacClusterInfoV1Adapter>());
+        services.AddSingleton<IRacResultCommandAdapter<RasClusterCreationOptions, Guid>>(serviceProvider =>
+            serviceProvider.GetRequiredService<RacClusterInsertV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider
+            .GetRequiredService<RacClusterInsertV1Adapter>());
+        services.AddSingleton<IRacCommandAdapter<UpdateRasClusterCommand>>(serviceProvider => serviceProvider
+            .GetRequiredService<RacClusterUpdateV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider
+            .GetRequiredService<RacClusterUpdateV1Adapter>());
+        services.AddSingleton<IRacCommandAdapter<RemoveRasClusterCommand>>(serviceProvider => serviceProvider
+            .GetRequiredService<RacClusterRemoveV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider
+            .GetRequiredService<RacClusterRemoveV1Adapter>());
         services.AddSingleton<RacCapabilityResolver>();
         services.AddSingleton(typeof(RacResourceAdapterResolver<>));
+        services.AddSingleton(typeof(RacCommandAdapterResolver<>));
+        services.AddSingleton(typeof(RacResultCommandAdapterResolver<,>));
         services.AddSingleton<IRasGateClientFactory, RasGateClientFactory>();
 
         services.AddScoped<IUnitOfWork>(serviceProvider =>

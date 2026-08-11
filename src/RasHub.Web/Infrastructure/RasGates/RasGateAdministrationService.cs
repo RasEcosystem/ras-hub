@@ -23,10 +23,15 @@ public sealed record RasGateEditorValues(
 
 public sealed record RasGateAdministrationResult(bool Succeeded, string? Error)
 {
-    public static RasGateAdministrationResult Success() => new(true, null);
+    public static RasGateAdministrationResult Success()
+    {
+        return new RasGateAdministrationResult(true, null);
+    }
 
-    public static RasGateAdministrationResult Failure(string error) =>
-        new(false, error);
+    public static RasGateAdministrationResult Failure(string error)
+    {
+        return new RasGateAdministrationResult(false, error);
+    }
 }
 
 public sealed class RasGateAdministrationService(
@@ -57,7 +62,7 @@ public sealed class RasGateAdministrationService(
     {
         await EnsureAuthorizedAsync();
 
-        var validation = Validate(values, apiKeyRequired: true);
+        var validation = Validate(values, true);
         if (validation is not null)
             return RasGateAdministrationResult.Failure(validation);
 

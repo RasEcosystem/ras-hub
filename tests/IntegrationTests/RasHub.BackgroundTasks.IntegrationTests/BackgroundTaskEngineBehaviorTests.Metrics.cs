@@ -25,23 +25,22 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                     meterListener.EnableMeasurementEvents(instrument);
             }
         };
-        listener.SetMeasurementEventCallback<long>(
-            (instrument, measurement, tags, _) =>
-            {
-                if (GetTag(tags, "task.type") != taskType)
-                    return;
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            if (GetTag(tags, "task.type") != taskType)
+                return;
 
-                if (instrument.Name == "rashub.background_tasks.active")
-                    Interlocked.Add(ref activeBalance, measurement);
+            if (instrument.Name == "rashub.background_tasks.active")
+                Interlocked.Add(ref activeBalance, measurement);
 
-                if (instrument.Name != "rashub.background_tasks.enqueued" ||
-                    Interlocked.Exchange(ref listenerReentered, 1) != 0)
-                    return;
+            if (instrument.Name != "rashub.background_tasks.enqueued" ||
+                Interlocked.Exchange(ref listenerReentered, 1) != 0)
+                return;
 
-                var execution = Assert.Single(engine!.GetTasks());
-                if (engine.Cancel(execution.Id))
-                    Interlocked.Exchange(ref cancellationAccepted, 1);
-            });
+            var execution = Assert.Single(engine!.GetTasks());
+            if (engine.Cancel(execution.Id))
+                Interlocked.Exchange(ref cancellationAccepted, 1);
+        });
         listener.Start();
 
         using var host = CreateHost(services =>
@@ -72,14 +71,12 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                     meterListener.EnableMeasurementEvents(instrument);
             }
         };
-        listener.SetMeasurementEventCallback<long>(
-            static (_, _, _, _) =>
-                throw new InvalidOperationException(
-                    "Expected metric listener failure."));
-        listener.SetMeasurementEventCallback<double>(
-            static (_, _, _, _) =>
-                throw new InvalidOperationException(
-                    "Expected metric listener failure."));
+        listener.SetMeasurementEventCallback<long>(static (_, _, _, _) =>
+            throw new InvalidOperationException(
+                "Expected metric listener failure."));
+        listener.SetMeasurementEventCallback<double>(static (_, _, _, _) =>
+            throw new InvalidOperationException(
+                "Expected metric listener failure."));
         listener.Start();
 
         using var host = CreateHost(services =>
@@ -126,19 +123,16 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             }
         };
 
-        listener.SetMeasurementEventCallback<long>(
-            (instrument, measurement, tags, _) =>
-            {
-                if (instrument.Name == "rashub.background_tasks.active" &&
-                    GetTag(tags, "task.type") == taskType)
-                    Interlocked.Add(ref activeBalance, measurement);
-            });
-        listener.SetMeasurementEventCallback<int>(
-            (instrument, measurement, _, _) =>
-                RecordMeasurement(measurements, instrument, measurement));
-        listener.SetMeasurementEventCallback<double>(
-            (instrument, measurement, _, _) =>
-                RecordMeasurement(measurements, instrument, measurement));
+        listener.SetMeasurementEventCallback<long>((instrument, measurement, tags, _) =>
+        {
+            if (instrument.Name == "rashub.background_tasks.active" &&
+                GetTag(tags, "task.type") == taskType)
+                Interlocked.Add(ref activeBalance, measurement);
+        });
+        listener.SetMeasurementEventCallback<int>((instrument, measurement, _, _) =>
+            RecordMeasurement(measurements, instrument, measurement));
+        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
+            RecordMeasurement(measurements, instrument, measurement));
         listener.Start();
 
         using var host = CreateHost(services =>
@@ -273,10 +267,8 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         string tagName)
     {
         foreach (var tag in tags)
-        {
             if (tag.Key == tagName)
                 return tag.Value as string;
-        }
 
         return null;
     }

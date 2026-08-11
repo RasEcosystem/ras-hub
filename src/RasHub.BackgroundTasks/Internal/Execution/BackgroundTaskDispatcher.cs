@@ -17,7 +17,7 @@ internal sealed class BackgroundTaskDispatcher
         _scopeFactory = scopeFactory;
     }
 
-    public async Task ExecuteAsync(
+    public async Task<object?> ExecuteAsync(
         BackgroundTaskExecution execution,
         CancellationToken cancellationToken)
     {
@@ -26,7 +26,7 @@ internal sealed class BackgroundTaskDispatcher
         await using var scope =
             _scopeFactory.CreateAsyncScope();
 
-        await execution.Invoker.InvokeAsync(
+        return await execution.Invoker.InvokeAsync(
             scope.ServiceProvider,
             execution.BackgroundTask,
             cancellationToken);

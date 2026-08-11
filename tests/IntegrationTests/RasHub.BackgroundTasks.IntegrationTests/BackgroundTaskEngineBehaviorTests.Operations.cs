@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Hosting;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Models;
 

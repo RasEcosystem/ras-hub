@@ -297,8 +297,11 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
 public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 {
+    private int _clusterCreateRequestCount;
     private int _clusterInfoRequestCount;
+    private int _clusterRemoveRequestCount;
     private int _clusterRequestCount;
+    private int _clusterUpdateRequestCount;
     private int _statusRequestCount;
     private TaskCompletionSource<bool>? _statusRequestRelease;
     private TaskCompletionSource<bool>? _statusRequestStarted;
@@ -307,6 +310,15 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public int ClusterInfoRequestCount => Volatile.Read(
         ref _clusterInfoRequestCount);
+
+    public int ClusterRemoveRequestCount => Volatile.Read(
+        ref _clusterRemoveRequestCount);
+
+    public int ClusterCreateRequestCount => Volatile.Read(
+        ref _clusterCreateRequestCount);
+
+    public int ClusterUpdateRequestCount => Volatile.Read(
+        ref _clusterUpdateRequestCount);
 
     public int StatusRequestCount => Volatile.Read(ref _statusRequestCount);
 
@@ -323,9 +335,35 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public bool SupportsClusterInfo { get; set; } = true;
 
+    public bool SupportsClusterRemove { get; set; } = true;
+
+    public bool SupportsClusterInsert { get; set; } = true;
+
+    public bool SupportsClusterUpdate { get; set; } = true;
+
     public Exception? ClustersException { get; set; }
 
     public Exception? ClusterException { get; set; }
+
+    public Exception? ClusterRemoveException { get; set; }
+
+    public Exception? ClusterCreateException { get; set; }
+
+    public Exception? ClusterUpdateException { get; set; }
+
+    public Guid CreatedClusterId { get; set; } = Guid.NewGuid();
+
+    public RasClusterCreationOptions? LastClusterCreationOptions { get; private set; }
+
+    public Guid? UpdatedClusterId { get; private set; }
+
+    public RasClusterUpdateOptions? LastClusterUpdateOptions { get; private set; }
+
+    public Guid? RemovedClusterId { get; private set; }
+
+    public string? LastClusterUser { get; private set; }
+
+    public string? LastClusterPassword { get; private set; }
 
     public RasGateStatus Status { get; set; } =
         new("Test RasGate", "1.0.0");
@@ -363,6 +401,9 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         _statusRequestStarted = null;
         _statusRequestRelease = null;
         Volatile.Write(ref _clusterInfoRequestCount, 0);
+        Volatile.Write(ref _clusterCreateRequestCount, 0);
+        Volatile.Write(ref _clusterUpdateRequestCount, 0);
+        Volatile.Write(ref _clusterRemoveRequestCount, 0);
         Volatile.Write(ref _clusterRequestCount, 0);
         Volatile.Write(ref _statusRequestCount, 0);
         LastApiKey = null;
@@ -371,8 +412,21 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         ClusterSnapshotCompleteness = SnapshotCompleteness.Complete;
         SupportsClusterSnapshots = true;
         SupportsClusterInfo = true;
+        SupportsClusterRemove = true;
+        SupportsClusterInsert = true;
+        SupportsClusterUpdate = true;
         ClustersException = null;
         ClusterException = null;
+        ClusterRemoveException = null;
+        ClusterCreateException = null;
+        ClusterUpdateException = null;
+        CreatedClusterId = Guid.NewGuid();
+        LastClusterCreationOptions = null;
+        UpdatedClusterId = null;
+        LastClusterUpdateOptions = null;
+        RemovedClusterId = null;
+        LastClusterUser = null;
+        LastClusterPassword = null;
         Status = new RasGateStatus("Test RasGate", "1.0.0");
     }
 
@@ -439,6 +493,54 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
                 $"Cluster '{clusterId}' is unavailable."));
         }
 
+        public Task RemoveClusterAsync(
+            Guid clusterId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._clusterRemoveRequestCount);
+
+            if (owner.ClusterRemoveException is not null)
+                throw owner.ClusterRemoveException;
+
+            owner.RemovedClusterId = clusterId;
+            owner.LastClusterUser = clusterUser;
+            owner.LastClusterPassword = clusterPassword;
+            return Task.CompletedTask;
+        }
+
+        public Task<Guid> CreateClusterAsync(
+            RasClusterCreationOptions options,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._clusterCreateRequestCount);
+
+            if (owner.ClusterCreateException is not null)
+                throw owner.ClusterCreateException;
+
+            owner.LastClusterCreationOptions = options;
+            return Task.FromResult(owner.CreatedClusterId);
+        }
+
+        public Task UpdateClusterAsync(
+            Guid clusterId,
+            RasClusterUpdateOptions options,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._clusterUpdateRequestCount);
+
+            if (owner.ClusterUpdateException is not null)
+                throw owner.ClusterUpdateException;
+
+            owner.UpdatedClusterId = clusterId;
+            owner.LastClusterUpdateOptions = options;
+            return Task.CompletedTask;
+        }
+
         private static IReadOnlyList<RasResourceCapability> GetCapabilities(
             FakeRasGateClientFactory owner)
         {
@@ -454,6 +556,24 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
                 capabilities.Add(new RasResourceCapability(
                     "clusters",
                     "info",
+                    1));
+
+            if (owner.SupportsClusterRemove)
+                capabilities.Add(new RasResourceCapability(
+                    "clusters",
+                    "remove",
+                    1));
+
+            if (owner.SupportsClusterInsert)
+                capabilities.Add(new RasResourceCapability(
+                    "clusters",
+                    "insert",
+                    1));
+
+            if (owner.SupportsClusterUpdate)
+                capabilities.Add(new RasResourceCapability(
+                    "clusters",
+                    "update",
                     1));
 
             return capabilities;

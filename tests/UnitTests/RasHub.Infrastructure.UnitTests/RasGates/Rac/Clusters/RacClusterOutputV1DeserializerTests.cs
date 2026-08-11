@@ -4,9 +4,9 @@ using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.UnitTests.RasGates.Rac.Clusters;
 
-public sealed class RacClusterOutputDeserializerTests
+public sealed class RacClusterOutputV1DeserializerTests
 {
-    private readonly RacClusterOutputDeserializer _deserializer = new(
+    private readonly RacClusterOutputV1Deserializer _deserializer = new(
         new RacKeyValueOutputDeserializer());
 
     [Fact]

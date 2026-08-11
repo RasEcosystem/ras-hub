@@ -49,6 +49,45 @@ internal static class RasGateTaskOptions
             rasGateId);
     }
 
+    public static BackgroundTaskOptions InteractiveClusterRemoval(
+        Guid rasGateId,
+        Guid clusterId)
+    {
+        return new BackgroundTaskOptions
+        {
+            Queue = BackgroundTaskQueue.Interactive,
+            MaxAttempts = 1,
+            Timeout = TimeSpan.FromSeconds(30),
+            DeduplicationKey =
+                $"ras-gate-cluster-remove:{rasGateId}:{clusterId}",
+            ConcurrencyKey = $"ras-gate:{rasGateId}"
+        };
+    }
+
+    public static BackgroundTaskOptions InteractiveClusterCreation(
+        Guid rasGateId)
+    {
+        return InteractiveClusterMutation(rasGateId);
+    }
+
+    public static BackgroundTaskOptions InteractiveClusterUpdate(
+        Guid rasGateId)
+    {
+        return InteractiveClusterMutation(rasGateId);
+    }
+
+    private static BackgroundTaskOptions InteractiveClusterMutation(
+        Guid rasGateId)
+    {
+        return new BackgroundTaskOptions
+        {
+            Queue = BackgroundTaskQueue.Interactive,
+            MaxAttempts = 1,
+            Timeout = TimeSpan.FromSeconds(30),
+            ConcurrencyKey = $"ras-gate:{rasGateId}"
+        };
+    }
+
     private static BackgroundTaskOptions Interactive(
         TimeSpan timeout,
         string deduplicationKey,

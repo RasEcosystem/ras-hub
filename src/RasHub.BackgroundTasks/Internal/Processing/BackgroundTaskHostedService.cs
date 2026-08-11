@@ -19,15 +19,17 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
     private readonly IBackgroundTaskEngineLifecycle _lifecycle;
     private readonly BackgroundTaskEngineOptions _options;
     private readonly BackgroundTaskRescheduler _rescheduler;
+
+    private readonly TaskCompletionSource _runtimeCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     private readonly BackgroundTaskRuntimeState _runtimeState;
     private readonly PeriodicBackgroundTaskScheduler _scheduler;
     private readonly TimeProvider _timeProvider;
     private readonly BackgroundTaskWorker _worker;
-    private readonly TaskCompletionSource _runtimeCompleted =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _runtimeStarted;
-    private int _startRequested;
     private int _shutdownStarted;
+    private int _startRequested;
 
     public BackgroundTaskHostedService(
         BackgroundTaskWorker worker,

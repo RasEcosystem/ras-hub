@@ -450,5 +450,4 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal("not_found", GetErrorCode(json));
         AssertTraceId(response);
     }
-
 }

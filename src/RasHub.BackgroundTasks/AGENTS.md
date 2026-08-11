@@ -7,8 +7,8 @@ suite for this library is `tests/IntegrationTests/RasHub.BackgroundTasks.Integra
 of the same subsystem.
 
 Read this file before changing the engine. The implementation is intentionally compact, but several ordinary-looking
-operations participate in admission, terminal publication, keyed ownership, or host lifecycle protocols. Preserve
-those protocols unless the requested behavior explicitly changes them and the replacement is covered by deterministic
+operations participate in admission, terminal publication, keyed ownership, or host lifecycle protocols. Preserve those
+protocols unless the requested behavior explicitly changes them and the replacement is covered by deterministic
 regression tests.
 
 ## Purpose and ownership boundary
@@ -27,25 +27,25 @@ decision that work is idempotent enough to retry or reconstruct after restart. T
 RasHub feature, Web, EF Core, transport, and persistence projects. Do not move business orchestration, database access,
 RasGate concepts, or feature-specific recovery into this project.
 
-The engine is deliberately non-durable. Queues, delayed executions, deduplication, concurrency ownership, schedules,
-and outcomes exist only in one process. A restart loses them. This library is execution machinery, not a job database
-or distributed coordinator.
+The engine is deliberately non-durable. Queues, delayed executions, deduplication, concurrency ownership, schedules, and
+outcomes exist only in one process. A restart loses them. This library is execution machinery, not a job database or
+distributed coordinator.
 
 ## Architecture map
 
-| Area | Main types | Responsibility |
-| --- | --- | --- |
-| Composition | `BackgroundTaskServiceCollectionExtensions`, `BackgroundTaskEngineOptions` | Registers singleton infrastructure, the hosted service, startup validation, health check, and replaceable `TimeProvider`. |
-| Admission and observation | `BackgroundTaskEngine` | Transactional enqueue, global active limit, active deduplication, cancel lookup, terminal accounting, lightweight completed history, statistics. |
-| Execution state | `BackgroundTaskExecution` | Thread-safe state machine and exactly-once terminal publication. Owns the execution cancellation source and caller completion task. |
-| Handler dispatch | `BackgroundTaskDispatcher`, `BackgroundTaskInvoker<TTask>` | Creates a fresh async DI scope for every attempt and resolves the typed handler. Missing handlers are permanent failures. |
-| Lane queues | `InMemoryBackgroundTaskQueue` | Three lock-protected `LinkedList` lanes with O(1) exact removal, actual enqueue timestamps, and coalesced channel wakeups. |
-| Delayed work | `BackgroundTaskRescheduler` | Stable `(DueAt, Sequence)` priority queue for `NotBefore` and retries; transfers due accepted executions back to their lane. |
-| Keyed serialization | `BackgroundTaskConcurrencyGate` | Non-blocking, FIFO waiter registration per concurrency key, generation-safe leases, and granted-owner handoff. |
-| Attempts | `BackgroundTaskWorker` | Dequeue, key acquisition, start transition, timeout, dispatch, retry planning, failure classification, logging, and worker containment. |
-| Periodic schedules | `PeriodicBackgroundTaskScheduler` | Registration dictionary plus due-time heap, exact removal, generation-bound handles, factory dispatch, shutdown close/clear. |
-| Host lifecycle | `BackgroundTaskHostedService`, `BackgroundTaskRuntimeState` | Supervises rescheduler, scheduler, cleanup loop, and every worker; coordinates fail-fast host stop and graceful draining. |
-| Diagnostics | `BackgroundTaskMetrics`, `BackgroundTaskHealthCheck`, `BackgroundTaskTelemetry` | Low-cardinality .NET metrics and readiness based on lifecycle/liveness and capacity. |
+| Area                      | Main types                                                                      | Responsibility                                                                                                                                   |
+|---------------------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| Composition               | `BackgroundTaskServiceCollectionExtensions`, `BackgroundTaskEngineOptions`      | Registers singleton infrastructure, the hosted service, startup validation, health check, and replaceable `TimeProvider`.                        |
+| Admission and observation | `BackgroundTaskEngine`                                                          | Transactional enqueue, global active limit, active deduplication, cancel lookup, terminal accounting, lightweight completed history, statistics. |
+| Execution state           | `BackgroundTaskExecution`                                                       | Thread-safe state machine and exactly-once terminal publication. Owns the execution cancellation source and caller completion task.              |
+| Handler dispatch          | `BackgroundTaskDispatcher`, `BackgroundTaskInvoker<TTask>`                      | Creates a fresh async DI scope for every attempt and resolves the typed handler. Missing handlers are permanent failures.                        |
+| Lane queues               | `InMemoryBackgroundTaskQueue`                                                   | Three lock-protected `LinkedList` lanes with O(1) exact removal, actual enqueue timestamps, and coalesced channel wakeups.                       |
+| Delayed work              | `BackgroundTaskRescheduler`                                                     | Stable `(DueAt, Sequence)` priority queue for `NotBefore` and retries; transfers due accepted executions back to their lane.                     |
+| Keyed serialization       | `BackgroundTaskConcurrencyGate`                                                 | Non-blocking, FIFO waiter registration per concurrency key, generation-safe leases, and granted-owner handoff.                                   |
+| Attempts                  | `BackgroundTaskWorker`                                                          | Dequeue, key acquisition, start transition, timeout, dispatch, retry planning, failure classification, logging, and worker containment.          |
+| Periodic schedules        | `PeriodicBackgroundTaskScheduler`                                               | Registration dictionary plus due-time heap, exact removal, generation-bound handles, factory dispatch, shutdown close/clear.                     |
+| Host lifecycle            | `BackgroundTaskHostedService`, `BackgroundTaskRuntimeState`                     | Supervises rescheduler, scheduler, cleanup loop, and every worker; coordinates fail-fast host stop and graceful draining.                        |
+| Diagnostics               | `BackgroundTaskMetrics`, `BackgroundTaskHealthCheck`, `BackgroundTaskTelemetry` | Low-cardinality .NET metrics and readiness based on lifecycle/liveness and capacity.                                                             |
 
 All engine infrastructure is singleton and must remain thread-safe. Handlers keep their natural scoped lifetime; never
 inject a scoped handler, `DbContext`, repository, or scoped service into these singletons.
@@ -163,8 +163,8 @@ and `Faulted`, along with expected/live process counts.
 
 - Every process yields once before consuming work so a preloaded synchronous lane cannot prevent the supervisor from
   registering the remaining loops.
-- Unexpected completion or fault of any child marks the runtime faulted, signals application stop, closes scheduler
-  and engine admission, cancels siblings, joins all sibling processes/attempt scopes, preserves the original child
+- Unexpected completion or fault of any child marks the runtime faulted, signals application stop, closes scheduler and
+  engine admission, cancels siblings, joins all sibling processes/attempt scopes, preserves the original child
   exception, and leaves readiness unhealthy.
 - Normal shutdown closes schedule admission first, then engine admission. Cancel-all first snapshots/prepares every
   active execution and only then starts signals; starting signals during weak dictionary enumeration can skip work.
@@ -191,23 +191,22 @@ and `Faulted`, along with expected/live process counts.
 - Public lane admission is bounded. `EnqueueAccepted` intentionally bypasses lane capacity for already-counted
   retry/delayed/granted work so it cannot be stranded. A lane can therefore temporarily exceed its configured queue
   capacity, while the global `MaxActiveTasks` limit remains the hard active-execution admission bound.
-- Queue removal must remain O(1). Canceled queued work is physically removed and frees lane capacity immediately.
+- Queue removal must remain O (1). Canceled queued work is physically removed and frees lane capacity immediately.
 - Rescheduler ordering is stable by `(DueAt, Sequence)` and rechecks actual dequeued priority and current UTC time.
   Custom/test clocks may move backward; do not assume `GetUtcNow()` is monotonic.
 - Use the registered `TimeProvider` for all engine time and timers. Keep attempt timeouts and registry-cleanup
   `PeriodicTimer` values within `BackgroundTaskTimerLimits`; unsupported values must fail validation before
   admission/startup. Scheduler/retry waits are sliced into at most one-day timers and may span longer intervals, but
   their due times must remain inside the supported `DateTimeOffset` range.
-- Metrics are correctness-isolated: synchronous `MeterListener` exceptions must not reject work or kill workers.
-  Active `+1` is emitted before the enqueued counter because an enqueued listener may re-enter and cancel the task.
-  Keep metric tags low-cardinality (`task.type`, `queue`), never task IDs, keys, payloads, or exception messages.
+- Metrics are correctness-isolated: synchronous `MeterListener` exceptions must not reject work or kill workers. Active
+  `+1` is emitted before the enqueued counter because an enqueued listener may re-enter and cancel the task. Keep metric
+  tags low-cardinality (`task.type`, `queue`), never task IDs, keys, payloads, or exception messages.
 
 ## Diagnostics and retained state
 
 Completed history is a bounded dictionary of `BackgroundTaskSnapshot` plus a physical linked-list index. The maximum
-count is enforced at terminal publication; `CompletedTaskRetention` is enforced by the periodic cleanup process.
-Cleanup must physically unlink arbitrary expired IDs; prefix-only tombstone cleanup leaks memory when UTC moves
-backward.
+count is enforced at terminal publication; `CompletedTaskRetention` is enforced by the periodic cleanup process. Cleanup
+must physically unlink arbitrary expired IDs; prefix-only tombstone cleanup leaks memory when UTC moves backward.
 
 Do not put `BackgroundTaskExecution`, `BackgroundTaskResult`, task payloads, or exceptions back into completed history.
 Callers may retain exception graphs through their handles, but the engine must release them independently while keeping
@@ -238,19 +237,19 @@ Test-file responsibilities:
 - `BackgroundTaskEngineBehaviorTests.cs`: public failure, retry, timeout, cancel, dedup, keyed serialization, lane FIFO,
   periodic schedule, rejection, pre-start cancellation, and missing-handler behavior.
 - `.Admission.cs`: transactional rollback when clock/queue admission throws, including dedup cleanup and recovery.
-- `.Hosting.cs`: startup/stop races, liveness/readiness, process fault containment, sibling/scope join, cancellation-signal
-  drain, and option-bound validation.
+- `.Hosting.cs`: startup/stop races, liveness/readiness, process fault containment, sibling/scope join,
+  cancellation-signal drain, and option-bound validation.
 - `.Metrics.cs`: exact active balance, observable gauges, throwing listeners, and listener re-entrancy.
 - `.Operations.cs`: lane isolation, full-queue shutdown cancellation, capacity health, timing retention, and bounded
   completed history.
-- `.QueuesAndScheduling.cs`: O(1) cancellation cleanup, multi-worker wake/exactly-once behavior, accepted re-entry into a
-  full lane, stable equal-due order, keyed FIFO/granted cancellation/stale leases, immediate keyed retry, closure/payload
-  collection, remove-vs-dispatch, and scheduler shutdown.
+- `.QueuesAndScheduling.cs`: O (1) cancellation cleanup, multi-worker wake/exactly-once behavior, accepted re-entry into
+  a full lane, stable equal-due order, keyed FIFO/granted cancellation/stale leases, immediate keyed retry,
+  closure/payload collection, remove-vs-dispatch, and scheduler shutdown.
 - `.Retention.cs`: payload/exception collection while snapshots remain and non-monotonic physical history cleanup.
 - `.Scheduler.cs`: old-handle/replacement generation safety.
 - `BackgroundTaskEngineCoreRegressionTests.cs`: terminal accounting order, cancel/failure races, throwing/blocking
-  callbacks, fan-out, callback-held capacity, safe exception messages, extreme timer/retry/retention values, and rejected
-  admission visibility.
+  callbacks, fan-out, callback-held capacity, safe exception messages, extreme timer/retry/retention values, and
+  rejected admission visibility.
 - `BackgroundTaskEngineTestDoubles.cs`: shared deterministic handlers and probes; reuse these before adding sleeps.
 
 When changing concurrency, add a deterministic interleaving regression. Prefer `TaskCompletionSource`,
@@ -270,8 +269,8 @@ counts.
   enqueue reintroduces retry/`NotBefore`/handoff starvation.
 - `BackgroundTaskResult.Exception` intentionally preserves the handler exception for in-process callers. Snapshot
   history keeps only a bounded safe message; external adapters remain responsible for sanitization.
-- Metrics listeners execute synchronously in .NET. The engine contains listener exceptions and ordering re-entrancy,
-  but a malicious listener that blocks forever can still block its producer thread.
+- Metrics listeners execute synchronously in .NET. The engine contains listener exceptions and ordering re-entrancy, but
+  a malicious listener that blocks forever can still block its producer thread.
 
 ## Current baseline
 
@@ -334,8 +333,8 @@ done
 
 ## Highest-risk change areas
 
-- `BackgroundTaskEngine`: admission transaction, exact membership, cancel ownership, terminal finalization, active count,
-  dedup, history, and shutdown fan-out are one correctness boundary.
+- `BackgroundTaskEngine`: admission transaction, exact membership, cancel ownership, terminal finalization, active
+  count, dedup, history, and shutdown fan-out are one correctness boundary.
 - `BackgroundTaskExecution`: state transitions and exactly-once terminal publication. Never invoke external engine work
   under its state lock.
 - `BackgroundTaskWorker`: attempt-token composition, key lease lifetime, retry publication order, and exception

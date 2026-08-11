@@ -38,8 +38,8 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
     private static (
         BackgroundTaskScheduleHandle Handle,
         WeakReference Payload) SchedulePayload(
-        IBackgroundTaskScheduler scheduler,
-        string scheduleId)
+            IBackgroundTaskScheduler scheduler,
+            string scheduleId)
     {
         var payload = new object();
         var weakPayload = new WeakReference(payload);

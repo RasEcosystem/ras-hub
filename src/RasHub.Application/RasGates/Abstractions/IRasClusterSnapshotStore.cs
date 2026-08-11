@@ -23,6 +23,11 @@ public interface IRasClusterSnapshotStore
         DateTime observedAt,
         CancellationToken cancellationToken);
 
+    Task RemoveAsync(
+        Guid rasGateId,
+        Guid clusterId,
+        CancellationToken cancellationToken);
+
     Task InvalidateAsync(
         Guid rasGateId,
         CancellationToken cancellationToken);

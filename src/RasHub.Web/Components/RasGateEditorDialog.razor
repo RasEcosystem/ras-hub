@@ -1,7 +1,6 @@
 @using RasHub.Domain
 @using RasHub.Infrastructure.Database.Queries
 @using RasHub.Web.Infrastructure.RasGates
-
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form" ValidationDelay="0">
@@ -47,8 +46,8 @@
                               InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
                               Adornment="Adornment.End"
                               AdornmentIcon="@(_showApiKey
-                                                   ? Icons.Material.Outlined.VisibilityOff
-                                                   : Icons.Material.Outlined.Visibility)"
+                                                 ? Icons.Material.Outlined.VisibilityOff
+                                                 : Icons.Material.Outlined.Visibility)"
                               OnAdornmentClick="ToggleApiKeyVisibility"
                               Validation="@(new Func<string?, string?>(ValidateApiKey))"
                               MaxLength="512"
@@ -96,11 +95,9 @@
     private bool _isActive = true;
     private bool _showApiKey;
 
-    [CascadingParameter]
-    private IMudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter]
-    public RasGateAdministrationItem? Gate { get; set; }
+    [Parameter] public RasGateAdministrationItem? Gate { get; set; }
 
     private bool EndpointChanged => Gate is not null &&
                                     (!string.Equals(
@@ -167,4 +164,5 @@
     {
         MudDialog.Cancel();
     }
+
 }

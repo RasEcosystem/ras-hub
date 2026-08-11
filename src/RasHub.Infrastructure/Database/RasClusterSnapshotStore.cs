@@ -87,6 +87,21 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
         Apply(cluster, snapshot, observedAt);
     }
 
+    public async Task RemoveAsync(
+        Guid rasGateId,
+        Guid clusterId,
+        CancellationToken cancellationToken)
+    {
+        var cluster = await db.RasClusters
+            .SingleOrDefaultAsync(
+                item => item.RasGateId == rasGateId &&
+                        item.ExternalId == clusterId,
+                cancellationToken);
+
+        if (cluster is not null)
+            db.RasClusters.Remove(cluster);
+    }
+
     private static void Apply(
         RasCluster cluster,
         RasClusterSnapshot snapshot,

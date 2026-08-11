@@ -7,7 +7,7 @@ namespace RasHub.BackgroundTasks.Internal.Execution;
 /// </summary>
 internal interface IBackgroundTaskInvoker
 {
-    Task InvokeAsync(
+    Task<object?> InvokeAsync(
         IServiceProvider serviceProvider,
         IBackgroundTask backgroundTask,
         CancellationToken cancellationToken);

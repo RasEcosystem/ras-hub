@@ -1,26 +1,23 @@
-using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.RasGates.Rac.Adapters;
 
 namespace RasHub.Infrastructure.RasGates.Rac.Clusters;
 
 public sealed class RacClusterSnapshotV1Adapter(
-    RacClusterOutputDeserializer deserializer)
+    RacClusterOutputDeserializerResolver deserializerResolver)
     : IRacResourceAdapter<RasClusterSnapshot>
 {
-    private static readonly Version BaselineVersion = new(8, 3, 27, 2214);
-    private static readonly Version NextPlatformFamilyVersion = new(8, 4, 0, 0);
-
     public string Resource => "clusters";
 
     public string Operation => "snapshot";
 
     public int SchemaVersion => 1;
 
-    public bool Supports(Version racVersion)
+    public Version MinimumVersion { get; } = new(8, 3, 27, 2214);
+
+    public int GetSchemaVersion(Version racVersion)
     {
-        return racVersion >= BaselineVersion &&
-               racVersion < NextPlatformFamilyVersion;
+        return deserializerResolver.Resolve(racVersion).SchemaVersion;
     }
 
     public IReadOnlyList<string> CreateCommand(Guid? externalId = null)
@@ -43,26 +40,18 @@ public sealed class RacClusterSnapshotV1Adapter(
                 "A complete cluster snapshot does not accept an external ID.",
                 nameof(externalId));
 
-        if (!Supports(racVersion))
-            throw new ArgumentOutOfRangeException(
-                nameof(racVersion),
-                racVersion,
-                "The RAC version is not supported by this adapter.");
+        RacExecutionGuard.EnsureSucceeded(
+            racVersion,
+            MinimumVersion,
+            execution,
+            "cluster list");
 
-        if (execution.TimedOut)
-            throw new RasGateClientException(
-                "RAC cluster list command timed out.");
-
-        if (execution.ExitCode != 0)
-            throw new RasGateClientException(
-                $"RAC cluster list command failed with exit code " +
-                $"{execution.ExitCode}.");
-
+        var deserializer = deserializerResolver.Resolve(racVersion);
         var items = deserializer.Deserialize(execution.StandardOutput);
 
         return new RasResourceSnapshot<RasClusterSnapshot>
         {
-            SchemaVersion = SchemaVersion,
+            SchemaVersion = deserializer.SchemaVersion,
             SourceVersion = racVersion.ToString(),
             Completeness = items.Count == 0
                 ? SnapshotCompleteness.Unknown

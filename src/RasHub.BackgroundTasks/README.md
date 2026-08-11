@@ -45,6 +45,12 @@ var handle = engine.Enqueue(
 var result = await handle.WaitAsync(requestCancellationToken);
 ```
 
+Tasks that must return a small in-process result can implement
+`IBackgroundTask<TResult>` and use
+`IBackgroundTaskHandler<TTask, TResult>`. The waiting caller reads the value with `result.GetValue<TResult>()`. Result
+values are retained only by live handles; completed history continues to store lightweight snapshots without task
+payloads or results.
+
 Each attempt gets a new DI scope. Canceling `WaitAsync` stops only the caller's wait; use `engine.Cancel(handle.Id)` to
 request task cancellation.
 

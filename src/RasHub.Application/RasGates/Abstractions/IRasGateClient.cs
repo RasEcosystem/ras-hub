@@ -15,4 +15,19 @@ public interface IRasGateClient
     Task<RasClusterSnapshot> GetClusterAsync(
         Guid clusterId,
         CancellationToken cancellationToken);
+
+    Task<Guid> CreateClusterAsync(
+        RasClusterCreationOptions options,
+        CancellationToken cancellationToken);
+
+    Task UpdateClusterAsync(
+        Guid clusterId,
+        RasClusterUpdateOptions options,
+        CancellationToken cancellationToken);
+
+    Task RemoveClusterAsync(
+        Guid clusterId,
+        string? clusterUser,
+        string? clusterPassword,
+        CancellationToken cancellationToken);
 }

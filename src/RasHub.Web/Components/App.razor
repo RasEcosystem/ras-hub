@@ -2,34 +2,31 @@
 <html lang="en">
 
 <head>
-      <meta charset="utf-8"/>
-      <meta name="viewport"
-            content="width=device-width, initial-scale=1.0"/>
+    <meta charset="utf-8"/>
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0"/>
 
-      <base href="/"/>
+    <base href="/"/>
 
-      <ResourcePreloader/>
+    <ResourcePreloader/>
 
-      <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
-            rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+          rel="stylesheet"/>
 
-      <link rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"/>
+    <link rel="stylesheet"
+          href="@Assets["_content/MudBlazor/MudBlazor.min.css"]"/>
 
-      <link rel="stylesheet"
-            href="@Assets["_content/MudBlazor/MudBlazor.min.css"]"/>
+    <link rel="stylesheet"
+          href="@Assets["RasHub.Web.styles.css"]"/>
 
-      <link rel="stylesheet"
-            href="@Assets["RasHub.Web.styles.css"]"/>
+    <link href="styles/app.css"
+          rel="stylesheet"/>
 
-      <link href="styles/app.css"
-            rel="stylesheet"/>
+    <ImportMap/>
 
-      <ImportMap/>
+    <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]"/>
 
-      <link rel="icon" type="image/svg+xml" href="@Assets["favicon.svg"]"/>
-
-      <HeadOutlet @rendermode="@PageRenderMode"/>
+    <HeadOutlet @rendermode="@PageRenderMode"/>
 </head>
 
 <body>
@@ -48,11 +45,11 @@
 </html>
 
 @code {
-      [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
-      private IComponentRenderMode? PageRenderMode =>
-            HttpContext.AcceptsInteractiveRouting()
-                  ? InteractiveServer
-                  : null;
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.AcceptsInteractiveRouting()
+            ? InteractiveServer
+            : null;
 
 }

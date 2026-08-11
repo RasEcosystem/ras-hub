@@ -49,7 +49,7 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<ApplicationDiagnostics>();
         builder.Services.AddRasHubOpenTelemetry(builder.Configuration);
         builder.Services.AddRasHubDataProtection(builder.Configuration);
@@ -81,7 +81,6 @@ public class Program
         builder.Services.AddSingleton<ThemeProvider>();
         builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
         builder.Services.AddScoped<RasGateAdministrationService>();
-
         builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.AddRasHubApi();
 
@@ -93,6 +92,7 @@ public class Program
                 .GetSection(BackgroundTaskEngineOptions.SectionName)
                 .Bind(options);
         });
+
         builder.Services.AddScoped<
             IBackgroundTaskHandler<CheckRasGateStatusTask>,
             CheckRasGateStatusTaskHandler>();
@@ -102,6 +102,16 @@ public class Program
         builder.Services.AddScoped<
             IBackgroundTaskHandler<SynchronizeClusterTask>,
             SynchronizeClusterTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<RemoveClusterTask>,
+            RemoveClusterTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<CreateClusterTask, Guid>,
+            CreateClusterTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<UpdateClusterTask>,
+            UpdateClusterTaskHandler>();
+
         builder.Services
             .AddOptions<RasGateMonitoringOptions>()
             .Bind(builder.Configuration.GetSection(

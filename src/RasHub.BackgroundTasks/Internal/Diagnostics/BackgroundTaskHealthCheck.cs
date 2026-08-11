@@ -56,8 +56,8 @@ internal sealed class BackgroundTaskHealthCheck : IHealthCheck
                                      BackgroundTaskRuntimeStatus.Faulted or
                                      BackgroundTaskRuntimeStatus.Stopping or
                                      BackgroundTaskRuntimeStatus.Stopped ||
-                                 runtime.Status == BackgroundTaskRuntimeStatus.Running &&
-                                 runtime.LiveProcessCount != runtime.ExpectedProcessCount;
+                                 (runtime.Status == BackgroundTaskRuntimeStatus.Running &&
+                                  runtime.LiveProcessCount != runtime.ExpectedProcessCount);
 
         if (runtimeUnavailable)
             return Task.FromResult(HealthCheckResult.Unhealthy(

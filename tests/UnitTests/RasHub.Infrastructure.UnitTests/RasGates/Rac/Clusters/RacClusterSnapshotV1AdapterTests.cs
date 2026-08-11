@@ -9,8 +9,11 @@ namespace RasHub.Infrastructure.UnitTests.RasGates.Rac.Clusters;
 public sealed class RacClusterSnapshotV1AdapterTests
 {
     private readonly RacClusterSnapshotV1Adapter _adapter = new(
-        new RacClusterOutputDeserializer(
-            new RacKeyValueOutputDeserializer()));
+        new RacClusterOutputDeserializerResolver(
+        [
+            new RacClusterOutputV1Deserializer(
+                new RacKeyValueOutputDeserializer())
+        ]));
 
     [Fact]
     public void Parse_successful_complete_output_returns_versioned_snapshot()
@@ -25,18 +28,28 @@ public sealed class RacClusterSnapshotV1AdapterTests
         Assert.Single(snapshot.Items);
     }
 
-    [Theory]
-    [InlineData("8.3.27.2213", false)]
-    [InlineData("8.3.27.2214", true)]
-    [InlineData("8.3.27.2215", true)]
-    [InlineData("8.3.28.0", true)]
-    [InlineData("8.3.99.9999", true)]
-    [InlineData("8.4.0.0", false)]
-    public void Supports_compatible_platform_range_returns_expected_result(
-        string version,
-        bool expected)
+    [Fact]
+    public void MinimumVersion_V1_adapter_returns_baseline_version()
     {
-        Assert.Equal(expected, _adapter.Supports(Version.Parse(version)));
+        Assert.Equal(new Version(8, 3, 27, 2214), _adapter.MinimumVersion);
+    }
+
+    [Fact]
+    public void Parse_version_above_previous_family_boundary_accepts_snapshot()
+    {
+        var snapshot = _adapter.Parse(
+            new Version(8, 4, 0, 0),
+            SuccessfulExecution(CreateClusterOutput()));
+
+        Assert.Equal(SnapshotCompleteness.Complete, snapshot.Completeness);
+    }
+
+    [Fact]
+    public void Parse_version_below_minimum_rejects_snapshot()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => _adapter.Parse(
+            new Version(8, 3, 27, 2213),
+            SuccessfulExecution(CreateClusterOutput())));
     }
 
     [Fact]

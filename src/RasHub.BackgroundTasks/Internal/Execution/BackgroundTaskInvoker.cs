@@ -15,7 +15,7 @@ internal sealed class BackgroundTaskInvoker<TTask>
     {
     }
 
-    public Task InvokeAsync(
+    public async Task<object?> InvokeAsync(
         IServiceProvider serviceProvider,
         IBackgroundTask backgroundTask,
         CancellationToken cancellationToken)
@@ -36,7 +36,47 @@ internal sealed class BackgroundTaskInvoker<TTask>
                 $"No handler is registered for background task " +
                 $"'{typeof(TTask).FullName}'.");
 
-        return handler.ExecuteAsync(
+        await handler.ExecuteAsync(
+            typedTask,
+            cancellationToken);
+
+        return null;
+    }
+}
+
+/// <summary>
+///     Bridges a result-producing runtime task to its strongly typed handler.
+/// </summary>
+internal sealed class BackgroundTaskResultInvoker<TTask, TResult>
+    : IBackgroundTaskInvoker
+    where TTask : IBackgroundTask<TResult>
+{
+    private BackgroundTaskResultInvoker()
+    {
+    }
+
+    public async Task<object?> InvokeAsync(
+        IServiceProvider serviceProvider,
+        IBackgroundTask backgroundTask,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+        ArgumentNullException.ThrowIfNull(backgroundTask);
+
+        if (backgroundTask is not TTask typedTask)
+            throw new InvalidOperationException(
+                $"Expected task type '{typeof(TTask).FullName}', " +
+                $"but received '{backgroundTask.GetType().FullName}'.");
+
+        var handler = serviceProvider
+            .GetService<IBackgroundTaskHandler<TTask, TResult>>();
+
+        if (handler is null)
+            throw new NonRetryableBackgroundTaskException(
+                $"No handler is registered for background task " +
+                $"'{typeof(TTask).FullName}'.");
+
+        return await handler.ExecuteAsync(
             typedTask,
             cancellationToken);
     }

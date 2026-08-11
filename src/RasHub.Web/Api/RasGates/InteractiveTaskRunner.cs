@@ -27,6 +27,34 @@ public sealed class InteractiveTaskRunner(IBackgroundTaskEngine taskEngine)
 
         return InteractiveTaskExecution.Completed(result);
     }
+
+    public async Task<InteractiveTaskExecution<TResult>> RunWithResultAsync<
+        TTask,
+        TResult>(
+        TTask task,
+        BackgroundTaskOptions options,
+        CancellationToken cancellationToken)
+        where TTask : IBackgroundTask<TResult>
+    {
+        BackgroundTaskHandle handle;
+
+        try
+        {
+            handle = taskEngine.Enqueue(task, options);
+        }
+        catch (BackgroundTaskRejectedException)
+        {
+            return InteractiveTaskExecution<TResult>.Rejected();
+        }
+
+        var result = await handle.WaitAsync(cancellationToken);
+
+        return result.IsSucceeded
+            ? InteractiveTaskExecution<TResult>.Completed(
+                result,
+                result.GetValue<TResult>())
+            : InteractiveTaskExecution<TResult>.Completed(result, default);
+    }
 }
 
 public sealed record InteractiveTaskExecution(
@@ -41,5 +69,23 @@ public sealed record InteractiveTaskExecution(
     public static InteractiveTaskExecution Completed(BackgroundTaskResult result)
     {
         return new InteractiveTaskExecution(false, result);
+    }
+}
+
+public sealed record InteractiveTaskExecution<TResult>(
+    bool WasRejected,
+    BackgroundTaskResult? Result,
+    TResult? Value)
+{
+    public static InteractiveTaskExecution<TResult> Rejected()
+    {
+        return new InteractiveTaskExecution<TResult>(true, null, default);
+    }
+
+    public static InteractiveTaskExecution<TResult> Completed(
+        BackgroundTaskResult result,
+        TResult? value)
+    {
+        return new InteractiveTaskExecution<TResult>(false, result, value);
     }
 }

@@ -25,8 +25,7 @@ public sealed class OpenTelemetryConfigurationTests
     public void Metrics_endpoint_invalid_fails_during_registration(
         string endpoint)
     {
-        var exception = Assert.Throws<InvalidOperationException>(
-            () => ConfigureTelemetry(endpoint));
+        var exception = Assert.Throws<InvalidOperationException>(() => ConfigureTelemetry(endpoint));
 
         Assert.Equal(
             "OpenTelemetry metrics endpoint must be an absolute HTTP or HTTPS URL.",
@@ -45,12 +44,12 @@ public sealed class OpenTelemetryConfigurationTests
         var extensionType = typeof(Program).Assembly.GetType(
             "RasHub.Web.Infrastructure.Diagnostics." +
             "OpenTelemetryConfigurationExtensions",
-            throwOnError: true)!;
+            true)!;
         var method = extensionType.GetMethod(
-            "AddRasHubOpenTelemetry",
-            BindingFlags.Public | BindingFlags.Static) ??
-            throw new InvalidOperationException(
-                "OpenTelemetry registration method was not found.");
+                         "AddRasHubOpenTelemetry",
+                         BindingFlags.Public | BindingFlags.Static) ??
+                     throw new InvalidOperationException(
+                         "OpenTelemetry registration method was not found.");
 
         try
         {

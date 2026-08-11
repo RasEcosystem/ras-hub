@@ -162,12 +162,14 @@ internal sealed class BackgroundTaskWorker
 
             try
             {
-                await _dispatcher.ExecuteAsync(
+                var value = await _dispatcher.ExecuteAsync(
                     execution,
                     attemptCancellation?.Token ??
                     execution.CancellationToken);
 
-                execution.TrySucceed(_timeProvider.GetUtcNow());
+                execution.TrySucceed(
+                    _timeProvider.GetUtcNow(),
+                    value);
 
                 _logger.LogInformation(
                     "Worker {WorkerId} completed background task " +
