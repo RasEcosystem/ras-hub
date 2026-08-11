@@ -20,12 +20,18 @@ public static class CarbonTheme
                 Black = "#111418",
 
                 Primary = "#5D8FCF",
+                PrimaryContrastText = "#FFFFFF",
                 Secondary = "#4B5D73",
+                SecondaryContrastText = "#FFFFFF",
 
                 Info = "#74A9DC",
+                InfoContrastText = "#FFFFFF",
                 Success = "#5F8F82",
+                SuccessContrastText = "#FFFFFF",
                 Warning = "#D1B06A",
+                WarningContrastText = "#FFFFFF",
                 Error = "#A66873",
+                ErrorContrastText = "#FFFFFF",
 
                 Dark = "#1A1F25",
 

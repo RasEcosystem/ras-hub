@@ -8,7 +8,7 @@
     padding: 56px 24px;
     color: var(--login-text);
     background: radial-gradient(circle at 50% 37%, color-mix(in srgb, var(--login-primary) 13%, transparent), transparent 28%),
-    radial-gradient(circle at 50% 50%, var(--login-background) 0, var(--login-background-alt) 52%, #050607 100%);
+    radial-gradient(circle at 50% 50%, var(--login-background) 0, var(--login-background-alt) 52%, var(--login-background-alt) 100%);
 }
 
 .documentation-login::before {

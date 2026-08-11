@@ -61,6 +61,40 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     }
 
     [Theory]
+    [InlineData(AppTheme.Light, "--mud-palette-background: rgba(245,246,248,1)")]
+    [InlineData(AppTheme.System, "@media (prefers-color-scheme: dark)")]
+    public async Task Login_page_configured_theme_is_rendered(
+        AppTheme theme,
+        string expectedThemeCss)
+    {
+        using var factory = new RasHubWebApplicationFactory();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var settingsProvider = scope.ServiceProvider
+                .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
+
+            await settingsProvider.UpdateAsync(new ApplicationSettings
+            {
+                Theme = theme
+            });
+        }
+
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(
+            "/Account/Login",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(expectedThemeCss, html);
+        Assert.Contains(
+            "--login-background:var(--mud-palette-background)",
+            html);
+    }
+
+    [Theory]
     [InlineData("/settings")]
     [InlineData("/health-events")]
     [InlineData("/ras-gates")]

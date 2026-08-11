@@ -9,11 +9,16 @@
                         {
                             <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Primary"/>
                         }
-                        <MudText Typo="Typo.h3">@Title</MudText>
+
+                        @if (!string.IsNullOrWhiteSpace(Title))
+                        {
+                            <MudText Typo="Typo.h3" HtmlTag="h1">@Title</MudText>
+                        }
                     </div>
+
                     @if (!string.IsNullOrWhiteSpace(Subtitle))
                     {
-                        <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
                             @Subtitle
                         </MudText>
                     }

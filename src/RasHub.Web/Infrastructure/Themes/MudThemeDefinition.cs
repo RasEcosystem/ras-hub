@@ -6,7 +6,30 @@ public class MudThemeDefinition
 {
     public required Palette Palette { get; set; }
     public Shadow Shadows { get; set; } = CreateShadows();
+    public Typography Typography { get; set; } = CreateTypography();
     public bool IsDarkMode { get; set; }
+
+    private static Typography CreateTypography()
+    {
+        return new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily =
+                [
+                    "Inter",
+                    "Roboto",
+                    "Segoe UI",
+                    "Arial",
+                    "sans-serif"
+                ]
+            },
+            Button = new ButtonTypography
+            {
+                TextTransform = "none"
+            }
+        };
+    }
 
     private static Shadow CreateShadows()
     {

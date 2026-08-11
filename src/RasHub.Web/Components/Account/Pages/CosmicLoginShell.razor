@@ -1,4 +1,3 @@
-@using RasHub.Web.Infrastructure.Themes.Providers
 <div class="documentation-login" style="@ThemeVariables">
     <div class="cosmos" aria-hidden="true">
         <span class="world-orbit world-orbit-one"></span>
@@ -42,22 +41,14 @@
 
     [Parameter] [EditorRequired] public string Subtitle { get; set; } = string.Empty;
 
-    private string ThemeVariables
-    {
-        get
-        {
-            var definition = ThemeProvider.GetTheme(SettingsProvider.Settings.Theme);
-            var palette = definition.MudTheme.Palette;
-
-            return $"--login-primary:{palette.Primary};" +
-                   $"--login-background:{palette.Background};" +
-                   $"--login-background-alt:{palette.BackgroundGray};" +
-                   $"--login-surface:{palette.Surface};" +
-                   $"--login-text:{palette.TextPrimary};" +
-                   $"--login-text-secondary:{palette.TextSecondary};" +
-                   $"--login-lines:{palette.LinesDefault};" +
-                   $"--login-error:{palette.Error};";
-        }
-    }
+    private const string ThemeVariables =
+        "--login-primary:var(--mud-palette-primary);" +
+        "--login-background:var(--mud-palette-background);" +
+        "--login-background-alt:var(--mud-palette-background-gray);" +
+        "--login-surface:var(--mud-palette-surface);" +
+        "--login-text:var(--mud-palette-text-primary);" +
+        "--login-text-secondary:var(--mud-palette-text-secondary);" +
+        "--login-lines:var(--mud-palette-lines-default);" +
+        "--login-error:var(--mud-palette-error);";
 
 }
