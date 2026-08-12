@@ -5,12 +5,53 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace RasHub.Infrastructure.Database.Migrations
 {
+    // The designer intentionally retains the final pre-squash migration ID so
+    // databases that completed the former migration chain remain compatible.
     /// <inheritdoc />
-    public partial class AddRasClusters : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "ras_gates",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    url = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: false),
+                    port = table.Column<int>(type: "integer", nullable: false),
+                    api_key = table.Column<string>(type: "character varying(4096)", maxLength: 4096, nullable: false),
+                    configuration_revision = table.Column<long>(type: "bigint", nullable: false, defaultValue: 1L),
+                    is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    instance_name = table.Column<string>(type: "text", nullable: true),
+                    version = table.Column<string>(type: "text", nullable: true),
+                    status_observed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    last_seen_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_ras_gates", x => x.id);
+                    table.CheckConstraint("ck_ras_gates_port", "port BETWEEN 1 AND 65535");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "settings",
+                columns: table => new
+                {
+                    key = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
+                    value = table.Column<string>(type: "jsonb", nullable: false),
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_settings", x => x.key);
+                });
+
             migrationBuilder.CreateTable(
                 name: "ras_clusters",
                 columns: table => new
@@ -30,6 +71,11 @@ namespace RasHub.Infrastructure.Database.Migrations
                     load_balancing_mode = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     errors_count_threshold_percent = table.Column<int>(type: "integer", nullable: false),
                     kill_problem_processes = table.Column<bool>(type: "boolean", nullable: false),
+                    kill_by_memory_with_dump = table.Column<bool>(type: "boolean", nullable: true),
+                    allow_access_right_audit_events_recording = table.Column<bool>(type: "boolean", nullable: true),
+                    ping_period = table.Column<long>(type: "bigint", nullable: true),
+                    ping_timeout = table.Column<long>(type: "bigint", nullable: true),
+                    restart_schedule = table.Column<string>(type: "text", nullable: true),
                     observed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -60,6 +106,12 @@ namespace RasHub.Infrastructure.Database.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ras_clusters");
+
+            migrationBuilder.DropTable(
+                name: "settings");
+
+            migrationBuilder.DropTable(
+                name: "ras_gates");
         }
     }
 }

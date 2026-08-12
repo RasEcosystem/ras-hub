@@ -12,8 +12,8 @@ using RasHub.Infrastructure.Database;
 namespace RasHub.Infrastructure.Database.Migrations
 {
     [DbContext(typeof(RasHubDbContext))]
-    [Migration("20260809115023_AddRasGateConfigurationRevision")]
-    partial class AddRasGateConfigurationRevision
+    [Migration("20260810162159_ProtectRasGateApiKeysAtRest")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -31,7 +31,7 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<bool>("AllowAccessRightAuditEventsRecording")
+                    b.Property<bool?>("AllowAccessRightAuditEventsRecording")
                         .HasColumnType("boolean")
                         .HasColumnName("allow_access_right_audit_events_recording");
 
@@ -66,7 +66,7 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<bool>("KillByMemoryWithDump")
+                    b.Property<bool?>("KillByMemoryWithDump")
                         .HasColumnType("boolean")
                         .HasColumnName("kill_by_memory_with_dump");
 
@@ -101,11 +101,11 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("observed_at");
 
-                    b.Property<long>("PingPeriod")
+                    b.Property<long?>("PingPeriod")
                         .HasColumnType("bigint")
                         .HasColumnName("ping_period");
 
-                    b.Property<long>("PingTimeout")
+                    b.Property<long?>("PingTimeout")
                         .HasColumnType("bigint")
                         .HasColumnName("ping_timeout");
 
@@ -118,7 +118,6 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnName("ras_gate_id");
 
                     b.Property<string>("RestartSchedule")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("restart_schedule");
 
@@ -155,8 +154,8 @@ namespace RasHub.Infrastructure.Database.Migrations
 
                     b.Property<string>("ApiKey")
                         .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("api_key");
 
                     b.Property<long>("ConfigurationRevision")

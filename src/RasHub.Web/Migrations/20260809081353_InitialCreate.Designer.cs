@@ -12,8 +12,8 @@ using RasHub.Web.Data;
 namespace RasHub.Web.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260807090848_AddUserApiKeys")]
-    partial class AddUserApiKeys
+    [Migration("20260809081353_AddUserBlocking")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -199,6 +199,9 @@ namespace RasHub.Web.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<bool>("EmailConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsBlocked")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("LockoutEnabled")

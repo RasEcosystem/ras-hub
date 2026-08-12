@@ -6,8 +6,10 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace RasHub.Web.Migrations
 {
+    // The designer intentionally retains the final pre-squash migration ID so
+    // databases that completed the former migration chain remain compatible.
     /// <inheritdoc />
-    public partial class InitialPostgreSqlIdentity : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -31,6 +33,8 @@ namespace RasHub.Web.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
+                    ApiKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    IsBlocked = table.Column<bool>(type: "boolean", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -49,18 +53,6 @@ namespace RasHub.Web.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "IdentityDataMigrations",
-                columns: table => new
-                {
-                    Id = table.Column<string>(type: "text", nullable: false),
-                    CompletedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_IdentityDataMigrations", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -225,6 +217,13 @@ namespace RasHub.Web.Migrations
                 column: "NormalizedEmail");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AspNetUsers_ApiKey",
+                table: "AspNetUsers",
+                column: "ApiKey",
+                unique: true,
+                filter: "\"ApiKey\" IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "UserNameIndex",
                 table: "AspNetUsers",
                 column: "NormalizedUserName",
@@ -251,9 +250,6 @@ namespace RasHub.Web.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens");
-
-            migrationBuilder.DropTable(
-                name: "IdentityDataMigrations");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

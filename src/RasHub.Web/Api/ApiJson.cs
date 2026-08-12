@@ -8,7 +8,7 @@ public static class ApiJson
     public static void Configure(JsonSerializerOptions options)
     {
         options.Converters.Add(new JsonStringEnumConverter(
-            namingPolicy: null,
-            allowIntegerValues: false));
+            null,
+            false));
     }
 }
