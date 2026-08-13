@@ -85,13 +85,25 @@ internal static class RacExecutionGuard
                 racVersion,
                 "The RAC version is not supported by this adapter.");
 
-        if (execution.TimedOut)
+        if (execution.Outcome == RacExecutionOutcome.Unknown)
             throw new RasGateClientException(
-                $"RAC {operationName} command timed out.");
+                $"RAC {operationName} command outcome is unknown.");
 
-        if (execution.ExitCode != 0)
+        if (execution.Outcome == RacExecutionOutcome.Failed)
+        {
+            if (execution.TimedOut || execution.ExitCode == 0)
+                throw new RasGateClientException(
+                    $"RAC {operationName} command returned an inconsistent result.");
+
             throw new RasGateClientException(
                 $"RAC {operationName} command failed with exit code " +
                 $"{execution.ExitCode}.");
+        }
+
+        if (execution.Outcome != RacExecutionOutcome.Succeeded ||
+            execution.TimedOut ||
+            execution.ExitCode != 0)
+            throw new RasGateClientException(
+                $"RAC {operationName} command returned an inconsistent result.");
     }
 }

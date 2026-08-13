@@ -157,6 +157,11 @@ public sealed class RacClusterInsertV1AdapterTests
     {
         return new RacExecutionResult
         {
+            Outcome = timedOut
+                ? RacExecutionOutcome.Unknown
+                : exitCode == 0
+                    ? RacExecutionOutcome.Succeeded
+                    : RacExecutionOutcome.Failed,
             ExitCode = exitCode,
             StandardOutput = standardOutput,
             StandardError = standardError,

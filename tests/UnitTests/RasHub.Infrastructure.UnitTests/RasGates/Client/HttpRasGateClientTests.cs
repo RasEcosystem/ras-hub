@@ -322,19 +322,11 @@ public sealed class HttpRasGateClientTests
                     TestContext.Current.CancellationToken)
                 .GetAwaiter()
                 .GetResult();
-            return JsonResponse(
-                $$"""
-                  {
-                    "success": true,
-                    "data": {
-                      "exitCode": 0,
-                      "standardOutput": "cluster : {{clusterId:D}}\r\n",
-                      "standardError": "",
-                      "durationMilliseconds": 7,
-                      "timedOut": false
-                    }
-                  }
-                  """);
+            return RacExecutionResponse(
+                "succeeded",
+                0,
+                false,
+                $"cluster : {clusterId:D}\r\n");
         });
         var client = CreateClient(
             httpClient,
@@ -365,6 +357,92 @@ public sealed class HttpRasGateClientTests
                 .GetProperty("arguments")
                 .EnumerateArray()
                 .Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task CreateClusterAsync_unknown_outcome_rejects_mutation()
+    {
+        var rasGateId = Guid.NewGuid();
+        using var httpClient = CreateRacHttpClient(() =>
+            RacExecutionResponse("unknown", -1, true));
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret",
+            rasGateId);
+
+        var exception = await Assert.ThrowsAsync<
+            RasGateMutationOutcomeUnknownException>(() =>
+            client.CreateClusterAsync(
+                new RasClusterCreationOptions
+                {
+                    Host = "localhost",
+                    Port = 1587
+                },
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(rasGateId, exception.RasGateId);
+        Assert.Equal("clusters", exception.Resource);
+        Assert.Equal("insert", exception.Operation);
+    }
+
+    [Theory]
+    [InlineData("rac_execution_outcome_unknown")]
+    [InlineData("rac_output_limit_exceeded")]
+    public async Task CreateClusterAsync_remote_unknown_error_rejects_mutation(
+        string errorCode)
+    {
+        using var httpClient = CreateRacHttpClient(() =>
+            RacErrorResponse(errorCode, HttpStatusCode.BadGateway));
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        await Assert.ThrowsAsync<RasGateMutationOutcomeUnknownException>(() =>
+            client.CreateClusterAsync(
+                new RasClusterCreationOptions
+                {
+                    Host = "localhost",
+                    Port = 1587
+                },
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task CreateClusterAsync_inconsistent_succeeded_outcome_rejects_response()
+    {
+        using var httpClient = CreateRacHttpClient(() =>
+            RacExecutionResponse("succeeded", 1, false));
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        await Assert.ThrowsAsync<RasGateClientException>(() =>
+            client.CreateClusterAsync(
+                new RasClusterCreationOptions
+                {
+                    Host = "localhost",
+                    Port = 1587
+                },
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetClustersAsync_unknown_outcome_is_retryable_read_failure()
+    {
+        using var httpClient = CreateRacHttpClient(() =>
+            RacExecutionResponse("unknown", -1, true));
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        var exception = await Assert.ThrowsAsync<RasGateClientException>(() =>
+            client.GetClustersAsync(TestContext.Current.CancellationToken));
+
+        Assert.IsNotType<RasGateMutationOutcomeUnknownException>(exception);
     }
 
     [Fact]
@@ -420,6 +498,47 @@ public sealed class HttpRasGateClientTests
                 .GetProperty("arguments")
                 .EnumerateArray()
                 .Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public async Task UpdateClusterAsync_unknown_outcome_reports_update_operation()
+    {
+        using var httpClient = CreateUnknownOutcomeHttpClient();
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        var exception = await Assert.ThrowsAsync<
+            RasGateMutationOutcomeUnknownException>(() =>
+            client.UpdateClusterAsync(
+                Guid.NewGuid(),
+                new RasClusterUpdateOptions { Name = "Updated cluster" },
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("clusters", exception.Resource);
+        Assert.Equal("update", exception.Operation);
+    }
+
+    [Fact]
+    public async Task RemoveClusterAsync_unknown_outcome_reports_remove_operation()
+    {
+        using var httpClient = CreateUnknownOutcomeHttpClient();
+        var client = CreateClient(
+            httpClient,
+            new Uri("https://gate.example.test/"),
+            "gate-secret");
+
+        var exception = await Assert.ThrowsAsync<
+            RasGateMutationOutcomeUnknownException>(() =>
+            client.RemoveClusterAsync(
+                Guid.NewGuid(),
+                null,
+                null,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal("clusters", exception.Resource);
+        Assert.Equal("remove", exception.Operation);
     }
 
     [Theory]
@@ -826,9 +945,66 @@ public sealed class HttpRasGateClientTests
         return new HttpClient(new StubHttpMessageHandler(responseFactory));
     }
 
-    private static HttpResponseMessage JsonResponse(string json)
+    private static HttpClient CreateUnknownOutcomeHttpClient()
     {
-        return new HttpResponseMessage(HttpStatusCode.OK)
+        return CreateRacHttpClient(() =>
+            RacExecutionResponse("unknown", -1, true));
+    }
+
+    private static HttpClient CreateRacHttpClient(
+        Func<HttpResponseMessage> executionResponseFactory)
+    {
+        return CreateHttpClient(request =>
+            request.RequestUri?.AbsolutePath.EndsWith(
+                "/rac/status",
+                StringComparison.Ordinal) == true
+                ? RacStatusResponse("8.3.27.2214")
+                : executionResponseFactory());
+    }
+
+    private static HttpResponseMessage RacExecutionResponse(
+        string outcome,
+        int exitCode,
+        bool timedOut,
+        string standardOutput = "")
+    {
+        return JsonResponse(JsonSerializer.Serialize(new
+        {
+            success = true,
+            data = new
+            {
+                outcome,
+                exitCode,
+                standardOutput,
+                standardError = "",
+                durationMilliseconds = 7,
+                timedOut
+            }
+        }));
+    }
+
+    private static HttpResponseMessage RacErrorResponse(
+        string errorCode,
+        HttpStatusCode statusCode)
+    {
+        return JsonResponse(
+            JsonSerializer.Serialize(new
+            {
+                success = false,
+                error = new
+                {
+                    code = errorCode,
+                    message = "remote implementation details"
+                }
+            }),
+            statusCode);
+    }
+
+    private static HttpResponseMessage JsonResponse(
+        string json,
+        HttpStatusCode statusCode = HttpStatusCode.OK)
+    {
+        return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(
                 json,

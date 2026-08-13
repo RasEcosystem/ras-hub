@@ -1,7 +1,16 @@
 namespace RasHub.Infrastructure.RasGates.Rac;
 
+public enum RacExecutionOutcome
+{
+    Succeeded,
+    Failed,
+    Unknown
+}
+
 public sealed record RacExecutionResult
 {
+    public required RacExecutionOutcome Outcome { get; init; }
+
     public required int ExitCode { get; init; }
 
     public required string StandardOutput { get; init; }

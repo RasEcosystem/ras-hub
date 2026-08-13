@@ -111,7 +111,7 @@ public sealed class HttpRasGateClient : IRasGateClient
             "clusters",
             "snapshot",
             racVersion);
-        var execution = await ExecuteRacAsync(
+        var execution = await ExecuteRacQueryAsync(
             adapter.CreateCommand(),
             cancellationToken);
 
@@ -127,7 +127,7 @@ public sealed class HttpRasGateClient : IRasGateClient
             "clusters",
             "info",
             racVersion);
-        var execution = await ExecuteRacAsync(
+        var execution = await ExecuteRacQueryAsync(
             adapter.CreateCommand(clusterId),
             cancellationToken);
         var snapshot = ParseRacOutput(() => adapter.Parse(
@@ -158,8 +158,9 @@ public sealed class HttpRasGateClient : IRasGateClient
             clusterId,
             clusterUser,
             clusterPassword);
-        var execution = await ExecuteRacAsync(
+        var execution = await ExecuteRacMutationAsync(
             adapter.CreateCommand(command),
+            new RacMutation("clusters", "remove"),
             cancellationToken);
 
         adapter.Validate(racVersion, execution, command);
@@ -174,8 +175,9 @@ public sealed class HttpRasGateClient : IRasGateClient
             "clusters",
             "insert",
             racVersion);
-        var execution = await ExecuteRacAsync(
+        var execution = await ExecuteRacMutationAsync(
             adapter.CreateCommand(options),
+            new RacMutation("clusters", "insert"),
             cancellationToken);
 
         return ParseRacOutput(() =>
@@ -193,8 +195,9 @@ public sealed class HttpRasGateClient : IRasGateClient
             "update",
             racVersion);
         var command = new UpdateRasClusterCommand(clusterId, options);
-        var execution = await ExecuteRacAsync(
+        var execution = await ExecuteRacMutationAsync(
             adapter.CreateCommand(command),
+            new RacMutation("clusters", "update"),
             cancellationToken);
 
         adapter.Validate(racVersion, execution, command);
@@ -254,8 +257,24 @@ public sealed class HttpRasGateClient : IRasGateClient
         _racVersionCache.Remove(_rasGateId, _configurationRevision);
     }
 
+    private Task<RacExecutionResult> ExecuteRacQueryAsync(
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteRacAsync(arguments, null, cancellationToken);
+    }
+
+    private Task<RacExecutionResult> ExecuteRacMutationAsync(
+        IReadOnlyList<string> arguments,
+        RacMutation mutation,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteRacAsync(arguments, mutation, cancellationToken);
+    }
+
     private async Task<RacExecutionResult> ExecuteRacAsync(
         IReadOnlyList<string> arguments,
+        RacMutation? mutation,
         CancellationToken cancellationToken)
     {
         using var request = CreateRequest(
@@ -269,7 +288,10 @@ public sealed class HttpRasGateClient : IRasGateClient
             },
             options: JsonOptions);
 
-        var data = await SendAsync<ExecuteRacData>(request, cancellationToken);
+        var data = await SendAsync<ExecuteRacData>(
+            request,
+            cancellationToken,
+            mutation);
 
         if (data.ExitCode is null ||
             data.TimedOut is null ||
@@ -279,8 +301,21 @@ public sealed class HttpRasGateClient : IRasGateClient
             throw new RasGateClientException(
                 "RasGate returned an incomplete RAC execution response.");
 
+        var outcome = ParseOutcome(
+            data.Outcome,
+            data.ExitCode.Value,
+            data.TimedOut.Value);
+
+        if (outcome == RacExecutionOutcome.Unknown &&
+            mutation is { } unknownMutation)
+            throw new RasGateMutationOutcomeUnknownException(
+                _rasGateId,
+                unknownMutation.Resource,
+                unknownMutation.Operation);
+
         return new RacExecutionResult
         {
+            Outcome = outcome,
             ExitCode = data.ExitCode.Value,
             StandardOutput = data.StandardOutput,
             StandardError = data.StandardError,
@@ -306,7 +341,8 @@ public sealed class HttpRasGateClient : IRasGateClient
 
     private async Task<T> SendAsync<T>(
         HttpRequestMessage request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RacMutation? mutation = null)
         where T : class
     {
         HttpResponseMessage response;
@@ -331,8 +367,21 @@ public sealed class HttpRasGateClient : IRasGateClient
         using (response)
         {
             if (!response.IsSuccessStatusCode)
+            {
+                var errorCode = await ReadErrorCodeAsync(
+                    response,
+                    cancellationToken);
+
+                if (mutation is { } unknownMutation &&
+                    IsUnknownOutcomeErrorCode(errorCode))
+                    throw new RasGateMutationOutcomeUnknownException(
+                        _rasGateId,
+                        unknownMutation.Resource,
+                        unknownMutation.Operation);
+
                 throw new RasGateClientException(
                     $"RasGate returned HTTP status code {(int)response.StatusCode}.");
+            }
 
             RasGateApiResponse<T>? envelope;
 
@@ -360,14 +409,93 @@ public sealed class HttpRasGateClient : IRasGateClient
                 throw new RasGateClientException("RasGate returned an empty response.");
 
             if (!envelope.Success)
+            {
+                if (mutation is { } unknownMutation &&
+                    IsUnknownOutcomeErrorCode(envelope.Error?.Code))
+                    throw new RasGateMutationOutcomeUnknownException(
+                        _rasGateId,
+                        unknownMutation.Resource,
+                        unknownMutation.Operation);
+
                 throw new RasGateClientException(
                     envelope.Error is null
                         ? "RasGate reported a request failure."
                         : $"RasGate reported error '{envelope.Error.Code}'.");
+            }
 
             return envelope.Data ?? throw new RasGateClientException(
                 "RasGate returned an incomplete response.");
         }
+    }
+
+    private static RacExecutionOutcome ParseOutcome(
+        string? value,
+        int exitCode,
+        bool timedOut)
+    {
+        if (value is null)
+            return timedOut
+                ? RacExecutionOutcome.Unknown
+                : exitCode == 0
+                    ? RacExecutionOutcome.Succeeded
+                    : RacExecutionOutcome.Failed;
+
+        var outcome = value.ToLowerInvariant() switch
+        {
+            "succeeded" => RacExecutionOutcome.Succeeded,
+            "failed" => RacExecutionOutcome.Failed,
+            "unknown" => RacExecutionOutcome.Unknown,
+            _ => throw new RasGateClientException(
+                "RasGate returned an invalid RAC execution outcome.")
+        };
+
+        var succeededResultIsInconsistent =
+            outcome == RacExecutionOutcome.Succeeded &&
+            (timedOut || exitCode != 0);
+        var failedResultIsInconsistent =
+            outcome == RacExecutionOutcome.Failed &&
+            (timedOut || exitCode == 0);
+
+        if (succeededResultIsInconsistent || failedResultIsInconsistent)
+            throw new RasGateClientException(
+                "RasGate returned an inconsistent RAC execution response.");
+
+        return outcome;
+    }
+
+    private static async Task<string?> ReadErrorCodeAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var envelope = await response.Content.ReadFromJsonAsync<
+                RasGateApiResponse<object>>(
+                JsonOptions,
+                cancellationToken);
+
+            return envelope?.Error?.Code;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsUnknownOutcomeErrorCode(string? errorCode)
+    {
+        return string.Equals(
+                   errorCode,
+                   "rac_execution_outcome_unknown",
+                   StringComparison.Ordinal) ||
+               string.Equals(
+                   errorCode,
+                   "rac_output_limit_exceeded",
+                   StringComparison.Ordinal);
     }
 
     private sealed record ExecuteRacRequest
@@ -403,8 +531,14 @@ public sealed class HttpRasGateClient : IRasGateClient
         public required string? Version { get; init; }
     }
 
+    private readonly record struct RacMutation(
+        string Resource,
+        string Operation);
+
     private sealed record ExecuteRacData
     {
+        public string? Outcome { get; init; }
+
         public required int? ExitCode { get; init; }
 
         public required string? StandardOutput { get; init; }

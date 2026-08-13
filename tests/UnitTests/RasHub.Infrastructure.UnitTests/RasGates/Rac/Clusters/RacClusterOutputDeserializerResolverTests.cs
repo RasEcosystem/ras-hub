@@ -63,6 +63,7 @@ public sealed class RacClusterOutputDeserializerResolverTests
             racVersion,
             new RacExecutionResult
             {
+                Outcome = RacExecutionOutcome.Succeeded,
                 ExitCode = 0,
                 StandardOutput = string.Empty,
                 StandardError = string.Empty,

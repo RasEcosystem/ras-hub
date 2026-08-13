@@ -239,30 +239,10 @@ internal static class RasGateApiResponses
     public static ApiResponse<RasClusterModel> ClusterRemovalFailed(
         BackgroundTaskResult result)
     {
-        if (result.Outcome == BackgroundTaskOutcome.Canceled)
-            return ApiResponse<RasClusterModel>.Fail(
-                HttpStatusCode.ServiceUnavailable,
-                "ras_gate_cluster_remove_canceled",
-                "RasGate cluster removal was canceled.");
-
-        if (result.Exception is RasGateInactiveException inactiveException)
-            return GateInactive<RasClusterModel>(inactiveException.RasGateId);
-
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<RasClusterModel>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during cluster removal.");
-
-        if (result.Exception is TimeoutException)
-            return ApiResponse<RasClusterModel>.Fail(
-                HttpStatusCode.GatewayTimeout,
-                "ras_gate_cluster_remove_timeout",
-                "RasGate cluster removal timed out.");
-
-        return ApiResponse<RasClusterModel>.Fail(
-            HttpStatusCode.BadGateway,
-            "ras_gate_cluster_remove_failed",
+        return ClusterMutationFailed(
+            result,
+            "remove",
+            "removal",
             "RasGate cluster could not be removed.");
     }
 
@@ -280,6 +260,13 @@ internal static class RasGateApiResponses
 
         if (result.Exception is RasGateInactiveException inactiveException)
             return GateInactive<RasClusterModel>(inactiveException.RasGateId);
+
+        if (result.Exception is RasGateMutationOutcomeUnknownException)
+            return ApiResponse<RasClusterModel>.Fail(
+                HttpStatusCode.BadGateway,
+                $"ras_gate_cluster_{operationCode}_outcome_unknown",
+                $"RasGate could not confirm the cluster {operationNoun} " +
+                "outcome. Synchronize cluster state before retrying.");
 
         if (result.Exception is RasGateConfigurationChangedException)
             return ApiResponse<RasClusterModel>.Fail(

@@ -128,6 +128,11 @@ public sealed class RacClusterRemoveV1AdapterTests
     {
         return new RacExecutionResult
         {
+            Outcome = timedOut
+                ? RacExecutionOutcome.Unknown
+                : exitCode == 0
+                    ? RacExecutionOutcome.Succeeded
+                    : RacExecutionOutcome.Failed,
             ExitCode = exitCode,
             StandardOutput = "",
             StandardError = standardError,

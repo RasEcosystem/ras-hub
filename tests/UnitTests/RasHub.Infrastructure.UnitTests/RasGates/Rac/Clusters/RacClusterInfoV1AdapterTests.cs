@@ -100,6 +100,9 @@ public sealed class RacClusterInfoV1AdapterTests
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
+            Outcome = timedOut
+                ? RacExecutionOutcome.Unknown
+                : RacExecutionOutcome.Failed,
             ExitCode = exitCode,
             TimedOut = timedOut
         };
@@ -115,6 +118,7 @@ public sealed class RacClusterInfoV1AdapterTests
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
+            Outcome = RacExecutionOutcome.Failed,
             ExitCode = -1,
             StandardError = "Cluster was not found."
         };
@@ -141,6 +145,7 @@ public sealed class RacClusterInfoV1AdapterTests
     {
         return new RacExecutionResult
         {
+            Outcome = RacExecutionOutcome.Succeeded,
             ExitCode = 0,
             StandardOutput = output,
             StandardError = string.Empty,

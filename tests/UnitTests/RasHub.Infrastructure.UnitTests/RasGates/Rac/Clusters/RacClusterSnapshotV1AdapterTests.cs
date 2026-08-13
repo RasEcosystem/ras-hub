@@ -57,6 +57,7 @@ public sealed class RacClusterSnapshotV1AdapterTests
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
+            Outcome = RacExecutionOutcome.Unknown,
             ExitCode = -1,
             TimedOut = true
         };
@@ -81,6 +82,7 @@ public sealed class RacClusterSnapshotV1AdapterTests
     {
         return new RacExecutionResult
         {
+            Outcome = RacExecutionOutcome.Succeeded,
             ExitCode = 0,
             StandardOutput = output,
             StandardError = string.Empty,
