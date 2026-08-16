@@ -3,12 +3,8 @@ name: Build development image
 on:
   push:
     branches:
-      - "feature/**"
+      - dev
   workflow_dispatch:
-
-concurrency:
-  group: build-development-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -19,8 +15,50 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore RasHub.sln
+
+      - name: Verify formatting
+        run: dotnet format RasHub.sln --no-restore --verify-no-changes
+
+      - name: Build
+        run: >-
+          dotnet build RasHub.sln
+          --configuration Release
+          --no-restore
+          --warnaserror
+          -m:1
+
+      - name: Test
+        run: >-
+          dotnet test RasHub.sln
+          --configuration Release
+          --no-build
+          --no-restore
+          -m:1
+
+  build:
+    needs:
+      - verify
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build-development
+      cancel-in-progress: true
 
     steps:
       - name: Check out repository
@@ -33,14 +71,14 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
 
       - name: Log in to GHCR
-        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push development image
-        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .
           file: deploy/Dockerfile
@@ -51,3 +89,29 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs:
+      - build
+    concurrency:
+      group: rashub-development
+      cancel-in-progress: false
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - rashub-dev
+    environment: development
+
+    env:
+      REVISION: ${{ github.sha }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Deploy image
+        shell: bash
+        run: |
+          printf '%s' "$GHCR_TOKEN" |
+            sudo /usr/local/sbin/rashub-dev-deploy \
+              "ghcr.io/${{ github.repository }}:dev-$REVISION" \
+              "${{ github.repository_owner }}"

@@ -1,0 +1,62 @@
+<div class="@RootClass">
+    <div class="app-page-inner">
+        @if (HasHeader)
+        {
+            <header class="app-page-header">
+                <div class="app-page-heading">
+                    <div class="app-page-title-row">
+                        @if (!string.IsNullOrWhiteSpace(Icon))
+                        {
+                            <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Primary"/>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(Title))
+                        {
+                            <MudText Typo="Typo.h3" HtmlTag="h1">@Title</MudText>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(Subtitle))
+                    {
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
+                            @Subtitle
+                        </MudText>
+                    }
+                </div>
+
+                @if (HeaderActions is not null)
+                {
+                    <div class="app-page-header-actions">
+                        @HeaderActions
+                    </div>
+                }
+            </header>
+
+            <MudDivider/>
+        }
+
+        <div class="app-page-content">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public AppPageWidth Width { get; set; } = AppPageWidth.Standard;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+    [Parameter] [EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    private bool HasHeader =>
+        !string.IsNullOrWhiteSpace(Title) ||
+        !string.IsNullOrWhiteSpace(Subtitle) ||
+        !string.IsNullOrWhiteSpace(Icon) ||
+        HeaderActions is not null;
+
+    private string RootClass =>
+        $"app-page app-page--{Width.ToString().ToLowerInvariant()} {Class}".TrimEnd();
+
+}

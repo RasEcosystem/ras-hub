@@ -1,13 +1,6 @@
 name: Deploy development
 
 on:
-  workflow_run:
-    workflows:
-      - Build development image
-    types:
-      - completed
-    branches:
-      - "feature/**"
   workflow_dispatch:
     inputs:
       revision:
@@ -25,9 +18,6 @@ permissions:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
     runs-on:
       - self-hosted
       - Linux
@@ -36,7 +26,7 @@ jobs:
     environment: development
 
     env:
-      REVISION: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.revision }}
+      REVISION: ${{ inputs.revision }}
       GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:

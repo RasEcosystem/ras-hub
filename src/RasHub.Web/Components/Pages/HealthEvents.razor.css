@@ -1,0 +1,51 @@
+.event-source {
+    display: block;
+    max-width: 220px;
+}
+
+.event-source-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.event-trace,
+.event-exception-type,
+.event-details pre {
+    font-family: monospace;
+    font-size: .75rem;
+}
+
+.event-trace {
+    display: block;
+    max-width: 220px;
+    overflow-wrap: anywhere;
+}
+
+.event-details {
+    margin-top: .5rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.event-details summary {
+    cursor: pointer;
+    color: var(--mud-palette-primary);
+    font-size: .75rem;
+}
+
+.event-exception-type {
+    margin-top: .5rem;
+}
+
+.event-details pre {
+    max-height: 280px;
+    margin: .5rem 0 0;
+    padding: .75rem;
+    overflow: auto;
+    border-radius: 4px;
+    background: var(--mud-palette-background-gray);
+    color: var(--mud-palette-text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

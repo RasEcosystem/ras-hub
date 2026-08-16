@@ -5,7 +5,7 @@
 @using System.Text.Encodings.Web
 @using Microsoft.AspNetCore.WebUtilities
 @using RasHub.Web.Data
-@using RasHub.Web.Infrastructure.Authorization
+@layout LoginLayout
 
 @inject SignInManager<ApplicationUser> SignInManager
 @inject UserManager<ApplicationUser> UserManager
@@ -14,7 +14,6 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<ExternalLogin> Logger
-@inject FirstUserAdminService FirstUserAdminService
 
 <AppPageTitle Title="Register"/>
 
@@ -127,6 +126,12 @@
             return;
         }
 
+        if (!SettingsProvider.Settings.AllowRegistration)
+        {
+            RedirectRegistrationDisabled();
+            return;
+        }
+
         // If the user does not have an account, then ask the user to create an account.
         if (externalLoginInfo.Principal.HasClaim(c => c.Type == ClaimTypes.Email))
         {
@@ -136,6 +141,12 @@
 
     private async Task OnValidSubmitAsync()
     {
+        if (!SettingsProvider.Settings.AllowRegistration)
+        {
+            RedirectRegistrationDisabled();
+            return;
+        }
+
         if (externalLoginInfo is null)
         {
             RedirectManager.RedirectToWithStatus("Account/Login", "Error loading external login information during confirmation.", HttpContext);
@@ -149,11 +160,6 @@
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
 
         var result = await UserManager.CreateAsync(user);
-        if (result.Succeeded)
-        {
-            result = await FirstUserAdminService.AssignAdminRoleIfFirstUserAsync(user);
-        }
-
         if (result.Succeeded)
         {
             result = await UserManager.AddLoginAsync(user, externalLoginInfo);
@@ -186,6 +192,14 @@
         {
             message = $"Error: {string.Join(",", result.Errors.Select(error => error.Description))}";
         }
+    }
+
+    private void RedirectRegistrationDisabled()
+    {
+        RedirectManager.RedirectToWithStatus(
+            "Account/Login",
+            "Registration is disabled.",
+            HttpContext);
     }
 
     private ApplicationUser CreateUser()

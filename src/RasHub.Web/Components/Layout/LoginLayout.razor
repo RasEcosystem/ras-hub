@@ -21,7 +21,7 @@
                       AlignItems="AlignItems.Center">
 
                 <MudText Typo="Typo.h6">
-                    RasHub
+                    <a href="/" class="brand-home-link">RasHub</a>
                 </MudText>
 
                 <MudText Typo="Typo.overline"
@@ -35,15 +35,10 @@
 
     </MudAppBar>
 
-    <MudMainContent Class="pt-16 pa-4">
-
-        <MudContainer MaxWidth="MaxWidth.Small"
-                      Class="py-8">
-
+    <MudMainContent Class="pt-16">
+        <AppPageShell Width="AppPageWidth.Narrow">
             @Body
-
-        </MudContainer>
-
+        </AppPageShell>
     </MudMainContent>
 
 </MudLayout>

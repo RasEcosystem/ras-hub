@@ -5,7 +5,6 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.WebUtilities
 @using RasHub.Web.Data
-@using RasHub.Web.Infrastructure.Authorization
 
 @attribute [AllowAnonymous]
 @layout LoginLayout
@@ -15,7 +14,6 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject IEmailSender<ApplicationUser> EmailSender
 @inject ILogger<Register> Logger
-@inject FirstUserAdminService FirstUserAdminService
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
@@ -109,7 +107,7 @@
                                         AdornmentIcon="@Icons.Material.Outlined.LockReset"
                                         UserAttributes="@ConfirmPasswordAttributes"/>
 
-                    <MudStaticButton Variant="Variant.Filled"
+                    <MudStaticButton Variant="Variant.Outlined"
                                      Color="Color.Primary"
                                      FullWidth="true"
                                      FormAction="FormAction.Submit">
@@ -148,6 +146,8 @@
 @code {
     private IEnumerable<IdentityError>? identityErrors;
 
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
     [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
 
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
@@ -157,21 +157,23 @@
             ? null
             : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
 
-    private static readonly Dictionary<string, object> EmailAttributes =
+    // MudStaticTextField mutates UserAttributes during SSR, so these dictionaries
+    // must remain scoped to the component instance.
+    private readonly Dictionary<string, object> EmailAttributes =
         new()
         {
             ["autocomplete"] = "username",
             ["aria-required"] = "true"
         };
 
-    private static readonly Dictionary<string, object> PasswordAttributes =
+    private readonly Dictionary<string, object> PasswordAttributes =
         new()
         {
             ["autocomplete"] = "new-password",
             ["aria-required"] = "true"
         };
 
-    private static readonly Dictionary<string, object> ConfirmPasswordAttributes =
+    private readonly Dictionary<string, object> ConfirmPasswordAttributes =
         new()
         {
             ["autocomplete"] = "new-password",
@@ -188,12 +190,17 @@
 
     protected override void OnInitialized()
     {
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+            EnsureRegistrationAllowed();
+
         Input ??= new InputModel();
     }
 
     public async Task RegisterUser(
         EditContext editContext)
     {
+        EnsureRegistrationAllowed();
+
         var user =
             CreateUser();
 
@@ -220,15 +227,6 @@
             identityErrors =
                 result.Errors;
 
-            return;
-        }
-
-        result =
-            await FirstUserAdminService.AssignAdminRoleIfFirstUserAsync(user);
-
-        if (!result.Succeeded)
-        {
-            identityErrors = result.Errors;
             return;
         }
 
@@ -279,6 +277,17 @@
 
         RedirectManager.RedirectTo(
             ReturnUrl);
+    }
+
+    private void EnsureRegistrationAllowed()
+    {
+        if (SettingsProvider.Settings.AllowRegistration)
+            return;
+
+        RedirectManager.RedirectToWithStatus(
+            "Account/Login",
+            "Registration is disabled.",
+            HttpContext);
     }
 
     private static ApplicationUser CreateUser()

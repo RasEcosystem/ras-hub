@@ -23,8 +23,8 @@ help:
 	@echo "  make test-integration   Run integration tests"
 	@echo "  make publish            Publish RasHub.Web for RID=$(RID)"
 	@echo "  make clean              Clean build outputs"
-	@echo "  make dev-up             Start PostgreSQL for IDE development"
-	@echo "  make dev-stack-up       Start PostgreSQL and RasHub in containers"
+	@echo "  make dev-up             Start PostgreSQL and Seq for IDE development"
+	@echo "  make dev-stack-up       Start PostgreSQL, Seq, and RasHub in containers"
 	@echo "  make dev-down           Stop the development stack"
 	@echo "  make -C deploy help     Show database and deployment commands"
 
@@ -62,6 +62,9 @@ test-unit: restore
 		--no-restore
 
 test-integration: restore
+	$(DOTNET) test "tests/IntegrationTests/RasHub.BackgroundTasks.IntegrationTests/RasHub.BackgroundTasks.IntegrationTests.csproj" \
+		--configuration "$(CONFIGURATION)" \
+		--no-restore
 	$(DOTNET) test "tests/IntegrationTests/RasHub.Infrastructure.IntegrationTests/RasHub.Infrastructure.IntegrationTests.csproj" \
 		--configuration "$(CONFIGURATION)" \
 		--no-restore

@@ -8,15 +8,16 @@ using RasHub.Web.Authentication;
 namespace RasHub.Web.Controllers;
 
 [ApiController]
+[ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
 [Route("api/v1/ras-hub")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [ControllerDescription(
-    "Inspect the running RasHub service.")]
+    "Inspect the running service.")]
 public sealed class RasHubController : ControllerBase
 {
     [HttpGet("status")]
-    [EndpointSummary("Get RasHub status")]
-    [EndpointDescription("Returns the running RasHub application version.")]
+    [EndpointSummary("Get status")]
+    [EndpointDescription("Returns the running application version.")]
     [ProducesResponseType(typeof(ApiResponse<RasHubStatusResponse>), StatusCodes.Status200OK)]
     public ApiResponse<RasHubStatusResponse> GetStatus()
     {

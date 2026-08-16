@@ -1,5 +1,7 @@
 ﻿@using RasHub.Web.Infrastructure.Authorization
+@using RasHub.Web.Infrastructure.Logging
 @implements IDisposable
+@inject IHostEnvironment HostEnvironment
 @inject NavigationManager NavigationManager
 
 <div style="
@@ -28,6 +30,58 @@
                 aria-label="Home"/>
 
         </MudTooltip>
+
+        <AuthorizeView Policy="@AppPolicies.ManageRasGates">
+            <Authorized>
+                <MudTooltip Text="RasGates"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.SettingsEthernet"
+                        Href="/ras-gates"
+                        Color="@GetRouteColor("ras-gates")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="RasGates"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
+        <MudTooltip Text="Tasks"
+                    Placement="Placement.Right"
+                    Arrow="true">
+
+            <MudIconButton
+                Icon="@Icons.Material.Filled.DoubleArrow"
+                Href="/background-tasks"
+                Color="@GetRouteColor("background-tasks")"
+                Size="Size.Medium"
+                Variant="Variant.Text"
+                aria-label="Tasks"/>
+
+        </MudTooltip>
+
+        <AuthorizeView Policy="@AppPolicies.ManageGlobalSettings">
+            <Authorized>
+                <MudTooltip Text="Events"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.ManageSearch"
+                        Href="/health-events"
+                        Color="@GetRouteColor("health-events")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="Events"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
+        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
     </MudStack>
 
@@ -66,6 +120,26 @@
                 </MudTooltip>
             </Authorized>
         </AuthorizeView>
+
+        @if (HostEnvironment.IsDevelopment())
+        {
+            <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+
+            <MudTooltip Text="API documentation"
+                        Placement="Placement.Right"
+                        Arrow="true">
+
+                <MudIconButton
+                    Icon="@Icons.Material.Filled.Api"
+                    Href="@SwaggerUiUrl"
+                    Target="_blank"
+                    Color="Color.Default"
+                    Size="Size.Medium"
+                    Variant="Variant.Text"
+                    aria-label="Open API documentation"/>
+
+            </MudTooltip>
+        }
 
         <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
@@ -113,6 +187,9 @@
 
 @code {
     private string _currentUrl = string.Empty;
+
+    private string SwaggerUiUrl => SwaggerUiUrlResolver.Resolve(
+        new Uri(NavigationManager.BaseUri));
 
     private string ReturnUrl =>
         string.IsNullOrEmpty(_currentUrl)

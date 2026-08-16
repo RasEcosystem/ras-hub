@@ -37,6 +37,7 @@ public sealed class RasGateQueriesTests : IDisposable
         Assert.Equal(rasGate.Name, result.Name);
         Assert.Equal(rasGate.Url, result.Url);
         Assert.Equal(rasGate.Port, result.Port);
+        Assert.True(result.IsActive);
         Assert.Equal(rasGate.CreatedAt, result.CreatedAt);
         Assert.Equal(rasGate.UpdatedAt, result.UpdatedAt);
         Assert.Empty(db.ChangeTracker.Entries<RasGate>());
@@ -61,6 +62,89 @@ public sealed class RasGateQueriesTests : IDisposable
         Assert.Null(await queries.GetByIdAsync(
             Guid.NewGuid(),
             TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Get_activity_returns_active_state_and_excludes_deleted_gate()
+    {
+        var active = RasGateTestData.Create("Active");
+        var inactive = RasGateTestData.Create("Inactive");
+        var deleted = RasGateTestData.Create("Deleted");
+        inactive.IsActive = false;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(active, inactive, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+        var queries = new RasGateQueries(db);
+
+        var activeResult = await queries.GetActivityAsync(
+            active.Id,
+            TestContext.Current.CancellationToken);
+        var inactiveResult = await queries.GetActivityAsync(
+            inactive.Id,
+            TestContext.Current.CancellationToken);
+        var deletedResult = await queries.GetActivityAsync(
+            deleted.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(activeResult?.IsActive);
+        Assert.False(inactiveResult?.IsActive);
+        Assert.Null(deletedResult);
+        Assert.Empty(db.ChangeTracker.Entries<RasGate>());
+    }
+
+    [Fact]
+    public async Task Get_administration_items_projects_operational_state_without_secrets()
+    {
+        var observedAt = new DateTime(2026, 8, 11, 10, 0, 0, DateTimeKind.Utc);
+        var lastSeenAt = observedAt.AddMinutes(1);
+        var gate = RasGateTestData.Create(
+            "Main gate",
+            "https://main.example.test",
+            8443,
+            "must-not-be-projected");
+        var deleted = RasGateTestData.Create("Deleted gate");
+        gate.InstanceName = "rasgate-main";
+        gate.Version = "1.2.3";
+        gate.StatusObservedAt = observedAt;
+        gate.LastSeenAt = lastSeenAt;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(gate, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        var result = await new RasGateQueries(db).GetAdministrationItemsAsync(
+            TestContext.Current.CancellationToken);
+
+        var item = Assert.Single(result);
+        Assert.Equal(gate.Id, item.Id);
+        Assert.Equal("Main gate", item.Name);
+        Assert.Equal("https://main.example.test", item.Url);
+        Assert.Equal(8443, item.Port);
+        Assert.Equal("rasgate-main", item.InstanceName);
+        Assert.Equal("1.2.3", item.Version);
+        Assert.Equal(observedAt, item.StatusObservedAt);
+        Assert.Equal(lastSeenAt, item.LastSeenAt);
+        Assert.False(item.IsDeleted);
+        Assert.Null(item.DeletedAt);
+        Assert.Empty(db.ChangeTracker.Entries<RasGate>());
+
+        var itemsIncludingDeleted = await new RasGateQueries(db)
+            .GetAdministrationItemsAsync(
+                true,
+                TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, itemsIncludingDeleted.Count);
+        var deletedItem = Assert.Single(itemsIncludingDeleted, candidate =>
+            candidate.Id == deleted.Id);
+        Assert.True(deletedItem.IsDeleted);
+        Assert.NotNull(deletedItem.DeletedAt);
     }
 
     [Fact]
@@ -96,5 +180,67 @@ public sealed class RasGateQueriesTests : IDisposable
         Assert.Equal(2, result.PageSize);
         Assert.Equal(2, result.TotalPages);
         Assert.Equal(expectedIds, result.Items.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task Get_health_summary_counts_only_recently_seen_gates()
+    {
+        var now = new DateTime(2026, 8, 9, 12, 0, 0, DateTimeKind.Utc);
+        var online = RasGateTestData.Create("Online");
+        var stale = RasGateTestData.Create("Stale");
+        var neverSeen = RasGateTestData.Create("Never seen");
+        var inactive = RasGateTestData.Create("Inactive");
+        var deleted = RasGateTestData.Create("Deleted");
+        online.LastSeenAt = now.AddMinutes(-1);
+        stale.LastSeenAt = now.AddMinutes(-10);
+        inactive.IsActive = false;
+        inactive.LastSeenAt = now;
+        deleted.LastSeenAt = now;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(online, stale, neverSeen, inactive, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await new RasGateQueries(db).GetHealthSummaryAsync(
+            now.AddMinutes(-3),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(1, result.OnlineCount);
+    }
+
+    [Fact]
+    public async Task Get_health_summary_without_active_gates_returns_zero_counts()
+    {
+        await using var db = _database.CreateContext();
+
+        var result = await new RasGateQueries(db).GetHealthSummaryAsync(
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.TotalCount);
+        Assert.Equal(0, result.OnlineCount);
+    }
+
+    [Fact]
+    public async Task Get_active_ids_excludes_inactive_and_deleted_gates()
+    {
+        var active = RasGateTestData.Create("Active");
+        var inactive = RasGateTestData.Create("Inactive");
+        var deleted = RasGateTestData.Create("Deleted");
+        inactive.IsActive = false;
+
+        await using var db = _database.CreateContext();
+        db.RasGates.AddRange(active, inactive, deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RasGates.Remove(deleted);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var ids = await new RasGateQueries(db).GetActiveIdsAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal([active.Id], ids);
     }
 }

@@ -1,13 +1,13 @@
 using System.Net;
-using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Mvc.Testing;
+using System.Reflection;
+using System.Text.Json;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
 namespace RasHub.Web.IntegrationTests.Api;
 
 [Collection(WebApplicationCollection.Name)]
-public sealed partial class ApiDocumentationAuthenticationTests
+public sealed class ApiDocumentationAuthenticationTests
 {
     private const string UserEmail = "documentation@example.test";
     private const string UserPassword = "Documentation-Password-42!";
@@ -40,13 +40,16 @@ public sealed partial class ApiDocumentationAuthenticationTests
             TestContext.Current.CancellationToken);
         var html = await response.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
+        var webAssemblyFileVersion = typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyFileVersionAttribute>()!
+            .Version;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("documentation-login", html);
         Assert.Contains("brand-orbit", html);
         Assert.Contains("RasHub", html);
         Assert.Contains("Development Environment", html);
-        Assert.Contains($"v{ThisAssembly.AssemblyFileVersion}", html);
+        Assert.Contains($"v{webAssemblyFileVersion}", html);
         Assert.DoesNotContain("v@ThisAssembly.AssemblyFileVersion", html);
         Assert.Contains("type=\"password\"", html);
         Assert.Contains("Log in with a passkey", html);
@@ -99,17 +102,86 @@ public sealed partial class ApiDocumentationAuthenticationTests
         using var application = await client.GetAsync(
             "/",
             TestContext.Current.CancellationToken);
+        using var engine = await client.GetAsync(
+            "/background-tasks",
+            TestContext.Current.CancellationToken);
+        using var userSettings = await client.GetAsync(
+            "/user-settings",
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, scalar.StatusCode);
         Assert.Equal(HttpStatusCode.OK, openApi.StatusCode);
         Assert.Equal(HttpStatusCode.OK, application.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, engine.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, userSettings.StatusCode);
 
         var document = await openApi.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var homePage = await application.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var enginePage = await engine.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+        var userSettingsPage = await userSettings.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
         Assert.DoesNotContain(
             "/Account/",
             document,
             StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Administration and monitoring", homePage);
+        Assert.Contains("Uptime", homePage);
+        Assert.Contains("Warnings", homePage);
+        Assert.Contains("Errors", homePage);
+        Assert.Contains("Online RasGates", homePage);
+        Assert.Contains("Health history", homePage);
+        Assert.Contains("Application health during the last 24 hours", homePage);
+        Assert.DoesNotContain("Monitor workload, queues, workers and task execution", homePage);
+        Assert.DoesNotContain("Manage your profile, appearance and API access", homePage);
+        Assert.DoesNotContain("Configure global settings and user access", homePage);
+        Assert.DoesNotContain("Live workload, workers and task execution state", homePage);
+        Assert.Contains("Live workload, workers and task execution state", enginePage);
+        Assert.DoesNotContain("Uptime", enginePage);
+        Assert.Contains("app-page--wide", homePage);
+        Assert.Contains("app-page--wide", enginePage);
+        Assert.Contains("app-page--standard", userSettingsPage);
+    }
+
+    [Fact]
+    public async Task Blocked_identity_user_cannot_log_in()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        await factory.SetIdentityUserBlockedAsync(UserEmail, true);
+        using var client = CreateClient(factory);
+
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        var html = await login.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Contains("Invalid login attempt", html);
+        Assert.False(login.Headers.TryGetValues("Set-Cookie", out var cookies) &&
+                     cookies.Any(cookie => cookie.StartsWith(
+                         ".AspNetCore.Identity.Application=",
+                         StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Blocking_user_revokes_existing_identity_cookie()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        await factory.SetIdentityUserBlockedAsync(UserEmail, true);
+
+        using var response = await client.GetAsync(
+            "/swagger/",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/Account/Login", response.Headers.Location?.AbsolutePath);
     }
 
     [Fact]
@@ -140,20 +212,83 @@ public sealed partial class ApiDocumentationAuthenticationTests
         Assert.Equal(HttpStatusCode.Unauthorized, apiResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task OpenApi_error_responses_do_not_expose_success_data_schema()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        using var response = await client.GetAsync(
+            "/openapi/v1.json",
+            TestContext.Current.CancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var root = document.RootElement;
+        var successSchema = ResolveResponseSchema(
+            root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
+            "post",
+            "200");
+        var errorSchema = ResolveResponseSchema(
+            root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
+            "post",
+            "502");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(successSchema.GetProperty("properties").TryGetProperty("data", out _));
+
+        var errorProperties = errorSchema.GetProperty("properties");
+        Assert.True(errorProperties.TryGetProperty("success", out _));
+        Assert.True(errorProperties.TryGetProperty("error", out _));
+        Assert.True(errorProperties.TryGetProperty("errors", out _));
+        Assert.False(errorProperties.TryGetProperty("data", out _));
+    }
+
+    [Fact]
+    public async Task OpenApi_exposes_status_synchronize_route_only()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        using var response = await client.GetAsync(
+            "/openapi/v1.json",
+            TestContext.Current.CancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var paths = document.RootElement.GetProperty("paths");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/status/synchronize",
+            out var synchronizationPath));
+        Assert.True(synchronizationPath.TryGetProperty("post", out _));
+        Assert.False(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/status/check",
+            out _));
+    }
+
     private static async Task<HttpResponseMessage> LoginAsync(
         HttpClient client,
         string email,
         string password)
     {
         const string loginPath = "/Account/Login?ReturnUrl=%2Fswagger%2F";
-        using var page = await client.GetAsync(
-            loginPath,
-            TestContext.Current.CancellationToken);
-        var html = await page.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var token = AntiforgeryTokenRegex().Match(html).Groups[1].Value;
-
-        Assert.False(string.IsNullOrEmpty(token));
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            loginPath);
 
         using var form = new FormUrlEncodedContent(
         [
@@ -161,7 +296,7 @@ public sealed partial class ApiDocumentationAuthenticationTests
             new KeyValuePair<string, string>("Input.Password", password),
             new KeyValuePair<string, string>("Input.RememberMe", "false"),
             new KeyValuePair<string, string>("_handler", "login"),
-            new KeyValuePair<string, string>("__RequestVerificationToken", WebUtility.HtmlDecode(token))
+            new KeyValuePair<string, string>("__RequestVerificationToken", token)
         ]);
 
         return await client.PostAsync(
@@ -175,16 +310,38 @@ public sealed partial class ApiDocumentationAuthenticationTests
         return new RasHubWebApplicationFactory("Development");
     }
 
+    private static JsonElement ResolveResponseSchema(
+        JsonElement root,
+        string path,
+        string method,
+        string statusCode)
+    {
+        var schema = root
+            .GetProperty("paths")
+            .GetProperty(path)
+            .GetProperty(method)
+            .GetProperty("responses")
+            .GetProperty(statusCode)
+            .GetProperty("content")
+            .GetProperty("application/json")
+            .GetProperty("schema");
+
+        while (schema.TryGetProperty("$ref", out var reference))
+        {
+            schema = root;
+
+            foreach (var segment in reference.GetString()!
+                         .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                         .Skip(1))
+                schema = schema.GetProperty(segment);
+        }
+
+        return schema;
+    }
+
     private static HttpClient CreateClient(
         RasHubWebApplicationFactory factory)
     {
-        return factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true
-        });
+        return factory.CreateIdentityClient();
     }
-
-    [GeneratedRegex("name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"")]
-    private static partial Regex AntiforgeryTokenRegex();
 }

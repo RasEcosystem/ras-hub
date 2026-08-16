@@ -6,6 +6,8 @@ namespace RasHub.Infrastructure.Database.EntityTypeConfigurations;
 
 public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<RasGate>
 {
+    private const int ProtectedApiKeyMaxLength = 4_096;
+
     public void Configure(EntityTypeBuilder<RasGate> builder)
     {
         builder.ToTable("ras_gates", tableBuilder =>
@@ -33,7 +35,34 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
 
         builder.Property(rasGate => rasGate.ApiKey)
             .HasColumnName("api_key")
-            .HasMaxLength(RasGate.ApiKeyMaxLength)
+            .HasMaxLength(ProtectedApiKeyMaxLength)
             .IsRequired();
+
+        builder.Property(rasGate => rasGate.ConfigurationRevision)
+            .HasColumnName("configuration_revision")
+            .HasDefaultValue(1L)
+            .IsConcurrencyToken()
+            .IsRequired();
+
+        builder.Property(rasGate => rasGate.IsActive)
+            .HasColumnName("is_active")
+            .HasDefaultValue(true)
+            .IsConcurrencyToken()
+            .IsRequired();
+
+        builder.Property(rasGate => rasGate.IsDeleted)
+            .IsConcurrencyToken();
+
+        builder.Property(rasGate => rasGate.InstanceName)
+            .HasColumnName("instance_name");
+
+        builder.Property(rasGate => rasGate.Version)
+            .HasColumnName("version");
+
+        builder.Property(rasGate => rasGate.StatusObservedAt)
+            .HasColumnName("status_observed_at");
+
+        builder.Property(rasGate => rasGate.LastSeenAt)
+            .HasColumnName("last_seen_at");
     }
 }

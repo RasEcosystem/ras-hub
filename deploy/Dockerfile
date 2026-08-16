@@ -7,7 +7,7 @@ COPY src/RasHub.Application/RasHub.Application.csproj src/RasHub.Application/
 COPY src/RasHub.Domain/RasHub.Domain.csproj src/RasHub.Domain/
 COPY src/RasHub.Infrastructure/RasHub.Infrastructure.csproj src/RasHub.Infrastructure/
 COPY src/RasHub.Web/RasHub.Web.csproj src/RasHub.Web/
-COPY src/RasHub.Synchronization/RasHub.Synchronization.csproj src/RasHub.Synchronization/
+COPY src/RasHub.BackgroundTasks/RasHub.BackgroundTasks.csproj src/RasHub.BackgroundTasks/
 COPY src/RasHub.Contracts/src/RasHub.Contracts/RasHub.Contracts.csproj src/RasHub.Contracts/src/RasHub.Contracts/
 
 RUN dotnet restore src/RasHub.Web/RasHub.Web.csproj -m:1
@@ -26,6 +26,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
 COPY --from=build --chown=app:app /app/publish .
+
+RUN mkdir -p /home/app/.aspnet/DataProtection-Keys
+RUN chown -R app:app /home/app/.aspnet
 
 ENV ASPNETCORE_HTTP_PORTS=8080
 

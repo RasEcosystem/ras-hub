@@ -1,57 +1,47 @@
 # RasHub
 
-RasHub is the central .NET backend for [RasStudio](https://github.com/zmaxb/ras-studio) and [RasGate](https://github.com/zmaxb/ras-gate). It acts as a hub for shared data and backend APIs.
-
-Shared request and response models are provided by [RasHub.Contracts](https://github.com/zmaxb/ras-hub-contracts), included as a Git submodule.
-
-Long-running, prioritized, periodic, and recoverable in-process work is managed
-by the [Synchronization Engine](src/RasHub.Synchronization/README.md).
+RasHub is the central .NET backend for
+[RasStudio](https://github.com/zmaxb/ras-studio) and
+[RasGate](https://github.com/zmaxb/ras-gate). Shared API models live in the
+[`RasHub.Contracts`](src/RasHub.Contracts) submodule.
 
 ## Requirements
 
-- .NET SDK 10.0 or later
-- Git
-- Make
+- .NET SDK 10
+- Git and Make
+- Docker with Compose for local services and deployment
 
-## Build
-
-Initialize submodules and build all projects in Release mode:
+## Build and test
 
 ```bash
+git submodule update --init --recursive
 make release
-```
-
-Update submodules to their latest configured revisions:
-
-```bash
-make submodules-update
-```
-
-Publish RasHub.Web as a self-contained Linux x64 single file:
-
-```bash
-make publish
-```
-
-Run `make help` to see all available commands.
-
-## Tests
-
-Run the complete test suite:
-
-```bash
 make test
 ```
 
-Unit and integration suites can also be run independently with `make test-unit`
-and `make test-integration`. See [`tests/README.md`](tests/README.md) for the test
-project layout and conventions.
-
-## Deployment
-
-Docker, Compose, database migration, development environment, and production
-operations live in [`deploy`](deploy/README.md).
+Useful commands:
 
 ```bash
-make -C deploy help
+make publish            # self-contained linux-x64 build
+make submodules-update  # update submodule revisions
+make help               # all root commands
 ```
+
+## Development
+
+Start PostgreSQL and Seq, then run `RasHub.Web` with its Development launch
+profile:
+
+```bash
+make dev-up
+```
+
+Use `make dev-stack-up` to run the complete stack in containers and
+`make dev-down` to stop it. See [deploy/README.md](deploy/README.md) for
+production setup and migrations.
+
+## Internals
+
+- [Background task engine](src/RasHub.BackgroundTasks/README.md)
+- [Test suites](tests/README.md)
+- [RAC compatibility boundary](docs/rac-compatibility.md)

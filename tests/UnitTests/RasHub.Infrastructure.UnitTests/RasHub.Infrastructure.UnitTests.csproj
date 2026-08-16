@@ -3,6 +3,5 @@
         <ProjectReference Include="..\..\..\src\RasHub.Infrastructure\RasHub.Infrastructure.csproj"/>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Update="coverlet.collector" Version="10.0.1" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
     </ItemGroup>
 </Project>

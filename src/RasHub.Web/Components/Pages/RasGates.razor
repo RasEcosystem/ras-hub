@@ -1,0 +1,472 @@
+@page "/ras-gates"
+@attribute [Authorize(Policy = AppPolicies.ManageRasGates)]
+@using Microsoft.Extensions.Options
+@using RasHub.Infrastructure.Database.Queries
+@using RasHub.Web.Infrastructure.Authorization
+@using RasHub.Web.Infrastructure.RasGates
+@implements IAsyncDisposable
+@inject RasGateAdministrationService AdministrationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IOptions<RasGateMonitoringOptions> MonitoringOptions
+@inject TimeProvider TimeProvider
+@inject ILogger<RasGates> Logger
+
+<AppPageTitle Title="RasGates"/>
+
+<AppPageShell Width="AppPageWidth.Wide"
+              Title="RasGates"
+              Subtitle="Gateway connections, availability and remote status"
+              Icon="@Icons.Material.Filled.SettingsEthernet">
+    <HeaderActions>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Outlined.Add"
+                   Disabled="@(_busyGateId is not null)"
+                   OnClick="AddAsync">
+            Add
+        </MudButton>
+    </HeaderActions>
+    <ChildContent>
+        <MudPaper Class="pa-4" Elevation="1">
+            <div class="ras-gates-table-toolbar">
+                <MudSwitch T="bool"
+                           Value="@_showDeleted"
+                           ValueChanged="ShowDeletedChangedAsync"
+                           Label="Show deleted"
+                           Color="Color.Primary"
+                           Disabled="@(_loading || _busyGateId is not null)"/>
+
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Updated @LastUpdatedLabel
+                    </MudText>
+                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh"
+                                   Size="Size.Small"
+                                   Disabled="@_loading"
+                                   OnClick="LoadAsync"
+                                   aria-label="Reload RasGates"/>
+                </MudStack>
+            </div>
+
+            @if (_loading && _items.Count == 0)
+            {
+                <MudProgressLinear Indeterminate Color="Color.Primary"/>
+            }
+
+            <MudTable T="RasGateAdministrationItem"
+                      Items="@_items"
+                      Hover
+                      Elevation="0"
+                      Breakpoint="Breakpoint.Md"
+                      RowsPerPage="@int.MaxValue">
+                <HeaderContent>
+                    <MudTh>Status</MudTh>
+                    <MudTh>RasGate</MudTh>
+                    <MudTh>Endpoint</MudTh>
+                    <MudTh>Remote instance</MudTh>
+                    <MudTh>Last seen</MudTh>
+                    <MudTh>Status observed</MudTh>
+                    <MudTh>Changed</MudTh>
+                    <MudTh Class="text-right">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Variant="Variant.Outlined"
+                                 Icon="@StatusIcon(context)"
+                                 Color="@StatusColor(context)">
+                            @StatusLabel(context)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="RasGate">
+                        <MudText Typo="Typo.body2">@context.Name</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @context.Id.ToString()[..8]
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Endpoint">
+                        <MudText Typo="Typo.body2">
+                            @FormatEndpoint(context)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Remote instance">
+                        <MudText Typo="Typo.body2">@(context.InstanceName ?? "—")</MudText>
+                        @if (context.Version is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Version @context.Version
+                            </MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Last seen">@FormatTime(context.LastSeenAt)</MudTd>
+                    <MudTd DataLabel="Status observed">@FormatTime(context.StatusObservedAt)</MudTd>
+                    <MudTd DataLabel="Changed">
+                        <MudText Typo="Typo.body2">
+                            @FormatTime(context.IsDeleted ? context.DeletedAt : context.UpdatedAt)
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @(context.IsDeleted ? "Deleted" : "Updated")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Class="text-right">
+                        @if (_busyGateId == context.Id)
+                        {
+                            <MudProgressCircular Indeterminate Size="Size.Small" Color="Color.Primary"/>
+                        }
+                        else
+                        {
+                            <MudMenu Icon="@Icons.Material.Outlined.MoreVert"
+                                     Size="Size.Small"
+                                     Dense
+                                     AnchorOrigin="Origin.BottomRight"
+                                     TransformOrigin="Origin.TopRight"
+                                     Disabled="@(_busyGateId is not null)"
+                                     AriaLabel="@($"Actions for {context.Name}")">
+                                @if (context.IsDeleted)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.RestoreFromTrash"
+                                                 IconColor="Color.Success"
+                                                 OnClick="@(() => RestoreAsync(context))">
+                                        Restore
+                                    </MudMenuItem>
+                                }
+                                else
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.Refresh"
+                                                 Disabled="@(!context.IsActive)"
+                                                 OnClick="@(() => SynchronizeAsync(context))">
+                                        Refresh status
+                                    </MudMenuItem>
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.Edit"
+                                                 OnClick="@(() => EditAsync(context))">
+                                        Edit connection
+                                    </MudMenuItem>
+                                    <MudDivider/>
+                                    <MudMenuItem Icon="@(context.IsActive
+                                                           ? Icons.Material.Outlined.PauseCircle
+                                                           : Icons.Material.Outlined.PlayCircle)"
+                                                 IconColor="@(context.IsActive ? Color.Warning : Color.Success)"
+                                                 OnClick="@(() => SetActiveAsync(context, !context.IsActive))">
+                                        @(context.IsActive ? "Deactivate" : "Activate")
+                                    </MudMenuItem>
+                                    <MudMenuItem Icon="@Icons.Material.Outlined.DeleteOutline"
+                                                 IconColor="Color.Error"
+                                                 OnClick="@(() => DeleteAsync(context))">
+                                        Delete
+                                    </MudMenuItem>
+                                }
+                            </MudMenu>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-8">
+                        <MudIcon Icon="@Icons.Material.Filled.SettingsEthernet"
+                                 Color="Color.Secondary"
+                                 Size="Size.Large"/>
+                        <MudText Typo="Typo.h6">No RasGates configured</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Add a gateway connection to start status monitoring.
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Outlined.Add"
+                                   OnClick="AddAsync">
+                            Add
+                        </MudButton>
+                    </MudStack>
+                </NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    </ChildContent>
+</AppPageShell>
+
+@code {
+
+    private static readonly DialogOptions EditorDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true,
+        CloseButton = true,
+        BackdropClick = false
+    };
+
+    private readonly CancellationTokenSource _disposeToken = new();
+    private readonly SemaphoreSlim _operationLock = new(1, 1);
+    private IReadOnlyList<RasGateAdministrationItem> _items = [];
+    private Task _pollTask = Task.CompletedTask;
+    private Guid? _busyGateId;
+    private bool _loading;
+    private bool _showDeleted;
+    private DateTimeOffset? _lastUpdated;
+
+    private string LastUpdatedLabel => _lastUpdated?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _pollTask = PollAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!await _operationLock.WaitAsync(0, _disposeToken.Token))
+            return;
+
+        try
+        {
+            await LoadCoreAsync();
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load RasGate administration data");
+            Snackbar.Add("Unable to load RasGates.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            _operationLock.Release();
+        }
+    }
+
+    private async Task LoadCoreAsync()
+    {
+        _loading = true;
+        _items = await AdministrationService.GetItemsAsync(
+            _showDeleted,
+            _disposeToken.Token);
+        _lastUpdated = TimeProvider.GetUtcNow();
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10), TimeProvider);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposeToken.Token))
+                await InvokeAsync(LoadAsync);
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "RasGate administration polling stopped unexpectedly");
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        var values = await ShowEditorAsync(null);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            null,
+            cancellationToken => AdministrationService.CreateAsync(values, cancellationToken),
+            "RasGate was added.",
+            "Unable to add the RasGate.");
+    }
+
+    private async Task EditAsync(RasGateAdministrationItem item)
+    {
+        var values = await ShowEditorAsync(item);
+        if (values is null)
+            return;
+
+        await ExecuteAsync(
+            item.Id,
+            cancellationToken => AdministrationService.UpdateAsync(item.Id, values, cancellationToken),
+            $"{item.Name} was updated.",
+            "Unable to update the RasGate.");
+    }
+
+    private Task SetActiveAsync(RasGateAdministrationItem item, bool isActive)
+    {
+        var values = new RasGateEditorValues(
+            item.Name,
+            item.Url,
+            item.Port,
+            null,
+            isActive);
+
+        return ExecuteAsync(
+            item.Id,
+            cancellationToken => AdministrationService.UpdateAsync(item.Id, values, cancellationToken),
+            isActive ? $"{item.Name} was activated." : $"{item.Name} was deactivated.",
+            "Unable to change the RasGate activity.");
+    }
+
+    private Task SynchronizeAsync(RasGateAdministrationItem item)
+    {
+        return ExecuteAsync(
+            item.Id,
+            cancellationToken => AdministrationService.SynchronizeStatusAsync(item.Id, cancellationToken),
+            $"Status for {item.Name} was refreshed.",
+            "Unable to refresh the RasGate status.");
+    }
+
+    private Task RestoreAsync(RasGateAdministrationItem item)
+    {
+        return ExecuteAsync(
+            item.Id,
+            cancellationToken => AdministrationService.RestoreAsync(item.Id, cancellationToken),
+            $"{item.Name} was restored.",
+            "Unable to restore the RasGate.");
+    }
+
+    private async Task ShowDeletedChangedAsync(bool value)
+    {
+        _showDeleted = value;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(RasGateAdministrationItem item)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete RasGate?",
+            $"Delete {item.Name}? The connection will disappear from regular queries, " +
+            "but its record is retained through soft deletion.",
+            "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        await ExecuteAsync(
+            item.Id,
+            cancellationToken => AdministrationService.DeleteAsync(item.Id, cancellationToken),
+            $"{item.Name} was deleted.",
+            "Unable to delete the RasGate.");
+    }
+
+    private async Task<RasGateEditorValues?> ShowEditorAsync(RasGateAdministrationItem? item)
+    {
+        var parameters = new DialogParameters<RasGateEditorDialog>();
+        if (item is not null)
+            parameters.Add(dialog => dialog.Gate, item);
+
+        var dialog = await DialogService.ShowAsync<RasGateEditorDialog>(
+            item is null ? "Add RasGate" : $"Edit {item.Name}",
+            parameters,
+            EditorDialogOptions);
+        var result = await dialog.Result;
+
+        return result is { Canceled: false, Data: RasGateEditorValues values }
+            ? values
+            : null;
+    }
+
+    private async Task ExecuteAsync(
+        Guid? gateId,
+        Func<CancellationToken, Task<RasGateAdministrationResult>> operation,
+        string successMessage,
+        string fallbackError)
+    {
+        var lockAcquired = false;
+
+        try
+        {
+            await _operationLock.WaitAsync(_disposeToken.Token);
+            lockAcquired = true;
+            _busyGateId = gateId ?? Guid.Empty;
+            var result = await operation(_disposeToken.Token);
+            Snackbar.Add(
+                result.Succeeded ? successMessage : result.Error ?? fallbackError,
+                result.Succeeded ? Severity.Success : Severity.Error);
+
+            await LoadCoreAsync();
+        }
+        catch (OperationCanceledException) when (_disposeToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "RasGate administration operation failed for {RasGateId}", gateId);
+            Snackbar.Add(fallbackError, Severity.Error);
+        }
+        finally
+        {
+            _busyGateId = null;
+            _loading = false;
+
+            if (lockAcquired)
+                _operationLock.Release();
+        }
+    }
+
+    private string StatusLabel(RasGateAdministrationItem item)
+    {
+        if (item.IsDeleted)
+            return "Deleted";
+        if (!item.IsActive)
+            return "Inactive";
+
+        return IsOnline(item) ? "Online" : "Offline";
+    }
+
+    private Color StatusColor(RasGateAdministrationItem item)
+    {
+        if (item.IsDeleted)
+            return Color.Error;
+        if (!item.IsActive)
+            return Color.Default;
+
+        return IsOnline(item) ? Color.Success : Color.Error;
+    }
+
+    private string StatusIcon(RasGateAdministrationItem item)
+    {
+        if (item.IsDeleted)
+            return Icons.Material.Outlined.DeleteOutline;
+        if (!item.IsActive)
+            return Icons.Material.Outlined.PauseCircle;
+
+        return IsOnline(item)
+            ? Icons.Material.Outlined.CheckCircle
+            : Icons.Material.Outlined.ErrorOutline;
+    }
+
+    private bool IsOnline(RasGateAdministrationItem item)
+    {
+        return item.LastSeenAt is { } lastSeen &&
+               lastSeen >= (TimeProvider.GetUtcNow() - MonitoringOptions.Value.OnlineThreshold).UtcDateTime;
+    }
+
+    private static string FormatEndpoint(RasGateAdministrationItem item)
+    {
+        if (!Uri.TryCreate(item.Url, UriKind.Absolute, out var address))
+            return $"{item.Url} · port {item.Port}";
+
+        return new UriBuilder(address) { Port = item.Port }
+            .Uri
+            .ToString()
+            .TrimEnd('/');
+    }
+
+    private static string FormatTime(DateTime? value)
+    {
+        return value?.ToLocalTime().ToString("dd MMM, HH:mm:ss") ?? "—";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeToken.Cancel();
+
+        try
+        {
+            await _pollTask;
+        }
+        finally
+        {
+            _disposeToken.Dispose();
+        }
+    }
+
+}

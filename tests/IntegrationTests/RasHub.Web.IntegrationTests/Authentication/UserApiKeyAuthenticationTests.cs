@@ -58,6 +58,27 @@ public sealed class UserApiKeyAuthenticationTests
     }
 
     [Fact]
+    public async Task Blocked_user_api_key_is_rejected_and_unblocking_restores_access()
+    {
+        using var factory = new RasHubWebApplicationFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        await factory.SetIdentityUserBlockedAsync("api-user@example.test", true);
+
+        using var blocked = await client.GetAsync(
+            "/api/v1/ras-hub/status",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, blocked.StatusCode);
+
+        await factory.SetIdentityUserBlockedAsync("api-user@example.test", false);
+
+        using var unblocked = await client.GetAsync(
+            "/api/v1/ras-hub/status",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, unblocked.StatusCode);
+    }
+
+    [Fact]
     public async Task Password_policy_only_requires_eight_characters()
     {
         using var factory = new RasHubWebApplicationFactory();

@@ -4,7 +4,16 @@ namespace RasHub.Infrastructure.IntegrationTests.Database;
 
 public sealed class AuditSoftDeleteInterceptorTests : IDisposable
 {
-    private readonly SqliteRasHubDatabase _database = new();
+    private static readonly DateTimeOffset InitialTime =
+        new(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly SqliteRasHubDatabase _database;
+    private readonly ManualTimeProvider _timeProvider = new(InitialTime);
+
+    public AuditSoftDeleteInterceptorTests()
+    {
+        _database = new SqliteRasHubDatabase(_timeProvider);
+    }
 
     public void Dispose()
     {
@@ -16,13 +25,10 @@ public sealed class AuditSoftDeleteInterceptorTests : IDisposable
     {
         await using var db = _database.CreateContext();
         var rasGate = RasGateTestData.Create();
-        var beforeSave = DateTime.UtcNow;
-
         db.RasGates.Add(rasGate);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var afterSave = DateTime.UtcNow;
-        Assert.InRange(rasGate.CreatedAt, beforeSave, afterSave);
+        Assert.Equal(InitialTime.UtcDateTime, rasGate.CreatedAt);
         Assert.Equal(rasGate.CreatedAt, rasGate.UpdatedAt);
     }
 
@@ -37,11 +43,13 @@ public sealed class AuditSoftDeleteInterceptorTests : IDisposable
 
         rasGate.Name = "Updated gate";
         rasGate.UpdatedAt = DateTime.UnixEpoch;
-        var beforeSave = DateTime.UtcNow;
+        _timeProvider.Advance(TimeSpan.FromMinutes(1));
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(createdAt, rasGate.CreatedAt);
-        Assert.InRange(rasGate.UpdatedAt, beforeSave, DateTime.UtcNow);
+        Assert.Equal(
+            InitialTime.AddMinutes(1).UtcDateTime,
+            rasGate.UpdatedAt);
     }
 
     [Fact]
@@ -71,5 +79,60 @@ public sealed class AuditSoftDeleteInterceptorTests : IDisposable
         Assert.True(deleted.IsDeleted);
         Assert.NotNull(deleted.DeletedAt);
         Assert.Equal(deleted.DeletedAt, deleted.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Restore_clears_deletion_state_and_returns_entity_to_regular_queries()
+    {
+        var rasGate = RasGateTestData.Create();
+
+        await using (var db = _database.CreateContext())
+        {
+            db.RasGates.Add(rasGate);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            db.RasGates.Remove(rasGate);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        _timeProvider.Advance(TimeSpan.FromMinutes(1));
+
+        await using (var restoreDb = _database.CreateContext())
+        {
+            var deleted = await restoreDb.RasGates
+                .IgnoreQueryFilters()
+                .SingleAsync(
+                    item => item.Id == rasGate.Id,
+                    TestContext.Current.CancellationToken);
+
+            deleted.IsDeleted = false;
+            deleted.DeletedAt = null;
+            await restoreDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var verificationDb = _database.CreateContext();
+        var restored = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(restored.IsDeleted);
+        Assert.Null(restored.DeletedAt);
+        Assert.Equal(
+            InitialTime.AddMinutes(1).UtcDateTime,
+            restored.UpdatedAt);
+    }
+
+    private sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        private DateTimeOffset _utcNow = utcNow;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            return _utcNow;
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _utcNow += duration;
+        }
     }
 }

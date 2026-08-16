@@ -1,0 +1,13 @@
+.task-key {
+    display: -webkit-box;
+    max-width: 220px;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font-family: monospace;
+    font-size: .75rem;
+    line-height: 1.25;
+}

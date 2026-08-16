@@ -4,7 +4,8 @@ using RasHub.Domain.Abstractions;
 
 namespace RasHub.Infrastructure.Database.Interceptors;
 
-public sealed class AuditSoftDeleteInterceptor : SaveChangesInterceptor
+public sealed class AuditSoftDeleteInterceptor(TimeProvider timeProvider)
+    : SaveChangesInterceptor
 {
     public override InterceptionResult<int> SavingChanges(
         DbContextEventData eventData,
@@ -25,12 +26,12 @@ public sealed class AuditSoftDeleteInterceptor : SaveChangesInterceptor
         return base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    private static void ApplyChanges(DbContext? dbContext)
+    private void ApplyChanges(DbContext? dbContext)
     {
         if (dbContext is null)
             return;
 
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         foreach (var entry in dbContext.ChangeTracker.Entries<ISoftDeletable>())
         {

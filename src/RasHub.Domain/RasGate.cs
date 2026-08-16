@@ -6,7 +6,6 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
 {
     public const int NameMaxLength = 200;
     public const int UrlMaxLength = 2_048;
-    public const int ApiKeyMaxLength = 512;
 
     public required string Name { get; set; }
 
@@ -15,6 +14,18 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
     public int Port { get; set; }
 
     public required string ApiKey { get; set; }
+
+    public long ConfigurationRevision { get; set; } = 1;
+
+    public bool IsActive { get; set; } = true;
+
+    public string? InstanceName { get; set; }
+
+    public string? Version { get; set; }
+
+    public DateTime? StatusObservedAt { get; set; }
+
+    public DateTime? LastSeenAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -9,5 +9,5 @@ public sealed class ApplicationSettings
     public bool AllowForgotPassword { get; set; } = true;
     public bool AllowResendEmailConfirmation { get; set; } = true;
     public bool AllowPasskeyLogin { get; set; } = true;
-    public bool AllowRegistration { get; set; } = true;
+    public bool AllowRegistration { get; set; }
 }

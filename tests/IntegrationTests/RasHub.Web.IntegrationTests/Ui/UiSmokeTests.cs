@@ -1,8 +1,8 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Abstractions;
-using RasHub.Web.Settings;
 using RasHub.Web.IntegrationTests.Infrastructure;
+using RasHub.Web.Settings;
 
 namespace RasHub.Web.IntegrationTests.Ui;
 
@@ -29,6 +29,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("RasHub", html);
+        Assert.Contains("brand-home-link", html);
         Assert.Contains(
             "--mud-palette-primary: rgba(93,143,207,1)",
             html);
@@ -45,12 +46,64 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Api_key_does_not_authenticate_the_user_interface()
+    public async Task Identity_forms_use_the_narrow_page_shell()
+    {
+        using var client = _factory.CreateClient();
+
+        using var response = await client.GetAsync(
+            "/Account/ForgotPassword",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("app-page--narrow", html);
+    }
+
+    [Theory]
+    [InlineData(AppTheme.Light, "--mud-palette-background: rgba(245,246,248,1)")]
+    [InlineData(AppTheme.System, "@media (prefers-color-scheme: dark)")]
+    public async Task Login_page_configured_theme_is_rendered(
+        AppTheme theme,
+        string expectedThemeCss)
+    {
+        using var factory = new RasHubWebApplicationFactory();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var settingsProvider = scope.ServiceProvider
+                .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
+
+            await settingsProvider.UpdateAsync(new ApplicationSettings
+            {
+                Theme = theme
+            });
+        }
+
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync(
+            "/Account/Login",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(expectedThemeCss, html);
+        Assert.Contains(
+            "--login-background:var(--mud-palette-background)",
+            html);
+    }
+
+    [Theory]
+    [InlineData("/settings")]
+    [InlineData("/health-events")]
+    [InlineData("/ras-gates")]
+    public async Task Api_key_does_not_authenticate_administration_pages(string path)
     {
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
-            "/settings",
+            path,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -90,5 +143,6 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         Assert.DoesNotContain("Resend email confirmation", html);
         Assert.DoesNotContain("Log in with a passkey", html);
         Assert.DoesNotContain("Create a new account", html);
+        Assert.DoesNotContain("mud-divider", html);
     }
 }

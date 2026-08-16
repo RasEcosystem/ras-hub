@@ -12,7 +12,8 @@ public class ThemeProvider
         {
             AppTheme.Carbon => CarbonTheme.Create(),
             AppTheme.Slate => SlateTheme.Create(),
-
+            AppTheme.Light => LightTheme.Create(),
+            AppTheme.System => CarbonTheme.Create(),
             _ => CarbonTheme.Create()
         };
     }

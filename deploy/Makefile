@@ -25,8 +25,8 @@ help:
 	@echo "  make database-update                     Apply migrations"
 	@echo ""
 	@echo "Development targets:"
-	@echo "  make dev-up             Start PostgreSQL for local IDE development"
-	@echo "  make dev-stack-up       Build and start PostgreSQL and RasHub"
+	@echo "  make dev-up             Start PostgreSQL and Seq for local IDE development"
+	@echo "  make dev-stack-up       Build and start PostgreSQL, Seq, and RasHub"
 	@echo "  make dev-down           Stop the development stack"
 	@echo ""
 	@echo "Production targets:"
@@ -83,7 +83,7 @@ dev-up: dev-config
 	$(DOCKER) compose \
 		--env-file "$(DEV_ENV_FILE)" \
 		--file "$(DEV_COMPOSE_FILE)" \
-		up --detach --remove-orphans postgres
+		up --detach --remove-orphans postgres seq
 
 dev-stack-up: dev-config
 	$(DOCKER) compose \

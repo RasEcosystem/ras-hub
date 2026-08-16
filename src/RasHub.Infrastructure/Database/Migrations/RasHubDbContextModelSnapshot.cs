@@ -22,17 +22,15 @@ namespace RasHub.Infrastructure.Database.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("RasHub.Domain.RasGate", b =>
+            modelBuilder.Entity("RasHub.Domain.RasCluster", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("ApiKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("api_key");
+                    b.Property<bool?>("AllowAccessRightAuditEventsRecording")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_access_right_audit_events_recording");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -42,11 +40,157 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<int>("ErrorsCountThresholdPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("errors_count_threshold_percent");
+
+                    b.Property<long>("ExpirationTimeoutSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("expiration_timeout_seconds");
+
+                    b.Property<Guid>("ExternalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("host");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<bool?>("KillByMemoryWithDump")
+                        .HasColumnType("boolean")
+                        .HasColumnName("kill_by_memory_with_dump");
+
+                    b.Property<bool>("KillProblemProcesses")
+                        .HasColumnType("boolean")
+                        .HasColumnName("kill_problem_processes");
+
+                    b.Property<long>("LifetimeLimitSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lifetime_limit_seconds");
+
+                    b.Property<string>("LoadBalancingMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("load_balancing_mode");
+
+                    b.Property<long>("MaxMemorySizeKb")
+                        .HasColumnType("bigint")
+                        .HasColumnName("max_memory_size_kb");
+
+                    b.Property<long>("MaxMemoryTimeLimitSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("max_memory_time_limit_seconds");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<long?>("PingPeriod")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ping_period");
+
+                    b.Property<long?>("PingTimeout")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ping_timeout");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer")
+                        .HasColumnName("port");
+
+                    b.Property<Guid>("RasGateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ras_gate_id");
+
+                    b.Property<string>("RestartSchedule")
+                        .HasColumnType("text")
+                        .HasColumnName("restart_schedule");
+
+                    b.Property<int>("SecurityLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("security_level");
+
+                    b.Property<int>("SessionFaultToleranceLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("session_fault_tolerance_level");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ras_clusters");
+
+                    b.HasIndex("RasGateId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
+
+                    b.ToTable("ras_clusters", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ras_clusters_port", "port BETWEEN 1 AND 65535");
+                        });
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasGate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApiKey")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("api_key");
+
+                    b.Property<long>("ConfigurationRevision")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("configuration_revision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("InstanceName")
+                        .HasColumnType("text")
+                        .HasColumnName("instance_name");
+
+                    b.Property<bool>("IsActive")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -58,6 +202,10 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
+                    b.Property<DateTime?>("StatusObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_observed_at");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -67,6 +215,10 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("url");
+
+                    b.Property<string>("Version")
+                        .HasColumnType("text")
+                        .HasColumnName("version");
 
                     b.HasKey("Id")
                         .HasName("pk_ras_gates");
@@ -97,6 +249,16 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasName("pk_settings");
 
                     b.ToTable("settings", (string)null);
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasCluster", b =>
+                {
+                    b.HasOne("RasHub.Domain.RasGate", null)
+                        .WithMany()
+                        .HasForeignKey("RasGateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ras_clusters_ras_gates_ras_gate_id");
                 });
 #pragma warning restore 612, 618
         }

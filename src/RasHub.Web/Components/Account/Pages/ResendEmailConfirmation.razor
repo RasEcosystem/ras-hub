@@ -81,7 +81,7 @@
                                         AdornmentIcon="@Icons.Material.Outlined.Email"
                                         UserAttributes="@EmailAttributes"/>
 
-                    <MudStaticButton Variant="Variant.Filled"
+                    <MudStaticButton Variant="Variant.Outlined"
                                      Color="Color.Primary"
                                      FullWidth="true"
                                      FormAction="FormAction.Submit">
@@ -122,7 +122,9 @@
 
     [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
 
-    private static readonly Dictionary<string, object> EmailAttributes =
+    // MudStaticTextField mutates UserAttributes during SSR, so this dictionary
+    // must remain scoped to the component instance.
+    private readonly Dictionary<string, object> EmailAttributes =
         new()
         {
             ["autocomplete"] = "username",
