@@ -9,7 +9,7 @@ PUBLISH_DIR ?= artifacts/publish/$(RID)
 
 .DEFAULT_GOAL := release
 
-.PHONY: help submodules submodules-update restore build debug release test test-unit test-integration publish clean dev-up dev-stack-up dev-down
+.PHONY: help submodules submodules-update restore build debug release format format-check test test-unit test-integration publish clean dev-up dev-stack-up dev-down
 
 help:
 	@echo "Targets:"
@@ -18,6 +18,8 @@ help:
 	@echo "  make build              Build the solution"
 	@echo "  make debug              Build in Debug mode"
 	@echo "  make release            Build in Release mode"
+	@echo "  make format             Format the solution"
+	@echo "  make format-check       Verify formatting exactly as CI does"
 	@echo "  make test               Run all tests"
 	@echo "  make test-unit          Run unit tests"
 	@echo "  make test-integration   Run integration tests"
@@ -47,6 +49,12 @@ debug: build
 
 release: CONFIGURATION := Release
 release: build
+
+format: restore
+	$(DOTNET) format "$(SOLUTION)" --no-restore
+
+format-check: restore
+	$(DOTNET) format "$(SOLUTION)" --no-restore --verify-no-changes
 
 test: restore
 	$(DOTNET) test "$(SOLUTION)" \

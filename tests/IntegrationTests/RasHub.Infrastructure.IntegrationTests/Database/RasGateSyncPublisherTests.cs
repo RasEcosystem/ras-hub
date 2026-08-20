@@ -15,6 +15,51 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         _database.Dispose();
     }
 
+    [Fact]
+    public async Task Publish_status_stores_gate_and_RAC_observations_atomically()
+    {
+        var observedAt = new DateTime(
+            2026,
+            8,
+            20,
+            12,
+            0,
+            0,
+            DateTimeKind.Utc);
+        var rasGate = RasGateTestData.Create();
+        await SeedGateAsync(rasGate);
+
+        await using (var publicationDb = _database.CreateContext())
+        {
+            var publisher = CreatePublisher(publicationDb);
+
+            var published = await publisher.TryPublishStatusAsync(
+                rasGate.Id,
+                rasGate.ConfigurationRevision,
+                new RasGateStatus(
+                    "Remote Gate",
+                    "1.2.3",
+                    false),
+                observedAt,
+                TestContext.Current.CancellationToken);
+
+            Assert.True(published);
+        }
+
+        await using var verificationDb = _database.CreateContext();
+        var stored = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Remote Gate", stored.InstanceName);
+        Assert.Equal("1.2.3", stored.Version);
+        Assert.Equal(observedAt, stored.StatusObservedAt);
+        Assert.False(stored.RacAvailable);
+        Assert.Null(stored.RacVersion);
+        Assert.Equal(observedAt, stored.RacStatusObservedAt);
+        Assert.Equal(observedAt, stored.LastSeenAt);
+    }
+
     [Theory]
     [InlineData("reconfigured")]
     [InlineData("inactive")]
@@ -36,7 +81,11 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         var published = await publisher.TryPublishStatusAsync(
             rasGate.Id,
             1,
-            new RasGateStatus("stale-instance", "stale-version"),
+            new RasGateStatus(
+                "stale-instance",
+                "stale-version",
+                true,
+                "8.3.27.2214"),
             DateTime.UtcNow,
             TestContext.Current.CancellationToken);
 
@@ -51,6 +100,65 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         Assert.Null(stored.InstanceName);
         Assert.Null(stored.Version);
         Assert.Null(stored.StatusObservedAt);
+        Assert.Null(stored.RacAvailable);
+        Assert.Null(stored.RacVersion);
+        Assert.Null(stored.RacStatusObservedAt);
+        Assert.Null(stored.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Publish_status_after_delete_and_restore_discards_pre_delete_result()
+    {
+        var rasGate = RasGateTestData.Create();
+        await SeedGateAsync(rasGate);
+
+        await using var publicationDb = _database.CreateContext();
+        _ = await publicationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        await using (var lifecycleDb = _database.CreateContext())
+        {
+            var lifecycleGate = await lifecycleDb.RasGates.SingleAsync(
+                item => item.Id == rasGate.Id,
+                TestContext.Current.CancellationToken);
+            lifecycleDb.RasGates.Remove(lifecycleGate);
+            await lifecycleDb.SaveChangesAsync(
+                TestContext.Current.CancellationToken);
+
+            lifecycleGate.IsDeleted = false;
+            lifecycleGate.DeletedAt = null;
+            await lifecycleDb.SaveChangesAsync(
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(3, lifecycleGate.ConfigurationRevision);
+        }
+
+        var publisher = CreatePublisher(publicationDb);
+        var published = await publisher.TryPublishStatusAsync(
+            rasGate.Id,
+            1,
+            new RasGateStatus(
+                "pre-delete-instance",
+                "pre-delete-version",
+                true,
+                "8.3.27.2214"),
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+
+        await using var verificationDb = _database.CreateContext();
+        var stored = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(3, stored.ConfigurationRevision);
+        Assert.Null(stored.InstanceName);
+        Assert.Null(stored.Version);
+        Assert.Null(stored.StatusObservedAt);
+        Assert.Null(stored.RacAvailable);
+        Assert.Null(stored.RacVersion);
+        Assert.Null(stored.RacStatusObservedAt);
         Assert.Null(stored.LastSeenAt);
     }
 

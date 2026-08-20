@@ -3,7 +3,6 @@ using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
@@ -13,9 +12,11 @@ public sealed class SynchronizeClustersTaskHandler(
     IRasGateSyncPublisher publisher,
     IRasClusterGateway clusterGateway,
     TimeProvider timeProvider)
-    : IBackgroundTaskHandler<SynchronizeClustersTask>
+    : IBackgroundTaskHandler<
+        SynchronizeClustersTask,
+        CollectionSynchronizationResult>
 {
-    public async Task ExecuteAsync(
+    public async Task<CollectionSynchronizationResult> ExecuteAsync(
         SynchronizeClustersTask task,
         CancellationToken cancellationToken)
     {
@@ -24,8 +25,7 @@ public sealed class SynchronizeClustersTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
@@ -58,5 +58,9 @@ public sealed class SynchronizeClustersTaskHandler(
                 observedAt,
                 cancellationToken))
             throw new RasGateConfigurationChangedException(rasGate.Id);
+
+        return new CollectionSynchronizationResult(
+            snapshot.Items.Count,
+            observedAt);
     }
 }

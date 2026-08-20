@@ -27,6 +27,9 @@ public sealed class RasGateSyncPublisher(
         rasGate.InstanceName = status.InstanceName;
         rasGate.Version = status.Version;
         rasGate.StatusObservedAt = observedAt;
+        rasGate.RacAvailable = status.RacAvailable;
+        rasGate.RacVersion = status.RacVersion;
+        rasGate.RacStatusObservedAt = observedAt;
         rasGate.LastSeenAt = observedAt;
 
         return await TrySaveAsync(cancellationToken);

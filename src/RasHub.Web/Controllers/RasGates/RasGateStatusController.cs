@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Responses;
@@ -15,80 +16,73 @@ namespace RasHub.Web.Controllers.RasGates;
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
 [Route("api/v1/ras-gates/{rasGateId:guid}/status")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
-    "Inspect and synchronize a registered gateway status.")]
+[Tags("RasGates")]
+[ControllerDescription("RasGates",
+    "Manage registered gateways and inspect their synchronized status.")]
 public sealed class RasGateStatusController(
-    ActiveRasGateLookup rasGateLookup,
     RasGateQueries queries,
-    InteractiveTaskRunner taskRunner) : ControllerBase
+    InteractiveTaskRunner taskRunner,
+    TimeProvider timeProvider,
+    IOptions<RasGateMonitoringOptions> monitoringOptions) : ControllerBase
 {
-    [HttpGet]
+    [HttpGet(Name = "GetRasGateStatus")]
     [EndpointSummary("Get status")]
     [EndpointDescription(
-        "Returns the cached status without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<RasGateStatusResponse>),
+        "Returns the last observed RasGate and RAC status without contacting the gateway.")]
+    [ProducesResponseType<ApiResponse<RasGateStatusResponse>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
     public async Task<ApiResponse<RasGateStatusResponse>> Get(
         Guid rasGateId,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
+        var result = await queries.GetStatusAsync(
             rasGateId,
+            GetOnlineSince(),
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<RasGateStatusResponse>(
-                state,
-                rasGateId);
-
-        var status = await queries.GetStatusAsync(
-            rasGateId,
-            cancellationToken);
-
-        return ApiResponse<RasGateStatusResponse>.Ok(status);
+        return result is null
+            ? RasGateApiResponses.GateNotFound<RasGateStatusResponse>(rasGateId)
+            : result.IsActive
+                ? ApiResponse<RasGateStatusResponse>.Ok(result.Status)
+                : RasGateApiResponses
+                    .ForUnavailableGate<RasGateStatusResponse>(
+                        ActiveRasGateState.Inactive,
+                        rasGateId);
     }
 
-    [HttpPost("synchronize")]
+    [HttpPost("synchronize", Name = "SynchronizeRasGateStatus")]
     [EndpointSummary("Synchronize status")]
     [EndpointDescription(
-        "Synchronizes the current gateway status, persists it, and returns the observed status.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<RasGateStatusResponse>),
+        "Observes RasGate and RAC, persists their aggregate status, and returns it.")]
+    [ProducesResponseType<ApiResponse<RasGateStatusResponse>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<RasGateStatusResponse>> Synchronize(
         Guid rasGateId,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
+        var current = await queries.GetStatusAsync(
             rasGateId,
+            GetOnlineSince(),
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<RasGateStatusResponse>(
-                state,
+        if (current is null)
+            return RasGateApiResponses.GateNotFound<RasGateStatusResponse>(
                 rasGateId);
+
+        if (!current.IsActive)
+            return RasGateApiResponses
+                .ForUnavailableGate<RasGateStatusResponse>(
+                    ActiveRasGateState.Inactive,
+                    rasGateId);
 
         var execution = await taskRunner.RunAsync(
             new CheckRasGateStatusTask(rasGateId),
@@ -104,12 +98,24 @@ public sealed class RasGateStatusController(
             return RasGateApiResponses.StatusSynchronizationFailed(
                 taskResult);
 
-        var status = await queries.GetStatusAsync(
+        var refreshed = await queries.GetStatusAsync(
             rasGateId,
+            GetOnlineSince(),
             cancellationToken);
 
-        return status is null
+        return refreshed is null
             ? RasGateApiResponses.GateNotFound<RasGateStatusResponse>(rasGateId)
-            : ApiResponse<RasGateStatusResponse>.Ok(status);
+            : refreshed.IsActive
+                ? ApiResponse<RasGateStatusResponse>.Ok(refreshed.Status)
+                : RasGateApiResponses
+                    .ForUnavailableGate<RasGateStatusResponse>(
+                        ActiveRasGateState.Inactive,
+                        rasGateId);
+    }
+
+    private DateTime GetOnlineSince()
+    {
+        return (timeProvider.GetUtcNow() - monitoringOptions.Value.OnlineThreshold)
+            .UtcDateTime;
     }
 }

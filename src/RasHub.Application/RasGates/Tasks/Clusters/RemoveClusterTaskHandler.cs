@@ -2,7 +2,6 @@ using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
@@ -23,8 +22,7 @@ public sealed class RemoveClusterTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
@@ -47,13 +45,32 @@ public sealed class RemoveClusterTaskHandler(
             task.ClusterPassword,
             cancellationToken);
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
+        bool published;
 
-        if (!await publisher.TryRemoveClusterAsync(
+        try
+        {
+            published = await publisher.TryRemoveClusterAsync(
                 rasGate.Id,
                 configurationRevision,
                 task.ClusterId,
                 observedAt,
-                cancellationToken))
-            throw new RasGateConfigurationChangedException(rasGate.Id);
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new RasGateMutationPublicationNotConfirmedException(
+                rasGate.Id,
+                "clusters",
+                "remove",
+                task.ClusterId,
+                exception);
+        }
+
+        if (!published)
+            throw new RasGateMutationPublicationNotConfirmedException(
+                rasGate.Id,
+                "clusters",
+                "remove",
+                task.ClusterId);
     }
 }

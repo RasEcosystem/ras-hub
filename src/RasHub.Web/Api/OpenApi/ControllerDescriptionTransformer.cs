@@ -18,34 +18,29 @@ public sealed class ControllerDescriptionTransformer : IOpenApiDocumentTransform
             .OfType<ControllerActionDescriptor>()
             .Select(action => new
             {
-                Tag = action.ControllerName,
-                action.ControllerTypeInfo
+                Attribute = action.ControllerTypeInfo
                     .GetCustomAttribute<ControllerDescriptionAttribute>(true)
-                    ?.Description
             })
-            .Where(item => item.Description is not null)
-            .DistinctBy(item => item.Tag);
+            .Where(item => item.Attribute is not null)
+            .Select(item => item.Attribute!)
+            .DistinctBy(attribute => attribute.Tag);
 
         document.Tags ??= new HashSet<OpenApiTag>();
 
-        foreach (var controller in controllerDescriptions)
+        foreach (var attribute in controllerDescriptions)
         {
             var existingTag = document.Tags.FirstOrDefault(tag => string.Equals(
                 tag.Name,
-                controller.Tag,
+                attribute.Tag,
                 StringComparison.Ordinal));
 
             if (existingTag is not null)
             {
-                existingTag.Description = controller.Description;
+                existingTag.Description = attribute.Description;
                 continue;
             }
 
-            document.Tags.Add(new OpenApiTag
-            {
-                Name = controller.Tag,
-                Description = controller.Description
-            });
+            document.Tags.Add(new OpenApiTag { Name = attribute.Tag, Description = attribute.Description });
         }
 
         return Task.CompletedTask;

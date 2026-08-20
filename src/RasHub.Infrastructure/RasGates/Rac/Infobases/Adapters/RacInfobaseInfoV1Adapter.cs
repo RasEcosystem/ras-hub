@@ -28,12 +28,7 @@ public sealed class RacInfobaseInfoV1Adapter(
     public IReadOnlyList<string> CreateCommand(RacInfobaseQuery command)
     {
         var infobaseId = GetRequiredInfobaseId(command);
-        var arguments = new List<string>
-        {
-            "infobase",
-            "summary",
-            "info"
-        };
+        var arguments = new List<string> { "infobase", "summary", "info" };
         RacInfobaseCommandArguments.AddCluster(arguments, command);
         arguments.Add($"--infobase={infobaseId:D}");
         return arguments;
@@ -54,6 +49,9 @@ public sealed class RacInfobaseInfoV1Adapter(
 
         var deserializer = deserializerResolver.Resolve(racVersion);
         var items = deserializer.Deserialize(execution.StandardOutput);
+
+        if (items.Count == 0)
+            throw new RacResourceNotFoundException("infobases", infobaseId);
 
         if (items.Count != 1)
             throw new RasGateClientException(

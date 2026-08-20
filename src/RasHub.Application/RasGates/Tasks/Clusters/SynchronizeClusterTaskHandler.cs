@@ -2,7 +2,6 @@ using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
@@ -23,8 +22,7 @@ public sealed class SynchronizeClusterTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);

@@ -39,12 +39,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         engine.Enqueue(new StartupProducerTask(), interactiveOptions);
         var maintenance = engine.Enqueue(
             new RecordedTask(10_000),
-            new BackgroundTaskOptions
-            {
-                Queue = BackgroundTaskQueue.Maintenance,
-                MaxAttempts = 1,
-                Timeout = null
-            });
+            new BackgroundTaskOptions { Queue = BackgroundTaskQueue.Maintenance, MaxAttempts = 1, Timeout = null });
         var producer = host.Services.GetRequiredService<StartupProducerProbe>();
         var cancellationToken = TestContext.Current.CancellationToken;
         var startTask = Task.Run(

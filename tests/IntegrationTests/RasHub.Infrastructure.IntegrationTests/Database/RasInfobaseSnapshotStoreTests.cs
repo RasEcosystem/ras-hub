@@ -130,12 +130,14 @@ public sealed class RasInfobaseSnapshotStoreTests : IDisposable
                 .ToListAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(2, infobases.Count);
-            Assert.Contains(infobases, infobase =>
-                infobase.ExternalId == first.ExternalId &&
-                infobase.Name == "First updated");
-            Assert.Contains(infobases, infobase =>
-                infobase.ExternalId == second.ExternalId &&
-                infobase.Name == "Second");
+            Assert.Contains(infobases,
+                infobase =>
+                    infobase.ExternalId == first.ExternalId &&
+                    infobase.Name == "First updated");
+            Assert.Contains(infobases,
+                infobase =>
+                    infobase.ExternalId == second.ExternalId &&
+                    infobase.Name == "Second");
         }
     }
 

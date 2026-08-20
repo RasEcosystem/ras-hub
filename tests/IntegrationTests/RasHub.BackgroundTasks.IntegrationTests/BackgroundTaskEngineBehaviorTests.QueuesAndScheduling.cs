@@ -252,10 +252,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
         var engine = GetEngine(host);
         var probe = host.Services.GetRequiredService<KeyedOrderProbe>();
-        var options = new BackgroundTaskOptions
-        {
-            ConcurrencyKey = "ordered-key"
-        };
+        var options = new BackgroundTaskOptions { ConcurrencyKey = "ordered-key" };
         var first = engine.Enqueue(new KeyedOrderTask(0), options);
 
         try
@@ -321,10 +318,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
         var engine = GetEngine(host);
         var probe = host.Services.GetRequiredService<KeyedOrderProbe>();
-        var options = new BackgroundTaskOptions
-        {
-            ConcurrencyKey = "cancel-waiter-key"
-        };
+        var options = new BackgroundTaskOptions { ConcurrencyKey = "cancel-waiter-key" };
         var first = engine.Enqueue(new KeyedOrderTask(0), options);
 
         try
@@ -415,10 +409,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var engine = GetEngine(host);
         var probe = host.Services.GetRequiredService<KeyedOrderProbe>();
         var blockingProbe = host.Services.GetRequiredService<BlockingProbe>();
-        var options = new BackgroundTaskOptions
-        {
-            ConcurrencyKey = "granted-cancel-key"
-        };
+        var options = new BackgroundTaskOptions { ConcurrencyKey = "granted-cancel-key" };
         var first = engine.Enqueue(new KeyedOrderTask(0), options);
 
         try
@@ -705,10 +696,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var weakPayload = new WeakReference(payload);
         var handle = engine.Enqueue(
             new PayloadTask(payload),
-            new BackgroundTaskOptions
-            {
-                NotBefore = DateTimeOffset.UtcNow + TimeSpan.FromDays(365)
-            });
+            new BackgroundTaskOptions { NotBefore = DateTimeOffset.UtcNow + TimeSpan.FromDays(365) });
 
         Assert.True(engine.Cancel(handle.Id));
         Assert.Equal(

@@ -45,6 +45,9 @@ public sealed class RacClusterInfoV1Adapter(
         var deserializer = deserializerResolver.Resolve(racVersion);
         var items = deserializer.Deserialize(execution.StandardOutput);
 
+        if (items.Count == 0)
+            throw new RacResourceNotFoundException("clusters", clusterId);
+
         if (items.Count != 1)
             throw new RasGateClientException(
                 "RAC cluster info command did not return exactly one cluster.");

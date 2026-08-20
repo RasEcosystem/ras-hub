@@ -26,10 +26,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             var engine = GetEngine(host);
             var maintenance = engine.Enqueue(
                 new BlockingTask(),
-                new BackgroundTaskOptions
-                {
-                    Queue = BackgroundTaskQueue.Maintenance
-                });
+                new BackgroundTaskOptions { Queue = BackgroundTaskQueue.Maintenance });
 
             var blockingProbe = host.Services
                 .GetRequiredService<BlockingProbe>();
@@ -40,10 +37,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
 
             var interactive = engine.Enqueue(
                 new RecordedTask(123),
-                new BackgroundTaskOptions
-                {
-                    Queue = BackgroundTaskQueue.Interactive
-                });
+                new BackgroundTaskOptions { Queue = BackgroundTaskQueue.Interactive });
 
             var interactiveResult = await Await(
                 interactive,

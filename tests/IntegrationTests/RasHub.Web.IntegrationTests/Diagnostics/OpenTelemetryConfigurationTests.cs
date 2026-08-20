@@ -36,10 +36,7 @@ public sealed class OpenTelemetryConfigurationTests
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["OpenTelemetry:MetricsEndpoint"] = endpoint
-            })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["OpenTelemetry:MetricsEndpoint"] = endpoint })
             .Build();
         var extensionType = typeof(Program).Assembly.GetType(
             "RasHub.Web.Infrastructure.Diagnostics." +

@@ -33,11 +33,7 @@ public sealed class RasInfobaseEntityTypeConfiguration
             .HasColumnName("observed_at")
             .IsRequired();
 
-        builder.HasIndex(infobase => new
-            {
-                infobase.RasClusterId,
-                infobase.ExternalId
-            })
+        builder.HasIndex(infobase => new { infobase.RasClusterId, infobase.ExternalId })
             .IsUnique()
             .HasDatabaseName(
                 "ux_ras_infobases_ras_cluster_id_external_id");

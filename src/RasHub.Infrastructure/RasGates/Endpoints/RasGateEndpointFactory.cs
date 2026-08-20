@@ -19,10 +19,7 @@ public sealed class RasGateEndpointFactory : IRasGateEndpointFactory
             (!address.IsDefaultPort && address.Port != port))
             throw InvalidEndpoint();
 
-        var builder = new UriBuilder(address)
-        {
-            Port = port
-        };
+        var builder = new UriBuilder(address) { Port = port };
 
         if (!builder.Path.EndsWith('/'))
             builder.Path += '/';

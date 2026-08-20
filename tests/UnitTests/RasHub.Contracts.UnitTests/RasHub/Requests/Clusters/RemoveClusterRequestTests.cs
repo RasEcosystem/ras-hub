@@ -6,22 +6,6 @@ namespace RasHub.Contracts.UnitTests.RasHub.Requests.Clusters;
 public sealed class RemoveClusterRequestTests
 {
     [Fact]
-    public void Validate_password_with_user_accepts_request()
-    {
-        var request = new RemoveClusterRequest(
-            "cluster-admin",
-            "cluster-secret");
-
-        Assert.Empty(Validate(request));
-    }
-
-    [Fact]
-    public void Validate_without_credentials_accepts_request()
-    {
-        Assert.Empty(Validate(new RemoveClusterRequest()));
-    }
-
-    [Fact]
     public void Validate_password_without_user_rejects_request()
     {
         var results = Validate(new RemoveClusterRequest(

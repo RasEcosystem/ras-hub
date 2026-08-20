@@ -56,11 +56,12 @@ internal static class IdentityServiceCollectionExtensions
                 $"Connection string 'ConnectionStrings:{RasHubDbContext.ConnectionStringName}' is required.");
 
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(connectionString, npgsql =>
-            {
-                npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
-                npgsql.MigrationsHistoryTable("__IdentityMigrationsHistory");
-            }));
+            options.UseNpgsql(connectionString,
+                npgsql =>
+                {
+                    npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
+                    npgsql.MigrationsHistoryTable("__IdentityMigrationsHistory");
+                }));
         services.AddDatabaseDeveloperPageExceptionFilter();
         services
             .AddIdentityCore<ApplicationUser>(options =>

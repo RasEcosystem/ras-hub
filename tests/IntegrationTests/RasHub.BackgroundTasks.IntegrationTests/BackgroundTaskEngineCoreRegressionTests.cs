@@ -334,11 +334,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             var engine = GetEngine(host);
             var handle = engine.Enqueue(
                 new RetryTask(1),
-                new BackgroundTaskOptions
-                {
-                    MaxAttempts = 2,
-                    RetryDelay = TimeSpan.Zero
-                });
+                new BackgroundTaskOptions { MaxAttempts = 2, RetryDelay = TimeSpan.Zero });
 
             Assert.True((await Await(handle, cancellationToken)).IsSucceeded);
             Assert.Null(engine.GetTask(handle.Id)?.LastError);
@@ -392,10 +388,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             engine.Enqueue(
                 new RecordedTask(1),
-                new BackgroundTaskOptions
-                {
-                    Timeout = TimeSpan.FromMilliseconds(uint.MaxValue)
-                }));
+                new BackgroundTaskOptions { Timeout = TimeSpan.FromMilliseconds(uint.MaxValue) }));
         Assert.Equal(0, engine.GetStatistics().ActiveTasks);
         Assert.Empty(engine.GetTasks());
     }
@@ -493,10 +486,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         {
             var start = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
-            var options = new BackgroundTaskOptions
-            {
-                DeduplicationKey = $"saturated:{round}"
-            };
+            var options = new BackgroundTaskOptions { DeduplicationKey = $"saturated:{round}" };
             var contenders = Enumerable.Range(0, 64)
                 .Select(_ => Task.Run(async () =>
                 {

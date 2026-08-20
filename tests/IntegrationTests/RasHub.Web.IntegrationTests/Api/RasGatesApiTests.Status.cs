@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -8,6 +9,7 @@ using RasHub.Application.RasGates.Tasks.Clusters;
 using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Contracts.RasHub.Requests;
+using RasHub.Infrastructure.Database;
 using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
 
 namespace RasHub.Web.IntegrationTests.Api;
@@ -15,13 +17,9 @@ namespace RasHub.Web.IntegrationTests.Api;
 public sealed partial class RasGatesApiTests
 {
     [Fact]
-    public async Task Get_status_returns_cached_status()
+    public async Task Get_status_without_observation_returns_unknown()
     {
-        var observedAt = DateTime.UtcNow.AddMinutes(-5);
-        var rasGate = await _factory.SeedRasGateAsync(
-            instanceName: "Cached Gate",
-            version: "1.2.3",
-            statusObservedAt: observedAt);
+        var rasGate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
@@ -31,9 +29,134 @@ public sealed partial class RasGatesApiTests
         var data = json.GetProperty("data");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Unknown", data.GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("rasGateObservedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("racAvailable").ValueKind);
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("racObservedAt").ValueKind);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_status_with_stale_gate_observation_returns_offline()
+    {
+        var staleObservedAt = DateTime.UtcNow.AddHours(-1);
+        var recentlySeenAt = DateTime.UtcNow;
+        var rasGate = await _factory.SeedRasGateAsync(
+            instanceName: "Stale Gate",
+            version: "1.2.3",
+            statusObservedAt: staleObservedAt);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+            var stored = await db.RasGates.SingleAsync(
+                item => item.Id == rasGate.Id,
+                TestContext.Current.CancellationToken);
+            stored.RacAvailable = true;
+            stored.RacVersion = "8.3.27.2214";
+            stored.RacStatusObservedAt = recentlySeenAt;
+            stored.LastSeenAt = recentlySeenAt;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            "Offline",
+            json.GetProperty("data").GetProperty("state").GetString());
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task Get_status_with_fresh_gate_and_unavailable_or_stale_RAC_returns_degraded(
+        bool racAvailable,
+        bool racObservationIsStale)
+    {
+        var observedAt = DateTime.UtcNow;
+        var rasGate = await _factory.SeedRasGateAsync(
+            instanceName: "Fresh Gate",
+            version: "1.2.3",
+            statusObservedAt: observedAt);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+            var stored = await db.RasGates.SingleAsync(
+                item => item.Id == rasGate.Id,
+                TestContext.Current.CancellationToken);
+            stored.RacAvailable = racAvailable;
+            stored.RacVersion = racAvailable ? "8.3.27.2214" : null;
+            stored.RacStatusObservedAt = racObservationIsStale
+                ? observedAt.AddHours(-1)
+                : observedAt;
+            stored.LastSeenAt = observedAt;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Degraded", data.GetProperty("state").GetString());
+        Assert.Equal(
+            racAvailable,
+            data.GetProperty("racAvailable").GetBoolean());
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_status_returns_cached_status()
+    {
+        var observedAt = DateTime.UtcNow;
+        var rasGate = await _factory.SeedRasGateAsync(
+            instanceName: "Cached Gate",
+            version: "1.2.3",
+            statusObservedAt: observedAt);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+            var stored = await db.RasGates.SingleAsync(
+                item => item.Id == rasGate.Id,
+                TestContext.Current.CancellationToken);
+            stored.RacAvailable = true;
+            stored.RacVersion = "8.3.27.2214";
+            stored.RacStatusObservedAt = observedAt;
+            stored.LastSeenAt = observedAt;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Ready", data.GetProperty("state").GetString());
         Assert.Equal("Cached Gate", data.GetProperty("instanceName").GetString());
-        Assert.Equal("1.2.3", data.GetProperty("version").GetString());
-        Assert.Equal(observedAt, data.GetProperty("observedAt").GetDateTime());
+        Assert.Equal("1.2.3", data.GetProperty("rasGateVersion").GetString());
+        Assert.Equal(
+            observedAt,
+            data.GetProperty("rasGateObservedAt").GetDateTime());
+        Assert.True(data.GetProperty("racAvailable").GetBoolean());
+        Assert.Equal("8.3.27.2214", data.GetProperty("racVersion").GetString());
+        Assert.Equal(
+            observedAt,
+            data.GetProperty("racObservedAt").GetDateTime());
         Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
     }
 
@@ -44,7 +167,9 @@ public sealed partial class RasGatesApiTests
         _factory.RasGateBoundary.Status =
             new RasGateStatus(
                 "Remote Gate",
-                "2.3.4");
+                "2.3.4",
+                true,
+                "8.3.27.2214");
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
@@ -55,9 +180,17 @@ public sealed partial class RasGatesApiTests
         var data = json.GetProperty("data");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Ready", data.GetProperty("state").GetString());
         Assert.Equal("Remote Gate", data.GetProperty("instanceName").GetString());
-        Assert.Equal("2.3.4", data.GetProperty("version").GetString());
-        Assert.NotEqual(JsonValueKind.Null, data.GetProperty("observedAt").ValueKind);
+        Assert.Equal("2.3.4", data.GetProperty("rasGateVersion").GetString());
+        Assert.NotEqual(
+            JsonValueKind.Null,
+            data.GetProperty("rasGateObservedAt").ValueKind);
+        Assert.True(data.GetProperty("racAvailable").GetBoolean());
+        Assert.Equal("8.3.27.2214", data.GetProperty("racVersion").GetString());
+        Assert.NotEqual(
+            JsonValueKind.Null,
+            data.GetProperty("racObservedAt").ValueKind);
         Assert.Equal(1, _factory.RasGateBoundary.StatusRequestCount);
         Assert.Equal("stored-secret", _factory.RasGateBoundary.LastApiKey);
 
@@ -66,8 +199,12 @@ public sealed partial class RasGatesApiTests
         Assert.Equal("Remote Gate", stored.InstanceName);
         Assert.Equal("2.3.4", stored.Version);
         Assert.NotNull(stored.StatusObservedAt);
+        Assert.True(stored.RacAvailable);
+        Assert.Equal("8.3.27.2214", stored.RacVersion);
+        Assert.NotNull(stored.RacStatusObservedAt);
         Assert.NotNull(stored.LastSeenAt);
         Assert.Equal(stored.StatusObservedAt, stored.LastSeenAt);
+        Assert.Equal(stored.StatusObservedAt, stored.RacStatusObservedAt);
 
         using var cachedResponse = await client.GetAsync(
             $"{RasGatesPath}/{rasGate.Id}/status",
@@ -101,6 +238,7 @@ public sealed partial class RasGatesApiTests
                     rasGate.Name,
                     "https://replacement.example.test",
                     9443,
+                    rasGate.IsActive,
                     "replacement-secret"),
                 TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
@@ -122,6 +260,9 @@ public sealed partial class RasGatesApiTests
         Assert.Null(stored.InstanceName);
         Assert.Null(stored.Version);
         Assert.Null(stored.StatusObservedAt);
+        Assert.Null(stored.RacAvailable);
+        Assert.Null(stored.RacVersion);
+        Assert.Null(stored.RacStatusObservedAt);
         Assert.Null(stored.LastSeenAt);
     }
 
@@ -139,6 +280,28 @@ public sealed partial class RasGatesApiTests
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("ras_gate_not_found", GetErrorCode(json));
         Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Synchronize_status_when_task_loses_gate_returns_not_found()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        _factory.RasGateBoundary.StatusException =
+            new RasGateNotFoundException(rasGate.Id);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
+            null,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("ras_gate_not_found", GetErrorCode(json));
+        Assert.Equal(
+            $"RasGate '{rasGate.Id}' was not found.",
+            json.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal(1, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Fact]
@@ -188,7 +351,9 @@ public sealed partial class RasGatesApiTests
         var statusHandler = scope.ServiceProvider.GetRequiredService<
             IBackgroundTaskHandler<CheckRasGateStatusTask>>();
         var clustersHandler = scope.ServiceProvider.GetRequiredService<
-            IBackgroundTaskHandler<SynchronizeClustersTask>>();
+            IBackgroundTaskHandler<
+                SynchronizeClustersTask,
+                CollectionSynchronizationResult>>();
 
         await Assert.ThrowsAsync<RasGateInactiveException>(() =>
             statusHandler.ExecuteAsync(

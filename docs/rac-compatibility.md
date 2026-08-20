@@ -17,12 +17,21 @@ catalog. Resource gateways own command/adapter selection and output
 interpretation; adding a resource does not add dependencies to
 `RasGateSessionFactory`.
 
-The status gateway uses the same session for `GET /rasgate/status` but does not
-resolve a RAC version or an operation adapter. Compatibility-aware RAC resource
-operations proceed as follows:
+The status gateway uses one session to request `GET /rasgate/status` and then
+`GET /rac/status`. A valid `available: false` RAC response is a successful
+degraded observation. A RAC transport or protocol failure after a successful
+RasGate response is logged without remote details and published as unknown;
+request cancellation is still propagated. RasGate and RAC observations are
+published atomically under the captured configuration revision. Status checks
+validate and cache an available RAC version, but do not resolve an operation
+adapter.
+
+Compatibility-aware RAC resource operations proceed as follows:
 
 1. The session reads the RAC version from `GET /rac/status`. The shared cache is
    keyed by `(RasGateId, ConfigurationRevision)` and expires after five minutes.
+   Resource operations fail with `RacUnavailableException` when a fresh valid
+   response reports `available: false`.
 2. The operation resolver selects the adapter with the highest
    `MinimumVersion` that does not exceed the detected RAC version.
 3. Read operations resolve their output deserializer independently with the
@@ -88,6 +97,15 @@ exactly one `cluster : <uuid>` record. RasHub then reads that cluster through
 `clusters.update` follows the same read-after-write publication rule. Neither
 mutation is retried automatically. A failed insert (including an RAC port
 conflict) or update leaves the previous local shadow state unchanged.
+
+After a mutating RAC request is dispatched, a transport interruption,
+timeout, malformed or incomplete success response, inconsistent execution
+outcome, or unparseable insert identifier is treated as an unknown outcome.
+It is never retried automatically. A confirmed mutation whose authoritative
+read-back or guarded local publication fails is reported as not confirmed;
+clients must synchronize, verify the target RasGate, and avoid automatic
+retry. Explicit pre-start rejection and a consistent RAC `failed` outcome
+remain ordinary failures.
 
 Optional `--agent-user` and `--agent-pwd` values are accepted for insert and
 update. They remain request-scoped and are not persisted or included in logs,

@@ -74,10 +74,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
             var settingsProvider = scope.ServiceProvider
                 .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
 
-            await settingsProvider.UpdateAsync(new ApplicationSettings
-            {
-                Theme = theme
-            });
+            await settingsProvider.UpdateAsync(new ApplicationSettings { Theme = theme });
         }
 
         using var client = factory.CreateClient();

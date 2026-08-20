@@ -2,7 +2,6 @@ using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Infobases;
@@ -24,8 +23,7 @@ public sealed class SynchronizeInfobaseTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
@@ -72,8 +70,8 @@ public sealed class SynchronizeInfobaseTaskHandler(
             cancellationToken);
 
         if (clusters.Count != 1)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasCluster '{task.ClusterId}' was not found for RasGate " +
-                $"'{task.RasGateId}'.");
+            throw new RasClusterNotFoundException(
+                task.RasGateId,
+                task.ClusterId);
     }
 }

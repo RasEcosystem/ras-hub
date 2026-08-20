@@ -15,28 +15,29 @@ internal static class BackgroundTaskInvokerFactory
     {
         ArgumentNullException.ThrowIfNull(taskType);
 
-        return Cache.GetOrAdd(taskType, static type =>
-        {
-            var resultContracts = type.GetInterfaces()
-                .Where(candidate => candidate.IsGenericType &&
-                                    candidate.GetGenericTypeDefinition() ==
-                                    typeof(IBackgroundTask<>))
-                .ToArray();
+        return Cache.GetOrAdd(taskType,
+            static type =>
+            {
+                var resultContracts = type.GetInterfaces()
+                    .Where(candidate => candidate.IsGenericType &&
+                                        candidate.GetGenericTypeDefinition() ==
+                                        typeof(IBackgroundTask<>))
+                    .ToArray();
 
-            if (resultContracts.Length > 1)
-                throw new InvalidOperationException(
-                    $"Background task '{type.FullName}' declares multiple result types.");
+                if (resultContracts.Length > 1)
+                    throw new InvalidOperationException(
+                        $"Background task '{type.FullName}' declares multiple result types.");
 
-            var invokerType = resultContracts.Length == 0
-                ? typeof(BackgroundTaskInvoker<>).MakeGenericType(type)
-                : typeof(BackgroundTaskResultInvoker<,>).MakeGenericType(
-                    type,
-                    resultContracts[0].GetGenericArguments()[0]);
+                var invokerType = resultContracts.Length == 0
+                    ? typeof(BackgroundTaskInvoker<>).MakeGenericType(type)
+                    : typeof(BackgroundTaskResultInvoker<,>).MakeGenericType(
+                        type,
+                        resultContracts[0].GetGenericArguments()[0]);
 
-            return (IBackgroundTaskInvoker)(
-                Activator.CreateInstance(invokerType, true) ??
-                throw new InvalidOperationException(
-                    $"Could not create invoker for '{type.FullName}'."));
-        });
+                return (IBackgroundTaskInvoker)(
+                    Activator.CreateInstance(invokerType, true) ??
+                    throw new InvalidOperationException(
+                        $"Could not create invoker for '{type.FullName}'."));
+            });
     }
 }

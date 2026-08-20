@@ -17,12 +17,7 @@ public sealed class RacClusterRemoveV1Adapter
     public IReadOnlyList<string> CreateCommand(RemoveRasClusterCommand command)
     {
         ValidateCommand(command);
-        var arguments = new List<string>
-        {
-            "cluster",
-            "remove",
-            $"--cluster={command.ClusterId:D}"
-        };
+        var arguments = new List<string> { "cluster", "remove", $"--cluster={command.ClusterId:D}" };
 
         if (command.ClusterUser is not null)
             arguments.Add($"--cluster-user={command.ClusterUser}");

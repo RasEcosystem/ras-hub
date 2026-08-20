@@ -14,16 +14,13 @@ public static class CarbonTheme
         return new MudThemeDefinition
         {
             IsDarkMode = true,
-
             Palette = new PaletteDark
             {
                 Black = "#111418",
-
                 Primary = "#5D8FCF",
                 PrimaryContrastText = "#FFFFFF",
                 Secondary = "#4B5D73",
                 SecondaryContrastText = "#FFFFFF",
-
                 Info = "#74A9DC",
                 InfoContrastText = "#FFFFFF",
                 Success = "#5F8F82",
@@ -32,42 +29,28 @@ public static class CarbonTheme
                 WarningContrastText = "#FFFFFF",
                 Error = "#A66873",
                 ErrorContrastText = "#FFFFFF",
-
                 Dark = "#1A1F25",
-
                 Background = "#20252B",
-
                 BackgroundGray = "#191E23",
-
                 Surface = "#2A3037",
-
                 DrawerBackground = "#252B31",
                 AppbarBackground = "#1A1F24",
-
                 AppbarText = "#D8DEE7",
-
                 TextPrimary = "#D8DEE7",
                 TextSecondary = "#A7B2BF",
                 TextDisabled = "#697480",
-
                 DrawerText = "#D0D8E2",
                 DrawerIcon = "#91A0B1",
-
                 ActionDefault = "#91A0B1",
                 ActionDisabled = "#A1A9B2",
                 ActionDisabledBackground = "#E2E6EA",
-
                 LinesDefault = "#3A424B",
                 LinesInputs = "#536170",
-
                 TableLines = "#39414A",
                 TableStriped = "#252B31",
-
                 Divider = "#3A424A",
                 DividerLight = "#30373F",
-
                 Skeleton = "#353D46",
-
                 OverlayLight = "#111418B8"
             }
         };

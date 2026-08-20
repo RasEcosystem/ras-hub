@@ -49,11 +49,12 @@ public static class ServiceCollectionExtensions
                 serviceProvider.GetRequiredService<
                     RasGateApiKeyProtectionInterceptor>());
 
-            options.UseNpgsql(connectionString, npgsql =>
-            {
-                npgsql.MigrationsAssembly(typeof(RasHubDbContext).Assembly.FullName);
-                npgsql.EnableRetryOnFailure();
-            });
+            options.UseNpgsql(connectionString,
+                npgsql =>
+                {
+                    npgsql.MigrationsAssembly(typeof(RasHubDbContext).Assembly.FullName);
+                    npgsql.EnableRetryOnFailure();
+                });
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));

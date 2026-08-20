@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
-using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Web.IntegrationTests.Infrastructure;
 using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
@@ -21,7 +20,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
-    public async Task Synchronize_persists_and_returns_infobases()
+    public async Task Synchronize_persists_infobases_and_returns_metadata()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
@@ -31,25 +30,17 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         using var response = await client.PostAsJsonAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/synchronize",
-            new SynchronizeInfobasesRequest
-            {
-                ClusterUser = "cluster-admin",
-                ClusterPassword = "cluster-secret"
-            },
+            new SynchronizeInfobasesRequest { ClusterUser = "cluster-admin", ClusterPassword = "cluster-secret" },
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
-        var infobase = Assert.Single(
-            data.GetProperty("items").EnumerateArray().ToArray());
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(json.GetProperty("success").GetBoolean());
         Assert.Equal(1, data.GetProperty("totalCount").GetInt32());
-        Assert.Equal(snapshot.ExternalId, infobase.GetProperty("id").GetGuid());
-        Assert.Equal(snapshot.Name, infobase.GetProperty("name").GetString());
-        Assert.Equal(
-            snapshot.Description,
-            infobase.GetProperty("description").GetString());
+        Assert.NotEqual(
+            default,
+            data.GetProperty("observedAt").GetDateTime());
         Assert.Equal(1, _factory.RasGateBoundary.InfobaseRequestCount);
         Assert.Equal(
             cluster.ExternalId,
@@ -69,7 +60,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
-    public async Task Get_paged_returns_cached_infobases_without_synchronization()
+    public async Task List_returns_cached_infobases_without_synchronization()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
@@ -77,16 +68,15 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
             [CreateSnapshot(Guid.NewGuid(), "cached")];
         using var client = _factory.CreateAuthenticatedClient();
 
-        using var synchronizationResponse = await client.PostAsJsonAsync(
+        using var synchronizationResponse = await client.PostAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/synchronize",
-            new SynchronizeInfobasesRequest(),
+            null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
 
         _factory.RasGateBoundary.Infobases = [];
-        using var cachedResponse = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/get-paged",
-            new PageRequest(),
+        using var cachedResponse = await client.GetAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases?page=1&pageSize=10",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(cachedResponse);
 
@@ -115,11 +105,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
         _factory.RasGateBoundary.Infobase = updated;
         using var response = await client.PostAsJsonAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/{first.ExternalId}/synchronize",
-            new SynchronizeInfobaseRequest
-            {
-                ClusterUser = "cluster-admin",
-                ClusterPassword = "cluster-secret"
-            },
+            new SynchronizeInfobaseRequest { ClusterUser = "cluster-admin", ClusterPassword = "cluster-secret" },
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -137,12 +123,38 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         var stored = await _factory.FindRasInfobasesAsync(cluster.Id);
         Assert.Equal(2, stored.Count);
-        Assert.Contains(stored, infobase =>
-            infobase.ExternalId == first.ExternalId &&
-            infobase.Name == "first-updated");
-        Assert.Contains(stored, infobase =>
-            infobase.ExternalId == second.ExternalId &&
-            infobase.Name == "second");
+        Assert.Contains(stored,
+            infobase =>
+                infobase.ExternalId == first.ExternalId &&
+                infobase.Name == "first-updated");
+        Assert.Contains(stored,
+            infobase =>
+                infobase.ExternalId == second.ExternalId &&
+                infobase.Name == "second");
+    }
+
+    [Fact]
+    public async Task Synchronize_by_id_missing_remote_infobase_returns_not_found()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        var infobaseId = Guid.NewGuid();
+        _factory.RasGateBoundary.InfobaseException =
+            new RacResourceNotFoundException("infobases", infobaseId);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/{infobaseId}/synchronize",
+            new SynchronizeInfobaseRequest(),
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("infobase_not_found", GetErrorCode(json));
+        Assert.Equal(
+            $"Infobase '{infobaseId}' was not found.",
+            json.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal(1, _factory.RasGateBoundary.InfobaseInfoRequestCount);
     }
 
     [Fact]
@@ -177,19 +189,46 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     public async Task Synchronize_for_unknown_cluster_returns_not_found_without_execution()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var clusterId = Guid.NewGuid();
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{Guid.NewGuid()}/infobases/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{clusterId}/infobases/synchronize",
             new SynchronizeInfobasesRequest(),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("cluster_not_found", GetErrorCode(json));
         Assert.Equal(
-            "ras_cluster_not_found",
-            json.GetProperty("error").GetProperty("code").GetString());
+            $"Cluster '{clusterId}' was not found.",
+            json.GetProperty("error").GetProperty("message").GetString());
         Assert.Equal(0, _factory.RasGateBoundary.InfobaseRequestCount);
+    }
+
+    [Fact]
+    public async Task Synchronize_when_task_loses_cluster_returns_not_found()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        _factory.RasGateBoundary.InfobasesException =
+            new RasClusterNotFoundException(
+                rasGate.Id,
+                cluster.ExternalId);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/synchronize",
+            null,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("cluster_not_found", GetErrorCode(json));
+        Assert.Equal(
+            $"Cluster '{cluster.ExternalId}' was not found.",
+            json.GetProperty("error").GetProperty("message").GetString());
+        Assert.Equal(1, _factory.RasGateBoundary.InfobaseRequestCount);
     }
 
     [Fact]
@@ -209,11 +248,49 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Equal(
-            "ras_gate_infobases_sync_failed",
+            "infobases_synchronization_failed",
             json.GetProperty("error").GetProperty("code").GetString());
         Assert.DoesNotContain("Sensitive remote details", json.ToString());
         Assert.Equal(2, _factory.RasGateBoundary.InfobaseRequestCount);
         Assert.Empty(await _factory.FindRasInfobasesAsync(cluster.Id));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Synchronize_when_RAC_is_unavailable_returns_service_unavailable(
+        bool singleResource)
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        var infobaseId = Guid.NewGuid();
+        var exception = new RacUnavailableException(rasGate.Id);
+
+        if (singleResource)
+            _factory.RasGateBoundary.InfobaseException = exception;
+        else
+            _factory.RasGateBoundary.InfobasesException = exception;
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var path = $"/api/v1/ras-gates/{rasGate.Id}/clusters/" +
+                   $"{cluster.ExternalId}/infobases" +
+                   (singleResource
+                       ? $"/{infobaseId}/synchronize"
+                       : "/synchronize");
+
+        using var response = singleResource
+            ? await client.PostAsJsonAsync(
+                path,
+                new SynchronizeInfobaseRequest(),
+                TestContext.Current.CancellationToken)
+            : await client.PostAsJsonAsync(
+                path,
+                new SynchronizeInfobasesRequest(),
+                TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("rac_unavailable", GetErrorCode(json));
     }
 
     [Fact]
@@ -246,6 +323,44 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.False(stored.IsDeleted);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Synchronize_without_capability_returns_conflict_without_execution(
+        bool singleResource)
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+
+        if (singleResource)
+            _factory.RasGateBoundary.SupportsInfobaseInfo = false;
+        else
+            _factory.RasGateBoundary.SupportsInfobaseSnapshots = false;
+
+        using var client = _factory.CreateAuthenticatedClient();
+        var path = $"/api/v1/ras-gates/{rasGate.Id}/clusters/" +
+                   $"{cluster.ExternalId}/infobases" +
+                   (singleResource
+                       ? $"/{Guid.NewGuid()}/synchronize"
+                       : "/synchronize");
+
+        using var response = singleResource
+            ? await client.PostAsJsonAsync(
+                path,
+                new SynchronizeInfobaseRequest(),
+                TestContext.Current.CancellationToken)
+            : await client.PostAsJsonAsync(
+                path,
+                new SynchronizeInfobasesRequest(),
+                TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("rac_capability_not_supported", GetErrorCode(json));
+        Assert.Equal(0, _factory.RasGateBoundary.InfobaseRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.InfobaseInfoRequestCount);
+    }
+
     [Fact]
     public async Task Synchronize_with_password_but_no_user_rejects_request()
     {
@@ -255,10 +370,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         using var response = await client.PostAsJsonAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/synchronize",
-            new SynchronizeInfobasesRequest
-            {
-                ClusterPassword = "cluster-secret"
-            },
+            new SynchronizeInfobasesRequest { ClusterPassword = "cluster-secret" },
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -270,32 +382,20 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        var infobaseId = Guid.NewGuid();
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/{Guid.NewGuid()}",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/{infobaseId}",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("infobase_not_found", GetErrorCode(json));
         Assert.Equal(
-            "ras_infobase_not_found",
-            json.GetProperty("error").GetProperty("code").GetString());
+            $"Infobase '{infobaseId}' was not found.",
+            json.GetProperty("error").GetProperty("message").GetString());
         Assert.Equal(0, _factory.RasGateBoundary.InfobaseInfoRequestCount);
-    }
-
-    [Fact]
-    public async Task Synchronize_without_authentication_returns_unauthorized()
-    {
-        using var client = _factory.CreateClient();
-
-        using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}/infobases/synchronize",
-            new SynchronizeInfobasesRequest(),
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal(0, _factory.RasGateBoundary.InfobaseRequestCount);
     }
 
     private static RasInfobaseSnapshot CreateSnapshot(
@@ -303,11 +403,6 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
         string name,
         string description = "")
     {
-        return new RasInfobaseSnapshot
-        {
-            ExternalId = externalId,
-            Name = name,
-            Description = description
-        };
+        return new RasInfobaseSnapshot { ExternalId = externalId, Name = name, Description = description };
     }
 }

@@ -94,12 +94,7 @@ public sealed class UserAdministrationServiceTests
         UserManager<ApplicationUser> userManager)
     {
         var id = Guid.NewGuid().ToString();
-        var user = new ApplicationUser
-        {
-            Id = id,
-            UserName = $"{id}@example.test",
-            Email = $"{id}@example.test"
-        };
+        var user = new ApplicationUser { Id = id, UserName = $"{id}@example.test", Email = $"{id}@example.test" };
         Assert.True((await userManager.CreateAsync(user)).Succeeded);
         return user;
     }

@@ -8,12 +8,30 @@ trim_trailing_whitespace = true
 
 [*.{cs,csx}]
 dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+csharp_using_directive_placement = outside_namespace:suggestion
+
 csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_before_members_in_object_initializers = true
+
 csharp_style_namespace_declarations = file_scoped:suggestion
 csharp_style_prefer_primary_constructors = true:suggestion
 csharp_style_prefer_switch_expression = true:suggestion
 csharp_style_prefer_pattern_matching = true:suggestion
 csharp_style_prefer_not_pattern = true:suggestion
+
+# Rider-specific wrapping. Roslyn ignores these keys and validates the
+# resulting whitespace through `dotnet format`.
+max_line_length = 120
+resharper_csharp_initializer_braces = next_line
+resharper_csharp_use_continuous_indent_inside_initializer_braces = false
+resharper_csharp_wrap_arguments_style = chop_if_long
+resharper_csharp_wrap_parameters_style = chop_if_long
 
 [*.{csproj,props,targets,xml}]
 indent_size = 4

@@ -17,12 +17,7 @@ public sealed class RacClusterUpdateV1Adapter
     public IReadOnlyList<string> CreateCommand(UpdateRasClusterCommand command)
     {
         ValidateCommand(command);
-        var arguments = new List<string>
-        {
-            "cluster",
-            "update",
-            $"--cluster={command.ClusterId:D}"
-        };
+        var arguments = new List<string> { "cluster", "update", $"--cluster={command.ClusterId:D}" };
         RacClusterCommandArguments.AddMutableSettings(arguments, command.Options);
         return arguments;
     }

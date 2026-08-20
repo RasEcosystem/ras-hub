@@ -40,7 +40,7 @@
 - Capture `RasGate.ConfigurationRevision` before remote I/O and publish remote-derived state through `IRasGateSyncPublisher`; its revision, active, and deleted guards must not be bypassed.
 - Keep shadow-state reconciliation and its observation metadata in the publisher's single `SaveChangesAsync`.
 - `IRasClusterSnapshotStore.ApplyAsync` and `IRasInfobaseSnapshotStore.ApplyAsync` accept only validated complete collections for their parent scope and may remove absent children. Targeted operations must not affect siblings.
-- Changes to a Gate URL, port, or API key and Gate deactivation must invalidate derived status, clusters, and their infobases in the same unit of work.
+- Gate remote-identity changes, deactivation, deletion, and restoration must invalidate derived status, clusters, and their infobases in the same unit of work.
 - Do not use raw SQL, `ExecuteUpdate`, or another interceptor-bypassing write for RasGate configuration or API keys unless revision, invalidation, and key protection are applied explicitly.
 - Preserve remote identity by parent scope: clusters use `(RasGateId, ExternalId)` and infobases use `(RasClusterId, ExternalId)`. Preserve restore-on-reappearance behavior.
 - Include cancellation tokens in EF queries and saves.

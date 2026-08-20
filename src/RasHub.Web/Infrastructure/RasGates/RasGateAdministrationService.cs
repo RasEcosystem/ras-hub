@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
-using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
+using RasHub.Application.RasGates.Services;
 using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Domain;
@@ -37,10 +38,8 @@ public sealed record RasGateAdministrationResult(bool Succeeded, string? Error)
 public sealed class RasGateAdministrationService(
     RasHubDbContext dbContext,
     RasGateQueries queries,
-    IRepository<RasGate> repository,
-    IRasClusterSnapshotStore snapshotStore,
+    RasGateRegistry rasGateRegistry,
     IRasGateEndpointFactory endpointFactory,
-    IUnitOfWork unitOfWork,
     InteractiveTaskRunner taskRunner,
     AuthenticationStateProvider authenticationStateProvider,
     IAuthorizationService authorizationService,
@@ -66,17 +65,14 @@ public sealed class RasGateAdministrationService(
         if (validation is not null)
             return RasGateAdministrationResult.Failure(validation);
 
-        var rasGate = new RasGate
-        {
-            Name = values.Name.Trim(),
-            Url = values.Url.Trim(),
-            Port = values.Port,
-            ApiKey = values.ApiKey!,
-            IsActive = values.IsActive
-        };
-
-        await repository.AddAsync(rasGate, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var rasGate = await rasGateRegistry.RegisterAsync(
+            new RasGateRegistration(
+                values.Name,
+                values.Url,
+                values.Port,
+                values.ApiKey!,
+                values.IsActive),
+            cancellationToken);
 
         logger.LogInformation("Administrator registered RasGate {RasGateId}", rasGate.Id);
         return RasGateAdministrationResult.Success();
@@ -89,59 +85,38 @@ public sealed class RasGateAdministrationService(
     {
         await EnsureAuthorizedAsync();
 
-        var rasGate = await repository.GetByIdAsync(id, cancellationToken);
-        if (rasGate is null)
-            return RasGateAdministrationResult.Failure("The RasGate no longer exists.");
-
-        var normalizedUrl = values.Url.Trim();
-        var endpointChanged =
-            !string.Equals(rasGate.Url, normalizedUrl, StringComparison.Ordinal) ||
-            rasGate.Port != values.Port;
-        var validation = Validate(values, endpointChanged);
+        var validation = Validate(values, false);
         if (validation is not null)
             return RasGateAdministrationResult.Failure(validation);
 
-        var apiKeyChanged = !string.IsNullOrWhiteSpace(values.ApiKey) &&
-                            !string.Equals(
-                                rasGate.ApiKey,
-                                values.ApiKey,
-                                StringComparison.Ordinal);
-        var remoteIdentityChanged = endpointChanged || apiKeyChanged;
-        var deactivated = !values.IsActive && rasGate.IsActive;
-
-        rasGate.Name = values.Name.Trim();
-        rasGate.Url = normalizedUrl;
-        rasGate.Port = values.Port;
-
-        if (!string.IsNullOrWhiteSpace(values.ApiKey))
-            rasGate.ApiKey = values.ApiKey;
-
-        if (rasGate.IsActive != values.IsActive)
-        {
-            rasGate.IsActive = values.IsActive;
-
-            if (values.IsActive)
-                rasGate.LastSeenAt = null;
-        }
-
-        if (remoteIdentityChanged || deactivated)
-        {
-            rasGate.InstanceName = null;
-            rasGate.Version = null;
-            rasGate.StatusObservedAt = null;
-            rasGate.LastSeenAt = null;
-            await snapshotStore.InvalidateAsync(id, cancellationToken);
-        }
-
+        RasGate? rasGate;
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            rasGate = await rasGateRegistry.UpdateAsync(
+                id,
+                new RasGateRegistrationUpdate(
+                    values.Name,
+                    values.Url,
+                    values.Port,
+                    values.IsActive,
+                    string.IsNullOrWhiteSpace(values.ApiKey)
+                        ? null
+                        : values.ApiKey),
+                cancellationToken);
+        }
+        catch (RasGateApiKeyRequiredException)
+        {
+            return RasGateAdministrationResult.Failure(
+                "A new API key is required for this endpoint.");
         }
         catch (DbUpdateConcurrencyException)
         {
             return RasGateAdministrationResult.Failure(
                 "The RasGate changed concurrently. Reload the list and try again.");
         }
+
+        if (rasGate is null)
+            return RasGateAdministrationResult.Failure("The RasGate no longer exists.");
 
         logger.LogInformation("Administrator updated RasGate {RasGateId}", id);
         return RasGateAdministrationResult.Success();
@@ -153,21 +128,21 @@ public sealed class RasGateAdministrationService(
     {
         await EnsureAuthorizedAsync();
 
-        var rasGate = await repository.GetByIdAsync(id, cancellationToken);
-        if (rasGate is null)
-            return RasGateAdministrationResult.Failure("The RasGate no longer exists.");
-
-        repository.Remove(rasGate);
-
+        RasGate? rasGate;
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            rasGate = await rasGateRegistry.UnregisterAsync(
+                id,
+                cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
             return RasGateAdministrationResult.Failure(
                 "The RasGate changed concurrently. Reload the list and try again.");
         }
+
+        if (rasGate is null)
+            return RasGateAdministrationResult.Failure("The RasGate no longer exists.");
 
         logger.LogInformation("Administrator deleted RasGate {RasGateId}", id);
         return RasGateAdministrationResult.Success();
@@ -190,12 +165,9 @@ public sealed class RasGateAdministrationService(
         if (!rasGate.IsDeleted)
             return RasGateAdministrationResult.Failure("The RasGate is not deleted.");
 
-        rasGate.IsDeleted = false;
-        rasGate.DeletedAt = null;
-
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await rasGateRegistry.RestoreAsync(rasGate, cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -235,6 +207,10 @@ public sealed class RasGateAdministrationService(
 
         if (result.Outcome == BackgroundTaskOutcome.Canceled)
             return RasGateAdministrationResult.Failure("The status refresh was canceled.");
+
+        if (result.Exception is RasGateNotFoundException)
+            return RasGateAdministrationResult.Failure(
+                "The RasGate no longer exists.");
 
         if (result.Exception is RasGateConfigurationChangedException)
             return RasGateAdministrationResult.Failure(

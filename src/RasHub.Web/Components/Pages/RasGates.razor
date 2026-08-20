@@ -1,6 +1,7 @@
 @page "/ras-gates"
 @attribute [Authorize(Policy = AppPolicies.ManageRasGates)]
 @using Microsoft.Extensions.Options
+@using RasHub.Contracts.RasHub.Models
 @using RasHub.Infrastructure.Database.Queries
 @using RasHub.Web.Infrastructure.Authorization
 @using RasHub.Web.Infrastructure.RasGates
@@ -96,12 +97,20 @@
                         @if (context.Version is not null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Version @context.Version
+                                RasGate @context.Version
                             </MudText>
                         }
+                        <MudText Typo="Typo.caption" Color="@RacStatusColor(context)">
+                            @RacStatusLabel(context)
+                        </MudText>
                     </MudTd>
                     <MudTd DataLabel="Last seen">@FormatTime(context.LastSeenAt)</MudTd>
-                    <MudTd DataLabel="Status observed">@FormatTime(context.StatusObservedAt)</MudTd>
+                    <MudTd DataLabel="Status observed">
+                        <MudText Typo="Typo.body2">Gate @FormatTime(context.StatusObservedAt)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            RAC @FormatTime(context.RacStatusObservedAt)
+                        </MudText>
+                    </MudTd>
                     <MudTd DataLabel="Changed">
                         <MudText Typo="Typo.body2">
                             @FormatTime(context.IsDeleted ? context.DeletedAt : context.UpdatedAt)
@@ -408,7 +417,7 @@
         if (!item.IsActive)
             return "Inactive";
 
-        return IsOnline(item) ? "Online" : "Offline";
+        return GetHealthState(item).ToString();
     }
 
     private Color StatusColor(RasGateAdministrationItem item)
@@ -418,7 +427,14 @@
         if (!item.IsActive)
             return Color.Default;
 
-        return IsOnline(item) ? Color.Success : Color.Error;
+        return GetHealthState(item) switch
+        {
+            RasGateHealthState.Unknown => Color.Default,
+            RasGateHealthState.Offline => Color.Error,
+            RasGateHealthState.Degraded => Color.Warning,
+            RasGateHealthState.Ready => Color.Success,
+            _ => Color.Default
+        };
     }
 
     private string StatusIcon(RasGateAdministrationItem item)
@@ -428,15 +444,38 @@
         if (!item.IsActive)
             return Icons.Material.Outlined.PauseCircle;
 
-        return IsOnline(item)
-            ? Icons.Material.Outlined.CheckCircle
-            : Icons.Material.Outlined.ErrorOutline;
+        return GetHealthState(item) switch
+        {
+            RasGateHealthState.Unknown => Icons.Material.Outlined.HelpOutline,
+            RasGateHealthState.Offline => Icons.Material.Outlined.ErrorOutline,
+            RasGateHealthState.Degraded => Icons.Material.Outlined.WarningAmber,
+            RasGateHealthState.Ready => Icons.Material.Outlined.CheckCircle,
+            _ => Icons.Material.Outlined.HelpOutline
+        };
     }
 
-    private bool IsOnline(RasGateAdministrationItem item)
+    private RasGateHealthState GetHealthState(RasGateAdministrationItem item)
     {
-        return item.LastSeenAt is { } lastSeen &&
-               lastSeen >= (TimeProvider.GetUtcNow() - MonitoringOptions.Value.OnlineThreshold).UtcDateTime;
+        var onlineSince = (
+                TimeProvider.GetUtcNow() - MonitoringOptions.Value.OnlineThreshold)
+            .UtcDateTime;
+
+        return item.GetHealthState(onlineSince);
+    }
+
+    private static string RacStatusLabel(RasGateAdministrationItem item)
+    {
+        if (item.RacAvailable == true)
+            return $"RAC {item.RacVersion ?? "available"}";
+
+        return item.RacAvailable == false
+            ? "RAC unavailable"
+            : "RAC not observed";
+    }
+
+    private static Color RacStatusColor(RasGateAdministrationItem item)
+    {
+        return item.RacAvailable == true ? Color.Secondary : Color.Warning;
     }
 
     private static string FormatEndpoint(RasGateAdministrationItem item)

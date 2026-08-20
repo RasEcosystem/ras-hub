@@ -63,6 +63,21 @@ public sealed class RacInfobaseInfoV1AdapterTests
     }
 
     [Fact]
+    public void Parse_empty_successful_output_reports_missing_infobase()
+    {
+        var execution = SuccessfulExecution(InfobaseId) with { StandardOutput = string.Empty };
+
+        var exception = Assert.Throws<RacResourceNotFoundException>(() =>
+            _adapter.Parse(
+                new Version(8, 3, 27, 2214),
+                execution,
+                new RacInfobaseQuery(ClusterId, InfobaseId)));
+
+        Assert.Equal("infobases", exception.Resource);
+        Assert.Equal(InfobaseId, exception.ExternalId);
+    }
+
+    [Fact]
     public void Create_command_without_infobase_id_rejects_query()
     {
         Assert.Throws<ArgumentException>(() =>

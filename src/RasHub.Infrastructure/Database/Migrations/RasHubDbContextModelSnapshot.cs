@@ -202,6 +202,18 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
+                    b.Property<bool?>("RacAvailable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("rac_available");
+
+                    b.Property<DateTime?>("RacStatusObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rac_status_observed_at");
+
+                    b.Property<string>("RacVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("rac_version");
+
                     b.Property<DateTime?>("StatusObservedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("status_observed_at");

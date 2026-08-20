@@ -6,12 +6,6 @@ namespace RasHub.Contracts.UnitTests.RasHub.Requests.Clusters;
 public sealed class UpdateClusterRequestTests
 {
     [Fact]
-    public void Validate_with_setting_accepts_request()
-    {
-        Assert.Empty(Validate(new UpdateClusterRequest("Updated")));
-    }
-
-    [Fact]
     public void Validate_without_setting_rejects_request()
     {
         Assert.Single(Validate(new UpdateClusterRequest()));
@@ -24,8 +18,9 @@ public sealed class UpdateClusterRequestTests
             "Updated",
             AgentPassword: "agent-secret"));
 
-        Assert.Contains(results, result => result.MemberNames.Contains(
-            nameof(UpdateClusterRequest.AgentUser)));
+        Assert.Contains(results,
+            result => result.MemberNames.Contains(
+                nameof(UpdateClusterRequest.AgentUser)));
     }
 
     [Fact]

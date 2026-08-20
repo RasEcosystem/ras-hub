@@ -1,4 +1,5 @@
 using RasHub.Contracts.Common.Pagination;
+using RasHub.Contracts.RasHub.Models;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Infrastructure.IntegrationTests.Database;
@@ -110,6 +111,9 @@ public sealed class RasGateQueriesTests : IDisposable
         gate.InstanceName = "rasgate-main";
         gate.Version = "1.2.3";
         gate.StatusObservedAt = observedAt;
+        gate.RacAvailable = true;
+        gate.RacVersion = "8.3.27.2214";
+        gate.RacStatusObservedAt = observedAt;
         gate.LastSeenAt = lastSeenAt;
 
         await using var db = _database.CreateContext();
@@ -130,7 +134,13 @@ public sealed class RasGateQueriesTests : IDisposable
         Assert.Equal("rasgate-main", item.InstanceName);
         Assert.Equal("1.2.3", item.Version);
         Assert.Equal(observedAt, item.StatusObservedAt);
+        Assert.True(item.RacAvailable);
+        Assert.Equal("8.3.27.2214", item.RacVersion);
+        Assert.Equal(observedAt, item.RacStatusObservedAt);
         Assert.Equal(lastSeenAt, item.LastSeenAt);
+        Assert.Equal(
+            RasGateHealthState.Ready,
+            item.GetHealthState(observedAt.AddMinutes(-1)));
         Assert.False(item.IsDeleted);
         Assert.Null(item.DeletedAt);
         Assert.Empty(db.ChangeTracker.Entries<RasGate>());
@@ -141,10 +151,35 @@ public sealed class RasGateQueriesTests : IDisposable
                 TestContext.Current.CancellationToken);
 
         Assert.Equal(2, itemsIncludingDeleted.Count);
-        var deletedItem = Assert.Single(itemsIncludingDeleted, candidate =>
-            candidate.Id == deleted.Id);
+        var deletedItem = Assert.Single(itemsIncludingDeleted,
+            candidate =>
+                candidate.Id == deleted.Id);
         Assert.True(deletedItem.IsDeleted);
         Assert.NotNull(deletedItem.DeletedAt);
+    }
+
+    [Fact]
+    public void Administration_item_health_uses_aggregate_status_observations()
+    {
+        var now = new DateTime(2026, 8, 20, 12, 0, 0, DateTimeKind.Utc);
+        var onlineSince = now.AddMinutes(-3);
+
+        Assert.Equal(
+            RasGateHealthState.Unknown,
+            CreateAdministrationItem(null, true, now, now)
+                .GetHealthState(onlineSince));
+        Assert.Equal(
+            RasGateHealthState.Offline,
+            CreateAdministrationItem(now.AddMinutes(-10), true, now, now)
+                .GetHealthState(onlineSince));
+        Assert.Equal(
+            RasGateHealthState.Degraded,
+            CreateAdministrationItem(now, false, now, now)
+                .GetHealthState(onlineSince));
+        Assert.Equal(
+            RasGateHealthState.Ready,
+            CreateAdministrationItem(now, true, now, now)
+                .GetHealthState(onlineSince));
     }
 
     [Fact]
@@ -183,7 +218,7 @@ public sealed class RasGateQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task Get_health_summary_counts_only_recently_seen_gates()
+    public async Task Get_health_summary_counts_only_fresh_gate_status_observations()
     {
         var now = new DateTime(2026, 8, 9, 12, 0, 0, DateTimeKind.Utc);
         var online = RasGateTestData.Create("Online");
@@ -191,11 +226,14 @@ public sealed class RasGateQueriesTests : IDisposable
         var neverSeen = RasGateTestData.Create("Never seen");
         var inactive = RasGateTestData.Create("Inactive");
         var deleted = RasGateTestData.Create("Deleted");
-        online.LastSeenAt = now.AddMinutes(-1);
-        stale.LastSeenAt = now.AddMinutes(-10);
+        online.StatusObservedAt = now.AddMinutes(-1);
+        online.RacAvailable = false;
+        stale.StatusObservedAt = now.AddMinutes(-10);
+        stale.LastSeenAt = now;
+        neverSeen.LastSeenAt = now;
         inactive.IsActive = false;
-        inactive.LastSeenAt = now;
-        deleted.LastSeenAt = now;
+        inactive.StatusObservedAt = now;
+        deleted.StatusObservedAt = now;
 
         await using var db = _database.CreateContext();
         db.RasGates.AddRange(online, stale, neverSeen, inactive, deleted);
@@ -242,5 +280,39 @@ public sealed class RasGateQueriesTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal([active.Id], ids);
+    }
+
+    private static RasGateAdministrationItem CreateAdministrationItem(
+        DateTime? rasGateObservedAt,
+        bool? racAvailable,
+        DateTime? racObservedAt,
+        DateTime? lastSeenAt)
+    {
+        var changedAt = new DateTime(
+            2026,
+            8,
+            20,
+            12,
+            0,
+            0,
+            DateTimeKind.Utc);
+
+        return new RasGateAdministrationItem(
+            Guid.NewGuid(),
+            "Gate",
+            "https://gate.example.test",
+            443,
+            true,
+            "Remote Gate",
+            "1.2.3",
+            rasGateObservedAt,
+            racAvailable,
+            racAvailable == true ? "8.3.27.2214" : null,
+            racObservedAt,
+            lastSeenAt,
+            changedAt,
+            changedAt,
+            false,
+            null);
     }
 }

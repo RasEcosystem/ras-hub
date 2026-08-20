@@ -3,7 +3,6 @@ using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Infobases;
@@ -14,9 +13,11 @@ public sealed class SynchronizeInfobasesTaskHandler(
     IRasGateSyncPublisher publisher,
     IRasInfobaseGateway infobaseGateway,
     TimeProvider timeProvider)
-    : IBackgroundTaskHandler<SynchronizeInfobasesTask>
+    : IBackgroundTaskHandler<
+        SynchronizeInfobasesTask,
+        CollectionSynchronizationResult>
 {
-    public async Task ExecuteAsync(
+    public async Task<CollectionSynchronizationResult> ExecuteAsync(
         SynchronizeInfobasesTask task,
         CancellationToken cancellationToken)
     {
@@ -25,8 +26,7 @@ public sealed class SynchronizeInfobasesTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
@@ -65,6 +65,10 @@ public sealed class SynchronizeInfobasesTaskHandler(
                 observedAt,
                 cancellationToken))
             throw new RasGateConfigurationChangedException(rasGate.Id);
+
+        return new CollectionSynchronizationResult(
+            snapshot.Items.Count,
+            observedAt);
     }
 
     private async Task EnsureClusterExistsAsync(
@@ -77,8 +81,8 @@ public sealed class SynchronizeInfobasesTaskHandler(
             cancellationToken);
 
         if (clusters.Count != 1)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasCluster '{task.ClusterId}' was not found for RasGate " +
-                $"'{task.RasGateId}'.");
+            throw new RasClusterNotFoundException(
+                task.RasGateId,
+                task.ClusterId);
     }
 }

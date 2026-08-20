@@ -17,11 +17,7 @@ public sealed class PageResultTests
         int pageSize,
         int expected)
     {
-        var result = new PageResult<object>
-        {
-            TotalCount = totalCount,
-            PageSize = pageSize
-        };
+        var result = new PageResult<object> { TotalCount = totalCount, PageSize = pageSize };
 
         Assert.Equal(expected, result.TotalPages);
     }

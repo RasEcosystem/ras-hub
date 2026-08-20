@@ -12,28 +12,31 @@ namespace RasHub.Infrastructure.Database.Queries;
 public sealed class RasClusterQueries(RasHubDbContext db)
 {
     private static readonly Expression<Func<RasCluster, ClusterModel>>
-        ModelProjection = cluster => new ClusterModel(
-            cluster.ExternalId,
-            cluster.Name,
-            cluster.Host,
-            cluster.Port,
-            cluster.ExpirationTimeoutSeconds,
-            cluster.LifetimeLimitSeconds,
-            cluster.MaxMemorySizeKb,
-            cluster.MaxMemoryTimeLimitSeconds,
-            cluster.SecurityLevel,
-            cluster.SessionFaultToleranceLevel,
-            cluster.LoadBalancingMode == DomainLoadBalancingMode.Performance
+        ModelProjection = cluster => new ClusterModel
+        {
+            Id = cluster.ExternalId,
+            Name = cluster.Name,
+            Host = cluster.Host,
+            Port = cluster.Port,
+            ExpirationTimeoutSeconds = cluster.ExpirationTimeoutSeconds,
+            LifetimeLimitSeconds = cluster.LifetimeLimitSeconds,
+            MaxMemorySizeKb = cluster.MaxMemorySizeKb,
+            MaxMemoryTimeLimitSeconds = cluster.MaxMemoryTimeLimitSeconds,
+            SecurityLevel = cluster.SecurityLevel,
+            SessionFaultToleranceLevel = cluster.SessionFaultToleranceLevel,
+            LoadBalancingMode = cluster.LoadBalancingMode == DomainLoadBalancingMode.Performance
                 ? ContractLoadBalancingMode.Performance
                 : ContractLoadBalancingMode.Memory,
-            cluster.ErrorsCountThresholdPercent,
-            cluster.KillProblemProcesses,
-            cluster.KillByMemoryWithDump,
-            cluster.AllowAccessRightAuditEventsRecording,
-            cluster.PingPeriod,
-            cluster.PingTimeout,
-            cluster.RestartSchedule,
-            cluster.ObservedAt);
+            ErrorsCountThresholdPercent = cluster.ErrorsCountThresholdPercent,
+            KillProblemProcesses = cluster.KillProblemProcesses,
+            KillByMemoryWithDump = cluster.KillByMemoryWithDump,
+            AllowAccessRightAuditEventsRecording =
+                cluster.AllowAccessRightAuditEventsRecording,
+            PingPeriod = cluster.PingPeriod,
+            PingTimeout = cluster.PingTimeout,
+            RestartSchedule = cluster.RestartSchedule,
+            ObservedAt = cluster.ObservedAt
+        };
 
     public async Task<PageResult<ClusterModel>> GetPagedAsync(
         Guid rasGateId,

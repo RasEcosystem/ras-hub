@@ -80,13 +80,14 @@ PostgreSQL     resource gateway   sync publisher
   and has no dependency on server implementation projects.
 - `RasHub.Web` owns HTTP, Blazor, Identity, monitoring, and process composition.
 
-The current remote boundary supports RasGate status, cluster snapshot and
-administration operations, and cluster-scoped infobase snapshot/detail
-synchronization. Complete collection snapshots may remove missing cached rows;
-targeted synchronization updates only the requested resource. Every remote
-publication is guarded by the captured RasGate configuration revision.
-Hosted monitoring refreshes RasGate status only; cluster and infobase
-synchronization is initiated through explicit API commands.
+The current remote boundary supports aggregate RasGate/RAC status, cluster
+snapshot and administration operations, and cluster-scoped infobase
+snapshot/detail synchronization. Complete collection snapshots may remove
+missing cached rows; targeted synchronization updates only the requested
+resource. Every remote publication is guarded by the captured RasGate
+configuration revision. Hosted monitoring refreshes the aggregate RasGate/RAC
+status only; cluster and infobase synchronization is initiated through
+explicit API commands.
 
 ## API
 
@@ -96,6 +97,11 @@ The versioned HTTP surface is under `/api/v1` and returns the shared
 require the `ManageRasGates` policy, currently granted to administrators.
 Cached queries never contact RasGate; synchronization endpoints explicitly
 enqueue remote work and await its in-process handle.
+
+The cached Gate status reports RasGate identity/version and RAC
+availability/version. Its state is `Unknown`, `Offline`, `Degraded`, or `Ready`;
+a reachable RasGate with unavailable or unobservable RAC is degraded rather
+than reported as fully ready.
 
 ## Internals
 

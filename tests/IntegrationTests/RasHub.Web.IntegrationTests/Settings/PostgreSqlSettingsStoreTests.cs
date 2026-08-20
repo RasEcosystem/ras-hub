@@ -25,10 +25,7 @@ public sealed class PostgreSqlSettingsStoreTests
         var store = scope.ServiceProvider.GetRequiredService<ISettingsStore>();
         var dbContext = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
 
-        await store.SaveAsync(new ApplicationSettings
-        {
-            Theme = AppTheme.Slate
-        });
+        await store.SaveAsync(new ApplicationSettings { Theme = AppTheme.Slate });
 
         var entry = await dbContext.Settings
             .AsNoTracking()

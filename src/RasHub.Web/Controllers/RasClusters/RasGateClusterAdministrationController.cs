@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks.Clusters;
 using RasHub.Contracts.Common;
@@ -22,27 +23,27 @@ namespace RasHub.Web.Controllers.RasClusters;
 [Authorize(
     AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme,
     Policy = AppPolicies.ManageRasGates)]
-[ControllerDescription(
-    "Manage 1C:Enterprise clusters through a registered gateway.")]
+[Tags("Clusters")]
+[ControllerDescription("Clusters",
+    "Inspect, synchronize, and manage 1C:Enterprise clusters through a registered gateway.")]
 public sealed class RasGateClusterAdministrationController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
 {
-    [HttpPost]
+    [HttpPost(Name = "CreateCluster")]
     [EndpointSummary("Create cluster")]
     [EndpointDescription(
         "Creates a cluster through RAC, reads its authoritative state, and publishes that state to the local cache. Agent credentials are used only for this request.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<ClusterModel>),
-        StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<ClusterModel>> Create(
+    [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status201Created)]
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
+        StatusCodes.Status504GatewayTimeout)]
+    public async Task<ApiResponse<ClusterModel>> CreateCluster(
         Guid rasGateId,
         [FromBody] CreateClusterRequest request,
         CancellationToken cancellationToken)
@@ -76,25 +77,31 @@ public sealed class RasGateClusterAdministrationController(
             cancellationToken);
 
         if (cluster is null)
-            return RasGateApiResponses.ClusterCreationNotPublished();
+            return RasGateApiResponses.ClusterCreationNotConfirmed();
 
-        Response.Headers.Location =
-            $"/api/v1/ras-gates/{rasGateId:D}/clusters/{clusterId:D}";
+        var location = Url.Link(
+            "GetCluster",
+            new { rasGateId, clusterId });
+
+        if (location is not null)
+            Response.Headers.Location = location;
+
         return ApiResponse<ClusterModel>.Created(cluster);
     }
 
-    [HttpPut("{clusterId:guid}")]
+    [HttpPatch("{clusterId:guid}", Name = "UpdateCluster")]
     [EndpointSummary("Update cluster")]
     [EndpointDescription(
         "Updates cluster settings through RAC, reads the authoritative state, and publishes that state to the local cache. Agent credentials are used only for this request.")]
-    [ProducesResponseType(typeof(ApiResponse<ClusterModel>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<ClusterModel>> Update(
+    [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
+        StatusCodes.Status504GatewayTimeout)]
+    public async Task<ApiResponse<ClusterModel>> UpdateCluster(
         Guid rasGateId,
         Guid clusterId,
         [FromBody] UpdateClusterRequest request,
@@ -132,36 +139,27 @@ public sealed class RasGateClusterAdministrationController(
             cancellationToken);
 
         return cluster is null
-            ? RasGateApiResponses.ClusterNotFound(clusterId)
+            ? RasGateApiResponses.ClusterUpdateNotConfirmed()
             : ApiResponse<ClusterModel>.Ok(cluster);
     }
 
-    [HttpDelete("{clusterId:guid}")]
+    [HttpPost("{clusterId:guid}/remove", Name = "RemoveCluster")]
     [EndpointSummary("Remove cluster")]
     [EndpointDescription(
         "Removes a cluster through RAC and then removes it from the local shadow state. Optional cluster administrator credentials are used only for this request.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<ClusterModel>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<ClusterModel>> Remove(
+    public async Task<ApiResponse<ClusterModel>> RemoveCluster(
         Guid rasGateId,
         Guid clusterId,
-        [FromBody] RemoveClusterRequest? request,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
+        RemoveClusterRequest? request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(

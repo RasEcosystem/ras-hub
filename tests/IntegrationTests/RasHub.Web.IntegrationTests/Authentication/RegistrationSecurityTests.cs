@@ -86,10 +86,7 @@ public sealed class RegistrationSecurityTests
         var settingsProvider = scope.ServiceProvider
             .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
 
-        await settingsProvider.UpdateAsync(new ApplicationSettings
-        {
-            AllowRegistration = allowed
-        });
+        await settingsProvider.UpdateAsync(new ApplicationSettings { AllowRegistration = allowed });
     }
 
     private static async Task<HttpResponseMessage> PostRegistrationAsync(

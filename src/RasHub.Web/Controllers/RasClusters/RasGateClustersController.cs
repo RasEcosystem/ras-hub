@@ -14,28 +14,26 @@ namespace RasHub.Web.Controllers.RasClusters;
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
 [Route("api/v1/ras-gates/{rasGateId:guid}/clusters")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
-    "Inspect cached 1C:Enterprise clusters available through a registered gateway.")]
+[Tags("Clusters")]
+[ControllerDescription("Clusters",
+    "Inspect, synchronize, and manage 1C:Enterprise clusters through a registered gateway.")]
 public sealed class RasGateClustersController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries) : ControllerBase
 {
-    [HttpPost("get-paged")]
+    [HttpGet(Name = "ListClusters")]
     [EndpointSummary("List clusters")]
     [EndpointDescription(
         "Returns cached clusters without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<PageResult<ClusterModel>>),
+    [ProducesResponseType<ApiResponse<PageResult<ClusterModel>>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<PageResult<ClusterModel>>> GetPaged(
+    public async Task<ApiResponse<PageResult<ClusterModel>>> List(
         Guid rasGateId,
-        [FromBody] PageRequest request,
+        [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(
@@ -56,20 +54,15 @@ public sealed class RasGateClustersController(
         return ApiResponse<PageResult<ClusterModel>>.Ok(result);
     }
 
-    [HttpGet("{clusterId:guid}")]
+    [HttpGet("{clusterId:guid}", Name = "GetCluster")]
     [EndpointSummary("Get cluster")]
     [EndpointDescription(
         "Returns a cached cluster without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<ClusterModel>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<ClusterModel>> GetById(
+    public async Task<ApiResponse<ClusterModel>> Get(
         Guid rasGateId,
         Guid clusterId,
         CancellationToken cancellationToken)

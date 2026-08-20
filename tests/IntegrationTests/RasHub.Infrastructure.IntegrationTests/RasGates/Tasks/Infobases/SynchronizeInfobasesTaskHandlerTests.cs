@@ -3,6 +3,7 @@ using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks.Infobases;
+using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.IntegrationTests.Database;
@@ -34,7 +35,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         var cluster = RasClusterTestData.Create(rasGate.Id);
         var remote = CreateSnapshot(Guid.NewGuid(), "rim_next");
         await SeedAsync(rasGate, cluster);
-        var client = new FakeRasGateClient
+        var gateway = new FakeRasInfobaseGateway
         {
             Infobases =
             [
@@ -44,7 +45,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
 
         await using (var db = _database.CreateContext())
         {
-            var handler = CreateCollectionHandler(db, client);
+            var handler = CreateCollectionHandler(db, gateway);
             var task = new SynchronizeInfobasesTask(
                 rasGate.Id,
                 cluster.ExternalId,
@@ -70,9 +71,9 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         Assert.Equal(remote.Name, stored.Name);
         Assert.Equal(ObservedAt, stored.ObservedAt);
         Assert.Equal(ObservedAt, storedGate.LastSeenAt);
-        Assert.Equal(cluster.ExternalId, client.RequestedClusterId);
-        Assert.Equal("cluster-admin", client.ClusterUser);
-        Assert.Equal("cluster-secret", client.ClusterPassword);
+        Assert.Equal(cluster.ExternalId, gateway.RequestedClusterId);
+        Assert.Equal("cluster-admin", gateway.ClusterUser);
+        Assert.Equal("cluster-secret", gateway.ClusterPassword);
     }
 
     [Fact]
@@ -83,14 +84,11 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         var sibling = RasInfobaseTestData.Create(cluster.Id, name: "Sibling");
         var remote = CreateSnapshot(Guid.NewGuid(), "Target");
         await SeedAsync(rasGate, cluster, sibling);
-        var client = new FakeRasGateClient
-        {
-            Infobase = remote
-        };
+        var gateway = new FakeRasInfobaseGateway { Infobase = remote };
 
         await using (var db = _database.CreateContext())
         {
-            var handler = CreateTargetedHandler(db, client);
+            var handler = CreateTargetedHandler(db, gateway);
 
             await handler.ExecuteAsync(
                 new SynchronizeInfobaseTask(
@@ -108,7 +106,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         Assert.Equal(2, stored.Count);
         Assert.Contains(stored, item => item.ExternalId == sibling.ExternalId);
         Assert.Contains(stored, item => item.ExternalId == remote.ExternalId);
-        Assert.Equal(remote.ExternalId, client.RequestedInfobaseId);
+        Assert.Equal(remote.ExternalId, gateway.RequestedInfobaseId);
     }
 
     [Fact]
@@ -118,14 +116,11 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         var cluster = RasClusterTestData.Create(rasGate.Id);
         var existing = RasInfobaseTestData.Create(cluster.Id);
         await SeedAsync(rasGate, cluster, existing);
-        var client = new FakeRasGateClient
-        {
-            InfobaseSnapshotCompleteness = SnapshotCompleteness.Unknown
-        };
+        var gateway = new FakeRasInfobaseGateway { InfobaseSnapshotCompleteness = SnapshotCompleteness.Unknown };
 
         await using (var db = _database.CreateContext())
         {
-            var handler = CreateCollectionHandler(db, client);
+            var handler = CreateCollectionHandler(db, gateway);
 
             await Assert.ThrowsAsync<RasGateClientException>(() =>
                 handler.ExecuteAsync(
@@ -141,6 +136,31 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
 
         Assert.Equal(existing.ExternalId, stored.ExternalId);
         Assert.False(stored.IsDeleted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Execute_missing_cluster_throws_typed_non_retryable_exception(
+        bool targeted)
+    {
+        var rasGate = RasGateTestData.Create();
+        var clusterId = Guid.NewGuid();
+        await SeedAsync(rasGate);
+        await using var db = _database.CreateContext();
+        var gateway = new FakeRasInfobaseGateway();
+
+        var exception = await Assert.ThrowsAsync<RasClusterNotFoundException>(() =>
+            ExecuteMissingClusterAsync(
+                targeted,
+                db,
+                gateway,
+                rasGate.Id,
+                clusterId));
+
+        Assert.Equal(rasGate.Id, exception.RasGateId);
+        Assert.Equal(clusterId, exception.ClusterId);
+        Assert.IsAssignableFrom<NonRetryableBackgroundTaskException>(exception);
     }
 
     private SynchronizeInfobasesTaskHandler CreateCollectionHandler(
@@ -165,6 +185,25 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
             CreatePublisher(db),
             gateway,
             new FixedTimeProvider(ObservedAt));
+    }
+
+    private Task ExecuteMissingClusterAsync(
+        bool targeted,
+        RasHubDbContext db,
+        IRasInfobaseGateway gateway,
+        Guid rasGateId,
+        Guid clusterId)
+    {
+        return targeted
+            ? CreateTargetedHandler(db, gateway).ExecuteAsync(
+                new SynchronizeInfobaseTask(
+                    rasGateId,
+                    clusterId,
+                    Guid.NewGuid()),
+                TestContext.Current.CancellationToken)
+            : CreateCollectionHandler(db, gateway).ExecuteAsync(
+                new SynchronizeInfobasesTask(rasGateId, clusterId),
+                TestContext.Current.CancellationToken);
     }
 
     private static RasGateSyncPublisher CreatePublisher(RasHubDbContext db)
@@ -194,7 +233,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         };
     }
 
-    private sealed class FakeRasGateClient : IRasInfobaseGateway
+    private sealed class FakeRasInfobaseGateway : IRasInfobaseGateway
     {
         public IReadOnlyList<RasInfobaseSnapshot> Infobases { get; init; } = [];
 

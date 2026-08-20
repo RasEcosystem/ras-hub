@@ -15,26 +15,28 @@ namespace RasHub.Web.Controllers.RasInfobases;
 [Route(
     "api/v1/ras-gates/{rasGateId:guid}/clusters/{clusterId:guid}/infobases")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
-    "Inspect cached 1C:Enterprise infobases registered in a cluster.")]
+[Tags("Infobases")]
+[ControllerDescription("Infobases",
+    "Inspect and synchronize 1C:Enterprise infobases registered in a cluster.")]
 public sealed class RasClusterInfobasesController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries,
     RasInfobaseQueries infobaseQueries) : ControllerBase
 {
-    [HttpPost("get-paged")]
+    [HttpGet(Name = "ListInfobases")]
     [EndpointSummary("List infobases")]
     [EndpointDescription(
         "Returns cached infobases without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<PageResult<InfobaseModel>>),
+    [ProducesResponseType<ApiResponse<PageResult<InfobaseModel>>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<PageResult<InfobaseModel>>> GetPaged(
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict)]
+    public async Task<ApiResponse<PageResult<InfobaseModel>>> List(
         Guid rasGateId,
         Guid clusterId,
-        [FromBody] PageRequest request,
+        [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(
@@ -63,16 +65,15 @@ public sealed class RasClusterInfobasesController(
         return ApiResponse<PageResult<InfobaseModel>>.Ok(result);
     }
 
-    [HttpGet("{infobaseId:guid}")]
+    [HttpGet("{infobaseId:guid}", Name = "GetInfobase")]
     [EndpointSummary("Get infobase")]
     [EndpointDescription(
         "Returns a cached infobase without contacting the gateway.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<InfobaseModel>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<InfobaseModel>> GetById(
+    [ProducesResponseType<ApiResponse<InfobaseModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict)]
+    public async Task<ApiResponse<InfobaseModel>> Get(
         Guid rasGateId,
         Guid clusterId,
         Guid infobaseId,

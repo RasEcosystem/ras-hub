@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using RasHub.Application.RasGates.Exceptions;
@@ -90,18 +91,53 @@ internal sealed class RasGateSession
             return cachedVersion;
         }
 
+        var status = await GetRacStatusAsync(cancellationToken);
+
+        if (!status.Available)
+            throw new RacUnavailableException(_rasGateId);
+
+        return status.Version ?? throw new RasGateClientException(
+            "RasGate returned an incomplete RAC status response.");
+    }
+
+    public async Task<RacStatusObservation> GetRacStatusAsync(
+        CancellationToken cancellationToken)
+    {
         using var request = CreateRequest(HttpMethod.Get, "rac/status");
         var data = await SendAsync<RacStatusData>(request, cancellationToken);
 
-        if (!data.Available || string.IsNullOrWhiteSpace(data.Version))
-            throw new RasGateClientException("RAC is unavailable through RasGate.");
+        if (!data.Available)
+        {
+            InvalidateRacVersion();
+            return new RacStatusObservation(false, null);
+        }
 
-        _racVersion = _versionParser.Parse(data.Version);
+        if (string.IsNullOrWhiteSpace(data.Version))
+        {
+            InvalidateRacVersion();
+            throw new RasGateClientException(
+                "RasGate returned an incomplete RAC status response.");
+        }
+
+        Version version;
+
+        try
+        {
+            version = _versionParser.Parse(data.Version);
+        }
+        catch (RasGateClientException)
+        {
+            InvalidateRacVersion();
+            throw;
+        }
+
+        _racVersion = version;
         _racVersionCache.Set(
             _rasGateId,
             _configurationRevision,
-            _racVersion);
-        return _racVersion;
+            version);
+
+        return new RacStatusObservation(true, version);
     }
 
     public T ParseRacOutput<T>(Func<T> parse)
@@ -120,6 +156,26 @@ internal sealed class RasGateSession
         {
             InvalidateRacVersion();
             throw;
+        }
+    }
+
+    public T ParseRacMutationOutput<T>(
+        Func<T> parse,
+        string resource,
+        string operation)
+    {
+        try
+        {
+            return ParseRacOutput(parse);
+        }
+        catch (RacOutputDeserializationException)
+        {
+            throw MutationOutcomeUnknown(new RacMutation(resource, operation));
+        }
+        catch (RasGateClientException exception)
+            when (exception.InnerException is RacOutputDeserializationException)
+        {
+            throw MutationOutcomeUnknown(new RacMutation(resource, operation));
         }
     }
 
@@ -158,10 +214,7 @@ internal sealed class RasGateSession
             "rac/execute",
             true);
         request.Content = JsonContent.Create(
-            new ExecuteRacRequest
-            {
-                Arguments = arguments
-            },
+            new ExecuteRacRequest { Arguments = arguments },
             options: JsonOptions);
 
         var data = await SendAsync<ExecuteRacData>(
@@ -174,20 +227,31 @@ internal sealed class RasGateSession
             data.StandardOutput is null ||
             data.StandardError is null ||
             data.DurationMilliseconds is null)
+        {
+            if (mutation is { } incompleteMutation)
+                throw MutationOutcomeUnknown(incompleteMutation);
+
             throw new RasGateClientException(
                 "RasGate returned an incomplete RAC execution response.");
+        }
 
-        var outcome = ParseOutcome(
-            data.Outcome,
-            data.ExitCode.Value,
-            data.TimedOut.Value);
+        RacExecutionOutcome outcome;
+
+        try
+        {
+            outcome = ParseOutcome(
+                data.Outcome,
+                data.ExitCode.Value,
+                data.TimedOut.Value);
+        }
+        catch (RasGateClientException) when (mutation is { } invalidMutation)
+        {
+            throw MutationOutcomeUnknown(invalidMutation);
+        }
 
         if (outcome == RacExecutionOutcome.Unknown &&
             mutation is { } unknownMutation)
-            throw new RasGateMutationOutcomeUnknownException(
-                _rasGateId,
-                unknownMutation.Resource,
-                unknownMutation.Operation);
+            throw MutationOutcomeUnknown(unknownMutation);
 
         return new RacExecutionResult
         {
@@ -223,15 +287,30 @@ internal sealed class RasGateSession
     {
         HttpResponseMessage response;
 
+        if (mutation is not null)
+            cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             response = await _httpClient.SendAsync(
                 request,
                 cancellationToken);
         }
+        catch (OperationCanceledException) when (mutation is { } canceledMutation)
+        {
+            throw MutationOutcomeUnknown(canceledMutation);
+        }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new RasGateClientException("The RasGate request timed out.");
+        }
+        catch (HttpRequestException) when (mutation is { } disconnectedMutation)
+        {
+            throw MutationOutcomeUnknown(disconnectedMutation);
+        }
+        catch (IOException) when (mutation is { } interruptedMutation)
+        {
+            throw MutationOutcomeUnknown(interruptedMutation);
         }
         catch (HttpRequestException exception)
         {
@@ -244,16 +323,35 @@ internal sealed class RasGateSession
         {
             if (!response.IsSuccessStatusCode)
             {
-                var errorCode = await ReadErrorCodeAsync(
-                    response,
-                    cancellationToken);
+                string? errorCode;
+
+                try
+                {
+                    errorCode = await ReadErrorCodeAsync(
+                        response,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                    when (mutation is { } canceledMutation)
+                {
+                    throw MutationOutcomeUnknown(canceledMutation);
+                }
+                catch (HttpRequestException)
+                    when (mutation is { } disconnectedMutation)
+                {
+                    throw MutationOutcomeUnknown(disconnectedMutation);
+                }
+                catch (IOException)
+                    when (mutation is { } interruptedMutation)
+                {
+                    throw MutationOutcomeUnknown(interruptedMutation);
+                }
 
                 if (mutation is { } unknownMutation &&
-                    IsUnknownOutcomeErrorCode(errorCode))
-                    throw new RasGateMutationOutcomeUnknownException(
-                        _rasGateId,
-                        unknownMutation.Resource,
-                        unknownMutation.Operation);
+                    HttpFailureLeavesMutationOutcomeUnknown(
+                        response.StatusCode,
+                        errorCode))
+                    throw MutationOutcomeUnknown(unknownMutation);
 
                 throw new RasGateClientException(
                     $"RasGate returned HTTP status code {(int)response.StatusCode}.");
@@ -268,11 +366,35 @@ internal sealed class RasGateSession
                     JsonOptions,
                     cancellationToken);
             }
+            catch (OperationCanceledException)
+                when (mutation is { } canceledMutation)
+            {
+                throw MutationOutcomeUnknown(canceledMutation);
+            }
+            catch (HttpRequestException)
+                when (mutation is { } disconnectedMutation)
+            {
+                throw MutationOutcomeUnknown(disconnectedMutation);
+            }
+            catch (IOException)
+                when (mutation is { } interruptedMutation)
+            {
+                throw MutationOutcomeUnknown(interruptedMutation);
+            }
+            catch (JsonException) when (mutation is { } invalidMutation)
+            {
+                throw MutationOutcomeUnknown(invalidMutation);
+            }
             catch (JsonException exception)
             {
                 throw new RasGateClientException(
                     "RasGate returned invalid JSON.",
                     exception);
+            }
+            catch (NotSupportedException)
+                when (mutation is { } unsupportedMutation)
+            {
+                throw MutationOutcomeUnknown(unsupportedMutation);
             }
             catch (NotSupportedException exception)
             {
@@ -282,17 +404,19 @@ internal sealed class RasGateSession
             }
 
             if (envelope is null)
+            {
+                if (mutation is { } emptyMutation)
+                    throw MutationOutcomeUnknown(emptyMutation);
+
                 throw new RasGateClientException(
                     "RasGate returned an empty response.");
+            }
 
             if (!envelope.Success)
             {
                 if (mutation is { } unknownMutation &&
                     IsUnknownOutcomeErrorCode(envelope.Error?.Code))
-                    throw new RasGateMutationOutcomeUnknownException(
-                        _rasGateId,
-                        unknownMutation.Resource,
-                        unknownMutation.Operation);
+                    throw MutationOutcomeUnknown(unknownMutation);
 
                 throw new RasGateClientException(
                     envelope.Error is null
@@ -300,9 +424,24 @@ internal sealed class RasGateSession
                         : $"RasGate reported error '{envelope.Error.Code}'.");
             }
 
-            return envelope.Data ?? throw new RasGateClientException(
+            if (envelope.Data is not null)
+                return envelope.Data;
+
+            if (mutation is { } incompleteMutation)
+                throw MutationOutcomeUnknown(incompleteMutation);
+
+            throw new RasGateClientException(
                 "RasGate returned an incomplete response.");
         }
+    }
+
+    private RasGateMutationOutcomeUnknownException MutationOutcomeUnknown(
+        RacMutation mutation)
+    {
+        return new RasGateMutationOutcomeUnknownException(
+            _rasGateId,
+            mutation.Resource,
+            mutation.Operation);
     }
 
     private static RacExecutionOutcome ParseOutcome(
@@ -375,6 +514,23 @@ internal sealed class RasGateSession
                    StringComparison.Ordinal);
     }
 
+    private static bool HttpFailureLeavesMutationOutcomeUnknown(
+        HttpStatusCode statusCode,
+        string? errorCode)
+    {
+        if (IsUnknownOutcomeErrorCode(errorCode))
+            return true;
+
+        var isConfirmedUnavailable =
+            statusCode == HttpStatusCode.ServiceUnavailable &&
+            string.Equals(
+                errorCode,
+                "rac_unavailable",
+                StringComparison.Ordinal);
+
+        return (int)statusCode >= 500 && !isConfirmedUnavailable;
+    }
+
     private sealed record ExecuteRacRequest
     {
         public required IReadOnlyList<string> Arguments { get; init; }
@@ -407,6 +563,10 @@ internal sealed class RasGateSession
 
         public required string? Version { get; init; }
     }
+
+    public readonly record struct RacStatusObservation(
+        bool Available,
+        Version? Version);
 
     private readonly record struct RacMutation(
         string Resource,

@@ -106,26 +106,27 @@ internal static class WebApplicationConfigurationExtensions
                 .RequireAuthorization(
                     ApiDocumentationAuthenticationDefaults.Policy);
 
-            app.MapScalarApiReference("/swagger", options =>
-            {
-                options.EnabledTargets =
-                [
-                    ScalarTarget.Shell,
-                    ScalarTarget.Php,
-                    ScalarTarget.Python
-                ];
+            app.MapScalarApiReference("/swagger",
+                options =>
+                {
+                    options.EnabledTargets =
+                    [
+                        ScalarTarget.Shell,
+                        ScalarTarget.Php,
+                        ScalarTarget.Python
+                    ];
 
-                options
-                    .WithTitle("RasHub API")
-                    .WithTheme(ScalarTheme.DeepSpace)
-                    .ForceDarkMode()
-                    .AddPreferredSecuritySchemes(ApiKeyAuthenticationDefaults.Scheme)
-                    .WithDefaultHttpClient(ScalarTarget.Shell, ScalarClient.Curl)
-                    .HideClientButton()
-                    .HideDeveloperTools()
-                    .DisableMcp()
-                    .DisableAgent();
-            }).RequireAuthorization(
+                    options
+                        .WithTitle("RasHub API")
+                        .WithTheme(ScalarTheme.DeepSpace)
+                        .ForceDarkMode()
+                        .AddPreferredSecuritySchemes(ApiKeyAuthenticationDefaults.Scheme)
+                        .WithDefaultHttpClient(ScalarTarget.Shell, ScalarClient.Curl)
+                        .HideClientButton()
+                        .HideDeveloperTools()
+                        .DisableMcp()
+                        .DisableAgent();
+                }).RequireAuthorization(
                 ApiDocumentationAuthenticationDefaults.Policy);
         }
 
@@ -142,16 +143,11 @@ internal static class WebApplicationConfigurationExtensions
             .AddInteractiveServerRenderMode();
         app.MapAdditionalIdentityEndpoints();
 
-        app.MapHealthChecks("/health/live", new HealthCheckOptions
-            {
-                Predicate = _ => false
-            })
+        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
             .AllowAnonymous();
 
-        app.MapHealthChecks("/health/ready", new HealthCheckOptions
-            {
-                Predicate = registration => registration.Tags.Contains("ready")
-            })
+        app.MapHealthChecks("/health/ready",
+                new HealthCheckOptions { Predicate = registration => registration.Tags.Contains("ready") })
             .AllowAnonymous();
     }
 

@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks.Clusters;
 using RasHub.Contracts.Common;
-using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Api.RasGates;
@@ -16,36 +17,26 @@ namespace RasHub.Web.Controllers.RasClusters;
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
 [Route("api/v1/ras-gates/{rasGateId:guid}/clusters")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
-    "Synchronize 1C:Enterprise clusters through a registered gateway.")]
+[Tags("Clusters")]
+[ControllerDescription("Clusters",
+    "Inspect, synchronize, and manage 1C:Enterprise clusters through a registered gateway.")]
 public sealed class RasGateClusterSynchronizationController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
 {
-    [HttpPost("{clusterId:guid}/synchronize")]
+    [HttpPost("{clusterId:guid}/synchronize", Name = "SynchronizeCluster")]
     [EndpointSummary("Synchronize cluster")]
     [EndpointDescription(
         "Synchronizes one cluster through RAC cluster info, persists it, and returns the synchronized cluster.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<ClusterModel>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<ClusterModel>> SynchronizeById(
+    public async Task<ApiResponse<ClusterModel>> SynchronizeCluster(
         Guid rasGateId,
         Guid clusterId,
         CancellationToken cancellationToken)
@@ -85,31 +76,20 @@ public sealed class RasGateClusterSynchronizationController(
             : ApiResponse<ClusterModel>.Ok(cluster);
     }
 
-    [HttpPost("synchronize")]
+    [HttpPost("synchronize", Name = "SynchronizeClusters")]
     [EndpointSummary("Synchronize clusters")]
     [EndpointDescription(
-        "Synchronizes clusters with the gateway, persists the snapshot, and returns the requested synchronized page.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<PageResult<ClusterModel>>),
+        "Synchronizes the complete cluster collection, persists it, and returns synchronization metadata.")]
+    [ProducesResponseType<ApiResponse<CollectionSynchronizationResponse>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status409Conflict)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
-        StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(
-        typeof(OpenApiErrorResponse),
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<PageResult<ClusterModel>>> Synchronize(
+    public async Task<ApiResponse<CollectionSynchronizationResponse>> SynchronizeClusters(
         Guid rasGateId,
-        [FromBody] PageRequest request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(
@@ -118,11 +98,13 @@ public sealed class RasGateClusterSynchronizationController(
 
         if (state != ActiveRasGateState.Active)
             return RasGateApiResponses
-                .ForUnavailableGate<PageResult<ClusterModel>>(
+                .ForUnavailableGate<CollectionSynchronizationResponse>(
                     state,
                     rasGateId);
 
-        var execution = await taskRunner.RunAsync(
+        var execution = await taskRunner.RunWithResultAsync<
+            SynchronizeClustersTask,
+            CollectionSynchronizationResult>(
             new SynchronizeClustersTask(rasGateId),
             RasGateTaskOptions.InteractiveClustersSynchronization(rasGateId),
             cancellationToken);
@@ -136,11 +118,9 @@ public sealed class RasGateClusterSynchronizationController(
             return RasGateApiResponses.ClustersSynchronizationFailed(
                 taskResult);
 
-        var result = await clusterQueries.GetPagedAsync(
-            rasGateId,
-            request,
-            cancellationToken);
+        var result = execution.Value!;
 
-        return ApiResponse<PageResult<ClusterModel>>.Ok(result);
+        return ApiResponse<CollectionSynchronizationResponse>.Ok(
+            new CollectionSynchronizationResponse { TotalCount = result.TotalCount, ObservedAt = result.ObservedAt });
     }
 }

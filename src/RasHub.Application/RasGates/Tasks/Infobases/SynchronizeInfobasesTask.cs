@@ -1,3 +1,4 @@
+using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
 
 namespace RasHub.Application.RasGates.Tasks.Infobases;
@@ -7,7 +8,7 @@ public sealed class SynchronizeInfobasesTask(
     Guid clusterId,
     string? clusterUser = null,
     string? clusterPassword = null)
-    : IBackgroundTask
+    : IBackgroundTask<CollectionSynchronizationResult>
 {
     public Guid RasGateId { get; } = rasGateId;
 

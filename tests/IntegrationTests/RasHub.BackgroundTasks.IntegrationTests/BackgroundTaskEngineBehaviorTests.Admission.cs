@@ -12,11 +12,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         using var host = CreateHost(services =>
             services.AddSingleton<TimeProvider>(timeProvider));
         var engine = GetEngine(host);
-        var options = new BackgroundTaskOptions
-        {
-            NotBefore = DateTimeOffset.MaxValue,
-            Timeout = null
-        };
+        var options = new BackgroundTaskOptions { NotBefore = DateTimeOffset.MaxValue, Timeout = null };
         timeProvider.FailAfterSuccessfulReads(0);
 
         Assert.Throws<AdmissionClockException>(() =>
@@ -41,11 +37,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         using var host = CreateHost(services =>
             services.AddSingleton<TimeProvider>(timeProvider));
         var engine = GetEngine(host);
-        var options = new BackgroundTaskOptions
-        {
-            DeduplicationKey = "admission-clock-failure",
-            Timeout = null
-        };
+        var options = new BackgroundTaskOptions { DeduplicationKey = "admission-clock-failure", Timeout = null };
         timeProvider.FailAfterSuccessfulReads(1);
 
         Assert.Throws<AdmissionClockException>(() =>

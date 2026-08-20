@@ -9,19 +9,20 @@ namespace RasHub.Web.Controllers.RasHub;
 
 [ApiController]
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
-[Route("api/v1/ras-hub")]
+[Route("api/v1/info")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
+[Tags("RasHub")]
+[ControllerDescription("RasHub",
     "Inspect the running service.")]
 public sealed class RasHubController : ControllerBase
 {
-    [HttpGet("status")]
-    [EndpointSummary("Get status")]
+    [HttpGet(Name = "GetRasHubInfo")]
+    [EndpointSummary("Get service information")]
     [EndpointDescription("Returns the running application version.")]
-    [ProducesResponseType(typeof(ApiResponse<RasHubStatusResponse>), StatusCodes.Status200OK)]
-    public ApiResponse<RasHubStatusResponse> GetStatus()
+    [ProducesResponseType<ApiResponse<RasHubInfoResponse>>(StatusCodes.Status200OK)]
+    public ApiResponse<RasHubInfoResponse> GetInfo()
     {
-        return ApiResponse<RasHubStatusResponse>.Ok(new RasHubStatusResponse
+        return ApiResponse<RasHubInfoResponse>.Ok(new RasHubInfoResponse
         {
             Version = ThisAssembly.AssemblyInformationalVersion
         });

@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks.Infobases;
 using RasHub.Contracts.Common;
-using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
+using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Api.RasGates;
@@ -18,31 +20,33 @@ namespace RasHub.Web.Controllers.RasInfobases;
 [Route(
     "api/v1/ras-gates/{rasGateId:guid}/clusters/{clusterId:guid}/infobases")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
-[ControllerDescription(
-    "Synchronize 1C:Enterprise infobases registered in a cluster.")]
+[Tags("Infobases")]
+[ControllerDescription("Infobases",
+    "Inspect and synchronize 1C:Enterprise infobases registered in a cluster.")]
 public sealed class RasClusterInfobaseSynchronizationController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries,
     RasInfobaseQueries infobaseQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
 {
-    [HttpPost("synchronize")]
+    [HttpPost("synchronize", Name = "SynchronizeInfobases")]
     [EndpointSummary("Synchronize infobases")]
     [EndpointDescription(
-        "Synchronizes the complete RAC infobase summary list, persists it, and returns the requested page.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<PageResult<InfobaseModel>>),
+        "Synchronizes the complete RAC infobase summary list, persists it, and returns synchronization metadata.")]
+    [ProducesResponseType<ApiResponse<CollectionSynchronizationResponse>>(
         StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<PageResult<InfobaseModel>>> Synchronize(
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
+        StatusCodes.Status504GatewayTimeout)]
+    public async Task<ApiResponse<CollectionSynchronizationResponse>> SynchronizeInfobases(
         Guid rasGateId,
         Guid clusterId,
-        [FromBody] SynchronizeInfobasesRequest request,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
+        SynchronizeInfobasesRequest? request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(
@@ -51,7 +55,7 @@ public sealed class RasClusterInfobaseSynchronizationController(
 
         if (state != ActiveRasGateState.Active)
             return RasGateApiResponses
-                .ForUnavailableGate<PageResult<InfobaseModel>>(
+                .ForUnavailableGate<CollectionSynchronizationResponse>(
                     state,
                     rasGateId);
 
@@ -60,14 +64,16 @@ public sealed class RasClusterInfobaseSynchronizationController(
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses
-                .ClusterNotFound<PageResult<InfobaseModel>>(clusterId);
+                .ClusterNotFound<CollectionSynchronizationResponse>(clusterId);
 
-        var execution = await taskRunner.RunAsync(
+        var execution = await taskRunner.RunWithResultAsync<
+            SynchronizeInfobasesTask,
+            CollectionSynchronizationResult>(
             new SynchronizeInfobasesTask(
                 rasGateId,
                 clusterId,
-                request.ClusterUser,
-                request.ClusterPassword),
+                request?.ClusterUser,
+                request?.ClusterPassword),
             RasGateTaskOptions.InteractiveInfobasesSynchronization(
                 rasGateId,
                 clusterId),
@@ -82,33 +88,30 @@ public sealed class RasClusterInfobaseSynchronizationController(
             return RasGateApiResponses.InfobasesSynchronizationFailed(
                 taskResult);
 
-        var result = await infobaseQueries.GetPagedAsync(
-            rasGateId,
-            clusterId,
-            new PageRequest(request.Page, request.PageSize),
-            cancellationToken);
+        var result = execution.Value!;
 
-        return ApiResponse<PageResult<InfobaseModel>>.Ok(result);
+        return ApiResponse<CollectionSynchronizationResponse>.Ok(
+            new CollectionSynchronizationResponse { TotalCount = result.TotalCount, ObservedAt = result.ObservedAt });
     }
 
-    [HttpPost("{infobaseId:guid}/synchronize")]
+    [HttpPost("{infobaseId:guid}/synchronize", Name = "SynchronizeInfobase")]
     [EndpointSummary("Synchronize infobase")]
     [EndpointDescription(
         "Synchronizes one RAC infobase summary without changing sibling infobases.")]
-    [ProducesResponseType(
-        typeof(ApiResponse<InfobaseModel>),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status502BadGateway)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status503ServiceUnavailable)]
-    [ProducesResponseType(typeof(OpenApiErrorResponse), StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<InfobaseModel>> SynchronizeById(
+    [ProducesResponseType<ApiResponse<InfobaseModel>>(StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict,
+        StatusCodes.Status502BadGateway,
+        StatusCodes.Status503ServiceUnavailable,
+        StatusCodes.Status504GatewayTimeout)]
+    public async Task<ApiResponse<InfobaseModel>> SynchronizeInfobase(
         Guid rasGateId,
         Guid clusterId,
         Guid infobaseId,
-        [FromBody] SynchronizeInfobaseRequest? request,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
+        SynchronizeInfobaseRequest? request,
         CancellationToken cancellationToken)
     {
         var state = await rasGateLookup.GetStateAsync(

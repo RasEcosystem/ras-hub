@@ -37,7 +37,7 @@ public sealed class UserApiKeyAuthenticationTests
             apiKey);
 
         using var allowed = await client.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
 
@@ -52,7 +52,7 @@ public sealed class UserApiKeyAuthenticationTests
         }
 
         using var revoked = await client.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, revoked.StatusCode);
     }
@@ -66,14 +66,14 @@ public sealed class UserApiKeyAuthenticationTests
         await factory.SetIdentityUserBlockedAsync("api-user@example.test", true);
 
         using var blocked = await client.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, blocked.StatusCode);
 
         await factory.SetIdentityUserBlockedAsync("api-user@example.test", false);
 
         using var unblocked = await client.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, unblocked.StatusCode);
     }
@@ -103,11 +103,6 @@ public sealed class UserApiKeyAuthenticationTests
     private static ApplicationUser CreateUser()
     {
         var id = Guid.NewGuid().ToString();
-        return new ApplicationUser
-        {
-            Id = id,
-            UserName = $"{id}@example.test",
-            Email = $"{id}@example.test"
-        };
+        return new ApplicationUser { Id = id, UserName = $"{id}@example.test", Email = $"{id}@example.test" };
     }
 }

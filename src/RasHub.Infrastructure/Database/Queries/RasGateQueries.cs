@@ -11,14 +11,16 @@ namespace RasHub.Infrastructure.Database.Queries;
 public sealed class RasGateQueries(RasHubDbContext db)
 {
     private static readonly Expression<Func<RasGate, RasGateModel>>
-        ModelProjection = rasGate => new RasGateModel(
-            rasGate.Id,
-            rasGate.Name,
-            rasGate.Url,
-            rasGate.Port,
-            rasGate.IsActive,
-            rasGate.CreatedAt,
-            rasGate.UpdatedAt);
+        ModelProjection = rasGate => new RasGateModel
+        {
+            Id = rasGate.Id,
+            Name = rasGate.Name,
+            Url = rasGate.Url,
+            Port = rasGate.Port,
+            IsActive = rasGate.IsActive,
+            CreatedAt = rasGate.CreatedAt,
+            UpdatedAt = rasGate.UpdatedAt
+        };
 
     public Task<List<Guid>> GetActiveIdsAsync(CancellationToken cancellationToken)
     {
@@ -52,6 +54,9 @@ public sealed class RasGateQueries(RasHubDbContext db)
                 rasGate.InstanceName,
                 rasGate.Version,
                 rasGate.StatusObservedAt,
+                rasGate.RacAvailable,
+                rasGate.RacVersion,
+                rasGate.RacStatusObservedAt,
                 rasGate.LastSeenAt,
                 rasGate.CreatedAt,
                 rasGate.UpdatedAt,
@@ -76,7 +81,8 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .GroupBy(_ => 1)
             .Select(group => new RasGateHealthSummary(
                 group.Count(),
-                group.Count(rasGate => rasGate.LastSeenAt >= onlineSince)))
+                group.Count(rasGate =>
+                    rasGate.StatusObservedAt >= onlineSince)))
             .SingleOrDefaultAsync(cancellationToken);
 
         return summary ?? new RasGateHealthSummary(0, 0);
@@ -130,26 +136,55 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public Task<RasGateStatusResponse?> GetStatusAsync(
+    public async Task<RasGateStatusQueryResult?> GetStatusAsync(
         Guid id,
+        DateTime onlineSince,
         CancellationToken cancellationToken)
     {
-        return db.RasGates
+        var observation = await db.RasGates
             .AsNoTracking()
             .Where(rasGate => rasGate.Id == id)
-            .Select(rasGate => new RasGateStatusResponse
+            .Select(rasGate => new
             {
-                InstanceName = rasGate.InstanceName,
-                Version = rasGate.Version,
-                ObservedAt = rasGate.StatusObservedAt
+                rasGate.IsActive,
+                rasGate.InstanceName,
+                rasGate.Version,
+                rasGate.StatusObservedAt,
+                rasGate.RacAvailable,
+                rasGate.RacVersion,
+                rasGate.RacStatusObservedAt
             })
             .SingleOrDefaultAsync(cancellationToken);
+
+        if (observation is null)
+            return null;
+
+        return new RasGateStatusQueryResult(
+            observation.IsActive,
+            new RasGateStatusResponse
+            {
+                State = RasGateHealthStateClassifier.Classify(
+                    observation.StatusObservedAt,
+                    observation.RacStatusObservedAt,
+                    observation.RacAvailable,
+                    onlineSince),
+                InstanceName = observation.InstanceName,
+                RasGateVersion = observation.Version,
+                RasGateObservedAt = observation.StatusObservedAt,
+                RacAvailable = observation.RacAvailable,
+                RacVersion = observation.RacVersion,
+                RacObservedAt = observation.RacStatusObservedAt
+            });
     }
 }
 
 public sealed record RasGateHealthSummary(int TotalCount, int OnlineCount);
 
 public sealed record RasGateActivity(bool IsActive);
+
+public sealed record RasGateStatusQueryResult(
+    bool IsActive,
+    RasGateStatusResponse Status);
 
 public sealed record RasGateAdministrationItem(
     Guid Id,
@@ -160,8 +195,43 @@ public sealed record RasGateAdministrationItem(
     string? InstanceName,
     string? Version,
     DateTime? StatusObservedAt,
+    bool? RacAvailable,
+    string? RacVersion,
+    DateTime? RacStatusObservedAt,
     DateTime? LastSeenAt,
     DateTime CreatedAt,
     DateTime UpdatedAt,
     bool IsDeleted,
-    DateTime? DeletedAt);
+    DateTime? DeletedAt)
+{
+    public RasGateHealthState GetHealthState(DateTime onlineSince)
+    {
+        return RasGateHealthStateClassifier.Classify(
+            StatusObservedAt,
+            RacStatusObservedAt,
+            RacAvailable,
+            onlineSince);
+    }
+}
+
+internal static class RasGateHealthStateClassifier
+{
+    public static RasGateHealthState Classify(
+        DateTime? rasGateObservedAt,
+        DateTime? racObservedAt,
+        bool? racAvailable,
+        DateTime onlineSince)
+    {
+        if (rasGateObservedAt is null)
+            return RasGateHealthState.Unknown;
+
+        if (rasGateObservedAt < onlineSince)
+            return RasGateHealthState.Offline;
+
+        return racObservedAt is null ||
+               racObservedAt < onlineSince ||
+               racAvailable != true
+            ? RasGateHealthState.Degraded
+            : RasGateHealthState.Ready;
+    }
+}

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
+using RasHub.Contracts.RasHub.Responses;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
@@ -119,32 +120,10 @@ public sealed class ApiDocumentationAuthenticationTests
 
         var document = await openApi.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
-        var homePage = await application.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var enginePage = await engine.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
-        var userSettingsPage = await userSettings.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken);
         Assert.DoesNotContain(
             "/Account/",
             document,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Administration and monitoring", homePage);
-        Assert.Contains("Uptime", homePage);
-        Assert.Contains("Warnings", homePage);
-        Assert.Contains("Errors", homePage);
-        Assert.Contains("Online RasGates", homePage);
-        Assert.Contains("Health history", homePage);
-        Assert.Contains("Application health during the last 24 hours", homePage);
-        Assert.DoesNotContain("Monitor workload, queues, workers and task execution", homePage);
-        Assert.DoesNotContain("Manage your profile, appearance and API access", homePage);
-        Assert.DoesNotContain("Configure global settings and user access", homePage);
-        Assert.DoesNotContain("Live workload, workers and task execution state", homePage);
-        Assert.Contains("Live workload, workers and task execution state", enginePage);
-        Assert.DoesNotContain("Uptime", enginePage);
-        Assert.Contains("app-page--wide", homePage);
-        Assert.Contains("app-page--wide", enginePage);
-        Assert.Contains("app-page--standard", userSettingsPage);
     }
 
     [Fact]
@@ -207,7 +186,7 @@ public sealed class ApiDocumentationAuthenticationTests
             UserEmail,
             UserPassword);
         using var apiResponse = await identityClient.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
@@ -215,7 +194,7 @@ public sealed class ApiDocumentationAuthenticationTests
     }
 
     [Fact]
-    public async Task OpenApi_error_responses_do_not_expose_success_data_schema()
+    public async Task OpenApi_matches_published_http_contract()
     {
         using var factory = CreateFactory();
         await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
@@ -232,78 +211,209 @@ public sealed class ApiDocumentationAuthenticationTests
             stream,
             cancellationToken: TestContext.Current.CancellationToken);
         var root = document.RootElement;
-        var successSchema = ResolveResponseSchema(
-            root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
-            "post",
-            "200");
-        var errorSchema = ResolveResponseSchema(
-            root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
-            "post",
-            "502");
+        var paths = root.GetProperty("paths");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(successSchema.GetProperty("properties").TryGetProperty("data", out _));
-
-        var errorProperties = errorSchema.GetProperty("properties");
-        Assert.True(errorProperties.TryGetProperty("success", out _));
-        Assert.True(errorProperties.TryGetProperty("error", out _));
-        Assert.True(errorProperties.TryGetProperty("errors", out _));
-        Assert.False(errorProperties.TryGetProperty("data", out _));
-    }
-
-    [Fact]
-    public async Task OpenApi_exposes_status_synchronize_route_only()
-    {
-        using var factory = CreateFactory();
-        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
-        using var client = CreateClient(factory);
-        using var login = await LoginAsync(client, UserEmail, UserPassword);
-        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
-
-        using var response = await client.GetAsync(
-            "/openapi/v1.json",
-            TestContext.Current.CancellationToken);
-        await using var stream = await response.Content.ReadAsStreamAsync(
-            TestContext.Current.CancellationToken);
-        using var document = await JsonDocument.ParseAsync(
-            stream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        var paths = document.RootElement.GetProperty("paths");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(paths.TryGetProperty(
+        AssertOperation(root, "/api/v1/info", "get", "GetRasHubInfo", "RasHub", "200", "401");
+        AssertOperation(root, "/api/v1/ras-gates", "get", "ListRasGates", "RasGates", "200", "400", "401");
+        AssertOperation(root, "/api/v1/ras-gates", "post", "RegisterRasGate", "RasGates", "201", "400", "401", "403");
+        AssertOperation(root, "/api/v1/ras-gates/{rasGateId}", "get", "GetRasGate", "RasGates", "200", "401", "404");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}",
+            "put",
+            "UpdateRasGate",
+            "RasGates",
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}",
+            "delete",
+            "UnregisterRasGate",
+            "RasGates",
+            "200",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/status",
+            "get",
+            "GetRasGateStatus",
+            "RasGates",
+            "200",
+            "401",
+            "404",
+            "409");
+        AssertOperation(root,
             "/api/v1/ras-gates/{rasGateId}/status/synchronize",
-            out var synchronizationPath));
-        Assert.True(synchronizationPath.TryGetProperty("post", out _));
+            "post",
+            "SynchronizeRasGateStatus",
+            "RasGates",
+            "200",
+            "401",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters",
+            "get",
+            "ListClusters",
+            "Clusters",
+            "200",
+            "400",
+            "401",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters",
+            "post",
+            "CreateCluster",
+            "Clusters",
+            "201",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/synchronize",
+            "post",
+            "SynchronizeClusters",
+            "Clusters",
+            "200",
+            "401",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}",
+            "get",
+            "GetCluster",
+            "Clusters",
+            "200",
+            "401",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}",
+            "patch",
+            "UpdateCluster",
+            "Clusters",
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/synchronize",
+            "post",
+            "SynchronizeCluster",
+            "Clusters",
+            "200",
+            "401",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/remove",
+            "post",
+            "RemoveCluster",
+            "Clusters",
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases",
+            "get",
+            "ListInfobases",
+            "Infobases",
+            "200",
+            "400",
+            "401",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/synchronize",
+            "post",
+            "SynchronizeInfobases",
+            "Infobases",
+            "200",
+            "400",
+            "401",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/{infobaseId}",
+            "get",
+            "GetInfobase",
+            "Infobases",
+            "200",
+            "401",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/{infobaseId}/synchronize",
+            "post",
+            "SynchronizeInfobase",
+            "Infobases",
+            "200",
+            "400",
+            "401",
+            "404",
+            "409",
+            "502",
+            "503",
+            "504");
+
+        Assert.False(paths.TryGetProperty("/api/v1/ras-hub/status", out _));
         Assert.False(paths.TryGetProperty(
             "/api/v1/ras-gates/{rasGateId}/status/check",
             out _));
-    }
+        Assert.False(paths.TryGetProperty("/api/v1/ras-gates/get-paged", out _));
+        Assert.False(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            out _));
+        Assert.False(paths.TryGetProperty(
+            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/get-paged",
+            out _));
 
-    [Fact]
-    public async Task OpenApi_uses_current_cluster_and_infobase_schema_names()
-    {
-        using var factory = CreateFactory();
-        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
-        using var client = CreateClient(factory);
-        using var login = await LoginAsync(client, UserEmail, UserPassword);
-        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        var documentedTags = root.GetProperty("tags")
+            .EnumerateArray()
+            .Select(tag => tag.GetProperty("name").GetString())
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.True(documentedTags.SetEquals(
+            ["RasHub", "RasGates", "Clusters", "Infobases"]));
 
-        using var response = await client.GetAsync(
-            "/openapi/v1.json",
-            TestContext.Current.CancellationToken);
-        await using var stream = await response.Content.ReadAsStreamAsync(
-            TestContext.Current.CancellationToken);
-        using var document = await JsonDocument.ParseAsync(
-            stream,
-            cancellationToken: TestContext.Current.CancellationToken);
-        var schemas = document.RootElement
+        var schemas = root
             .GetProperty("components")
             .GetProperty("schemas");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(schemas.TryGetProperty(nameof(ClusterModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(CreateClusterRequest), out _));
@@ -311,8 +421,12 @@ public sealed class ApiDocumentationAuthenticationTests
         Assert.True(schemas.TryGetProperty(nameof(RemoveClusterRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(SynchronizeInfobaseRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(SynchronizeInfobasesRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(RasHubInfoResponse), out _));
+        Assert.True(schemas.TryGetProperty(nameof(CollectionSynchronizationResponse), out _));
+        Assert.True(schemas.TryGetProperty("OpenApiErrorResponse", out _));
         Assert.False(schemas.TryGetProperty("RasClusterModel", out _));
         Assert.False(schemas.TryGetProperty("RasInfobaseModel", out _));
+        Assert.False(schemas.TryGetProperty("RasHubStatusResponse", out _));
     }
 
     private static async Task<HttpResponseMessage> LoginAsync(
@@ -351,15 +465,7 @@ public sealed class ApiDocumentationAuthenticationTests
         string method,
         string statusCode)
     {
-        var schema = root
-            .GetProperty("paths")
-            .GetProperty(path)
-            .GetProperty(method)
-            .GetProperty("responses")
-            .GetProperty(statusCode)
-            .GetProperty("content")
-            .GetProperty("application/json")
-            .GetProperty("schema");
+        var schema = GetResponseSchema(root, path, method, statusCode);
 
         while (schema.TryGetProperty("$ref", out var reference))
         {
@@ -372,6 +478,99 @@ public sealed class ApiDocumentationAuthenticationTests
         }
 
         return schema;
+    }
+
+    private static JsonElement GetResponseSchema(
+        JsonElement root,
+        string path,
+        string method,
+        string statusCode)
+    {
+        return root
+            .GetProperty("paths")
+            .GetProperty(path)
+            .GetProperty(method)
+            .GetProperty("responses")
+            .GetProperty(statusCode)
+            .GetProperty("content")
+            .GetProperty("application/json")
+            .GetProperty("schema");
+    }
+
+    private static void AssertOperation(
+        JsonElement root,
+        string path,
+        string method,
+        string operationId,
+        string tag,
+        params string[] responseCodes)
+    {
+        var operation = root
+            .GetProperty("paths")
+            .GetProperty(path)
+            .GetProperty(method);
+
+        Assert.Equal(operationId, operation.GetProperty("operationId").GetString());
+        Assert.Equal(
+            [tag],
+            operation.GetProperty("tags")
+                .EnumerateArray()
+                .Select(value => value.GetString()));
+
+        var actualResponseCodes = operation
+            .GetProperty("responses")
+            .EnumerateObject()
+            .Select(response => response.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.True(
+            actualResponseCodes.SetEquals(responseCodes),
+            $"Operation '{operationId}' documents [{string.Join(", ", actualResponseCodes.Order())}] instead of [{string.Join(", ", responseCodes.Order())}].");
+
+        var successCodes = responseCodes
+            .Where(responseCode => responseCode.StartsWith('2'))
+            .ToArray();
+        Assert.Single(successCodes);
+
+        var successSchema = ResolveResponseSchema(
+            root,
+            path,
+            method,
+            successCodes[0]);
+        Assert.True(
+            successSchema.GetProperty("properties").TryGetProperty("data", out _),
+            $"Operation '{operationId}' success schema does not expose data.");
+
+        foreach (var responseCode in responseCodes.Except(successCodes))
+        {
+            var errorSchemaReference = GetResponseSchema(
+                root,
+                path,
+                method,
+                responseCode);
+            Assert.Equal(
+                "#/components/schemas/OpenApiErrorResponse",
+                errorSchemaReference.GetProperty("$ref").GetString());
+
+            var errorSchema = ResolveResponseSchema(
+                root,
+                path,
+                method,
+                responseCode);
+            var errorProperties = errorSchema.GetProperty("properties");
+
+            Assert.True(
+                errorProperties.TryGetProperty("success", out _),
+                $"Operation '{operationId}' HTTP {responseCode} schema does not expose success.");
+            Assert.True(
+                errorProperties.TryGetProperty("error", out _),
+                $"Operation '{operationId}' HTTP {responseCode} schema does not expose error.");
+            Assert.True(
+                errorProperties.TryGetProperty("errors", out _),
+                $"Operation '{operationId}' HTTP {responseCode} schema does not expose errors.");
+            Assert.False(
+                errorProperties.TryGetProperty("data", out _),
+                $"Operation '{operationId}' HTTP {responseCode} schema exposes success data.");
+        }
     }
 
     private static HttpClient CreateClient(

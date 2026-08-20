@@ -1,8 +1,8 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
@@ -23,8 +23,7 @@ public sealed class CreateClusterTaskHandler(
             cancellationToken);
 
         if (rasGate is null)
-            throw new NonRetryableBackgroundTaskException(
-                $"RasGate '{task.RasGateId}' was not found.");
+            throw new RasGateNotFoundException(task.RasGateId);
 
         if (!rasGate.IsActive)
             throw new RasGateInactiveException(rasGate.Id);
@@ -50,19 +49,53 @@ public sealed class CreateClusterTaskHandler(
             rasGate,
             task.Options,
             cancellationToken);
-        var snapshot = await clusterGateway.GetClusterAsync(
-            rasGate,
-            clusterId,
-            cancellationToken);
-        var observedAt = timeProvider.GetUtcNow().UtcDateTime;
+        RasClusterSnapshot snapshot;
 
-        if (!await publisher.TryPublishClusterAsync(
+        try
+        {
+            snapshot = await clusterGateway.GetClusterAsync(
+                rasGate,
+                clusterId,
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new RasGateMutationReadBackNotConfirmedException(
+                rasGate.Id,
+                "clusters",
+                "insert",
+                clusterId,
+                exception);
+        }
+
+        var observedAt = timeProvider.GetUtcNow().UtcDateTime;
+        bool published;
+
+        try
+        {
+            published = await publisher.TryPublishClusterAsync(
                 rasGate.Id,
                 configurationRevision,
                 snapshot,
                 observedAt,
-                cancellationToken))
-            throw new RasGateConfigurationChangedException(rasGate.Id);
+                cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            throw new RasGateMutationPublicationNotConfirmedException(
+                rasGate.Id,
+                "clusters",
+                "insert",
+                clusterId,
+                exception);
+        }
+
+        if (!published)
+            throw new RasGateMutationPublicationNotConfirmedException(
+                rasGate.Id,
+                "clusters",
+                "insert",
+                clusterId);
 
         return clusterId;
     }

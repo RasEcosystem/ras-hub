@@ -208,10 +208,7 @@ public sealed class ApplicationDiagnostics(TimeProvider timeProvider) : ILogEven
                 return new StoredEventChange(previous, diagnosticEvent);
             }
 
-            diagnosticEvent = diagnosticEvent with
-            {
-                Id = Interlocked.Increment(ref _nextEventId)
-            };
+            diagnosticEvent = diagnosticEvent with { Id = Interlocked.Increment(ref _nextEventId) };
             var index = (_eventStart + _eventCount) % RetainedEventCapacity;
 
             if (_eventCount == RetainedEventCapacity)

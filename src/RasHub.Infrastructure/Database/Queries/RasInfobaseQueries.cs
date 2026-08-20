@@ -10,11 +10,13 @@ namespace RasHub.Infrastructure.Database.Queries;
 public sealed class RasInfobaseQueries(RasHubDbContext db)
 {
     private static readonly Expression<Func<RasInfobase, InfobaseModel>>
-        ModelProjection = infobase => new InfobaseModel(
-            infobase.ExternalId,
-            infobase.Name,
-            infobase.Description,
-            infobase.ObservedAt);
+        ModelProjection = infobase => new InfobaseModel
+        {
+            Id = infobase.ExternalId,
+            Name = infobase.Name,
+            Description = infobase.Description,
+            ObservedAt = infobase.ObservedAt
+        };
 
     public async Task<PageResult<InfobaseModel>> GetPagedAsync(
         Guid rasGateId,
@@ -57,10 +59,10 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
         Guid clusterId)
     {
         return from infobase in db.RasInfobases.AsNoTracking()
-            join cluster in db.RasClusters.AsNoTracking()
-                on infobase.RasClusterId equals cluster.Id
-            where cluster.RasGateId == rasGateId &&
-                  cluster.ExternalId == clusterId
-            select infobase;
+               join cluster in db.RasClusters.AsNoTracking()
+                   on infobase.RasClusterId equals cluster.Id
+               where cluster.RasGateId == rasGateId &&
+                     cluster.ExternalId == clusterId
+               select infobase;
     }
 }

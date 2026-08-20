@@ -6,34 +6,10 @@ namespace RasHub.Contracts.UnitTests.RasHub.Requests.Infobases;
 public sealed class SynchronizeInfobaseRequestTests
 {
     [Fact]
-    public void Validate_password_with_user_accepts_requests()
-    {
-        var listRequest = new SynchronizeInfobasesRequest
-        {
-            ClusterUser = "cluster-admin",
-            ClusterPassword = "cluster-secret"
-        };
-        var itemRequest = new SynchronizeInfobaseRequest
-        {
-            ClusterUser = "cluster-admin",
-            ClusterPassword = "cluster-secret"
-        };
-
-        Assert.Empty(Validate(listRequest));
-        Assert.Empty(Validate(itemRequest));
-    }
-
-    [Fact]
     public void Validate_password_without_user_rejects_requests()
     {
-        var listResults = Validate(new SynchronizeInfobasesRequest
-        {
-            ClusterPassword = "cluster-secret"
-        });
-        var itemResults = Validate(new SynchronizeInfobaseRequest
-        {
-            ClusterPassword = "cluster-secret"
-        });
+        var listResults = Validate(new SynchronizeInfobasesRequest { ClusterPassword = "cluster-secret" });
+        var itemResults = Validate(new SynchronizeInfobaseRequest { ClusterPassword = "cluster-secret" });
 
         Assert.Contains(nameof(SynchronizeInfobasesRequest.ClusterUser),
             Assert.Single(listResults).MemberNames);

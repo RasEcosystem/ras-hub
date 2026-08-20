@@ -87,8 +87,10 @@ internal sealed class RasClusterGateway(
             "insert",
             cancellationToken);
 
-        return session.ParseRacOutput(() =>
-            adapter.Parse(racVersion, execution, options));
+        return session.ParseRacMutationOutput(
+            () => adapter.Parse(racVersion, execution, options),
+            "clusters",
+            "insert");
     }
 
     public async Task UpdateClusterAsync(

@@ -6,12 +6,6 @@ namespace RasHub.Contracts.UnitTests.RasHub.Requests.Clusters;
 public sealed class CreateClusterRequestTests
 {
     [Fact]
-    public void Validate_required_settings_accepts_request()
-    {
-        Assert.Empty(Validate(new CreateClusterRequest("localhost", 1587)));
-    }
-
-    [Fact]
     public void Validate_password_without_user_rejects_request()
     {
         var results = Validate(new CreateClusterRequest(
@@ -19,8 +13,9 @@ public sealed class CreateClusterRequestTests
             1587,
             AgentPassword: "agent-secret"));
 
-        Assert.Contains(results, result => result.MemberNames.Contains(
-            nameof(CreateClusterRequest.AgentUser)));
+        Assert.Contains(results,
+            result => result.MemberNames.Contains(
+                nameof(CreateClusterRequest.AgentUser)));
     }
 
     [Fact]

@@ -1,0 +1,124 @@
+using RasHub.Application.Interfaces;
+using RasHub.Application.RasGates.Abstractions;
+using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
+using RasHub.Domain;
+
+namespace RasHub.Application.RasGates.Services;
+
+public sealed class RasGateRegistry(
+    IRepository<RasGate> repository,
+    IRasClusterSnapshotStore snapshotStore,
+    IRasGateEndpointFactory endpointFactory,
+    IUnitOfWork unitOfWork)
+{
+    public async Task<RasGate> RegisterAsync(
+        RasGateRegistration registration,
+        CancellationToken cancellationToken)
+    {
+        var name = registration.Name.Trim();
+        var url = registration.Url.Trim();
+
+        _ = endpointFactory.CreateBaseAddress(url, registration.Port);
+
+        var rasGate = new RasGate
+        {
+            Name = name,
+            Url = url,
+            Port = registration.Port,
+            ApiKey = registration.ApiKey,
+            IsActive = registration.IsActive
+        };
+
+        await repository.AddAsync(rasGate, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return rasGate;
+    }
+
+    public async Task<RasGate?> UpdateAsync(
+        Guid rasGateId,
+        RasGateRegistrationUpdate update,
+        CancellationToken cancellationToken)
+    {
+        var rasGate = await repository.GetByIdAsync(
+            rasGateId,
+            cancellationToken);
+
+        if (rasGate is null)
+            return null;
+
+        var name = update.Name.Trim();
+        var url = update.Url.Trim();
+        var endpointChanged =
+            !string.Equals(rasGate.Url, url, StringComparison.Ordinal) ||
+            rasGate.Port != update.Port;
+
+        if (endpointChanged && update.ApiKey is null)
+            throw new RasGateApiKeyRequiredException();
+
+        _ = endpointFactory.CreateBaseAddress(url, update.Port);
+
+        var apiKeyChanged = update.ApiKey is not null &&
+                            !string.Equals(
+                                rasGate.ApiKey,
+                                update.ApiKey,
+                                StringComparison.Ordinal);
+        var remoteIdentityChanged = endpointChanged || apiKeyChanged;
+        var deactivated = !update.IsActive && rasGate.IsActive;
+
+        rasGate.Name = name;
+        rasGate.Url = url;
+        rasGate.Port = update.Port;
+
+        if (update.ApiKey is not null)
+            rasGate.ApiKey = update.ApiKey;
+
+        if (rasGate.IsActive != update.IsActive)
+        {
+            rasGate.IsActive = update.IsActive;
+
+            if (update.IsActive)
+                rasGate.LastSeenAt = null;
+        }
+
+        if (remoteIdentityChanged || deactivated) await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return rasGate;
+    }
+
+    public async Task<RasGate?> UnregisterAsync(
+        Guid rasGateId,
+        CancellationToken cancellationToken)
+    {
+        var rasGate = await repository.GetByIdAsync(
+            rasGateId,
+            cancellationToken);
+
+        if (rasGate is null)
+            return null;
+
+        await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
+        repository.Remove(rasGate);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return rasGate;
+    }
+
+    public async Task RestoreAsync(
+        RasGate rasGate,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(rasGate);
+
+        if (!rasGate.IsDeleted)
+            throw new InvalidOperationException(
+                $"RasGate '{rasGate.Id}' is not deleted.");
+
+        await snapshotStore.InvalidateAsync(rasGate.Id, cancellationToken);
+        rasGate.IsDeleted = false;
+        rasGate.DeletedAt = null;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+}

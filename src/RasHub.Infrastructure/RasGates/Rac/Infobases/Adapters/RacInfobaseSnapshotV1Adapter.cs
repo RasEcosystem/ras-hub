@@ -33,12 +33,7 @@ public sealed class RacInfobaseSnapshotV1Adapter(
                 "A complete infobase snapshot does not accept an infobase ID.",
                 nameof(command));
 
-        var arguments = new List<string>
-        {
-            "infobase",
-            "summary",
-            "list"
-        };
+        var arguments = new List<string> { "infobase", "summary", "list" };
         RacInfobaseCommandArguments.AddCluster(arguments, command);
         return arguments;
     }

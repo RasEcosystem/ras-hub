@@ -128,12 +128,14 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
                 .ToListAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(2, clusters.Count);
-            Assert.Contains(clusters, cluster =>
-                cluster.ExternalId == firstId &&
-                cluster.Name == "First updated");
-            Assert.Contains(clusters, cluster =>
-                cluster.ExternalId == secondId &&
-                cluster.Name == "Second");
+            Assert.Contains(clusters,
+                cluster =>
+                    cluster.ExternalId == firstId &&
+                    cluster.Name == "First updated");
+            Assert.Contains(clusters,
+                cluster =>
+                    cluster.ExternalId == secondId &&
+                    cluster.Name == "Second");
         }
     }
 

@@ -27,6 +27,7 @@ atomic transaction.
 |---|---|
 | RasGate CRUD API | `src/RasHub.Web/Controllers/RasGates/RasGatesController.cs` |
 | Blazor RasGate administration | `src/RasHub.Web/Infrastructure/RasGates/RasGateAdministrationService.cs` |
+| Shared RasGate configuration lifecycle | `src/RasHub.Application/RasGates/Services/RasGateRegistry.cs` |
 | Cached and synchronized status | `src/RasHub.Web/Controllers/RasGates/RasGateStatusController.cs` |
 | Cached cluster reads | `src/RasHub.Web/Controllers/RasClusters/RasGateClustersController.cs` |
 | Cluster synchronization | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterSynchronizationController.cs` |
@@ -36,9 +37,9 @@ atomic transaction.
 | Hosted Gate status monitoring | `src/RasHub.Web/Infrastructure/RasGates/RasGateMonitoringService.cs` |
 | DI and handler registration | `src/RasHub.Web/Program.cs` and `src/RasHub.Infrastructure/Extensions/ServiceCollectionExtensions.cs` |
 
-RasGate configuration writes exist in both the API controller and the Blazor
-administration service. When their validation, authorization, revision, or
-shadow invalidation behavior changes, inspect both adapters.
+The API controller and Blazor administration service delegate RasGate writes
+to `RasGateRegistry`. Keep shared normalization, lifecycle, and shadow
+invalidation there; authorization and presentation remain adapter-specific.
 
 ## Real execution flows
 
@@ -63,7 +64,7 @@ Controller -> ActiveRasGateLookup + optional parent/resource lookup
  -> lane worker and per-Gate concurrency key -> fresh attempt DI scope
  -> Application task handler -> tracked RasGate + captured ConfigurationRevision
  -> status/resource gateway -> internal RasGate session -> RasGate
-                                                   -> RAC (clusters/infobases)
+                                                   -> RAC (status/resources)
  -> IRasGateSyncPublisher -> [snapshot store for cluster/infobase state]
  -> one SaveChangesAsync -> controller returns the endpoint-specific response
 ```
@@ -80,8 +81,11 @@ RasGateMonitoringService -> PeriodicTimer -> scoped RasGateQueries
  -> CheckRasGateStatusTask in Synchronization lane -> normal handler flow
 ```
 
-Monitoring currently refreshes Gate status only. It does not use the generic
-periodic scheduler, and it does not schedule cluster or infobase synchronization.
+Monitoring refreshes the aggregate RasGate/RAC status only. It does not use the
+generic periodic scheduler, and it does not schedule cluster or infobase
+synchronization. A reachable Gate with `available: false` RAC is recorded as
+degraded; a failed RAC probe records RAC as unknown without discarding the
+successful Gate observation.
 
 ### Shadow publication and Gate configuration
 
@@ -90,6 +94,11 @@ obtains the tracked Gate, guards revision plus active/deleted state, applies a
 complete collection or targeted change, updates observation metadata, and saves
 once. Complete collections can remove absent children; targeted upserts leave
 siblings unchanged.
+
+Status publication writes the RasGate and RAC observations in the same guarded
+save. Remote-identity, deactivation, deletion, and restoration changes clear
+derived state and advance the configuration revision, preventing an in-flight
+result from restoring stale state.
 
 Gate-write mechanics live under `Database/Interceptors` and
 `EntityTypeConfigurations`. Remote keys are parent-scoped—clusters by Gate and

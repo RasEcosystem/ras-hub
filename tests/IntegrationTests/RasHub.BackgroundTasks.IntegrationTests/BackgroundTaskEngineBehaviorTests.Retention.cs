@@ -115,11 +115,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var exceptionPayloadReference = new WeakReference(exceptionPayload);
         var handle = engine.Enqueue(
             new HistoryRetentionTask(taskPayload, exceptionPayload),
-            new BackgroundTaskOptions
-            {
-                MaxAttempts = 1,
-                Timeout = null
-            });
+            new BackgroundTaskOptions { MaxAttempts = 1, Timeout = null });
         var result = handle.WaitAsync()
             .WaitAsync(TimeSpan.FromSeconds(5))
             .GetAwaiter()
@@ -140,11 +136,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
     {
         var handle = engine.Enqueue(
             new RecordedTask(1),
-            new BackgroundTaskOptions
-            {
-                NotBefore = DateTimeOffset.MaxValue,
-                Timeout = null
-            });
+            new BackgroundTaskOptions { NotBefore = DateTimeOffset.MaxValue, Timeout = null });
 
         Assert.True(engine.Cancel(handle.Id));
         Assert.Equal(

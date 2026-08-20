@@ -9,12 +9,13 @@ public sealed class RasClusterEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<RasCluster> builder)
     {
-        builder.ToTable("ras_clusters", tableBuilder =>
-        {
-            tableBuilder.HasCheckConstraint(
-                "ck_ras_clusters_port",
-                "port BETWEEN 1 AND 65535");
-        });
+        builder.ToTable("ras_clusters",
+            tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint(
+                    "ck_ras_clusters_port",
+                    "port BETWEEN 1 AND 65535");
+            });
 
         builder.ConfigureCommonFields();
 
@@ -95,11 +96,7 @@ public sealed class RasClusterEntityTypeConfiguration
             .HasColumnName("observed_at")
             .IsRequired();
 
-        builder.HasIndex(cluster => new
-            {
-                cluster.RasGateId,
-                cluster.ExternalId
-            })
+        builder.HasIndex(cluster => new { cluster.RasGateId, cluster.ExternalId })
             .IsUnique()
             .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
 

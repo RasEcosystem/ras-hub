@@ -21,13 +21,7 @@ public sealed class RacClusterInsertV1Adapter(
     public IReadOnlyList<string> CreateCommand(RasClusterCreationOptions command)
     {
         ValidateCommand(command);
-        var arguments = new List<string>
-        {
-            "cluster",
-            "insert",
-            $"--host={command.Host}",
-            $"--port={command.Port}"
-        };
+        var arguments = new List<string> { "cluster", "insert", $"--host={command.Host}", $"--port={command.Port}" };
         RacClusterCommandArguments.AddMutableSettings(arguments, command);
         return arguments;
     }

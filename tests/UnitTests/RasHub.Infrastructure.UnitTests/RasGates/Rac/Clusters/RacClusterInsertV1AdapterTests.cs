@@ -142,11 +142,7 @@ public sealed class RacClusterInsertV1AdapterTests
 
     private static RasClusterCreationOptions CreateOptions()
     {
-        return new RasClusterCreationOptions
-        {
-            Host = "localhost",
-            Port = 1587
-        };
+        return new RasClusterCreationOptions { Host = "localhost", Port = 1587 };
     }
 
     private static RacExecutionResult CreateExecution(
