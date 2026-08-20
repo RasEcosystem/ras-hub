@@ -229,6 +229,62 @@ namespace RasHub.Infrastructure.Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RasHub.Domain.RasInfobase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<Guid>("ExternalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("external_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<Guid>("RasClusterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ras_cluster_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ras_infobases");
+
+                    b.HasIndex("RasClusterId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ras_infobases_ras_cluster_id_external_id");
+
+                    b.ToTable("ras_infobases", (string)null);
+                });
+
             modelBuilder.Entity("RasHub.Infrastructure.Database.SettingEntry", b =>
                 {
                     b.Property<string>("Key")
@@ -259,6 +315,16 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_ras_clusters_ras_gates_ras_gate_id");
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasInfobase", b =>
+                {
+                    b.HasOne("RasHub.Domain.RasCluster", null)
+                        .WithMany()
+                        .HasForeignKey("RasClusterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_ras_infobases_ras_clusters_ras_cluster_id");
                 });
 #pragma warning restore 612, 618
         }

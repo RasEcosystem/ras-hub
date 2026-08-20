@@ -39,6 +39,13 @@ reverse proxy; PostgreSQL is not published.
 The container stack exports the `RasHub.BackgroundTasks` meter to Seq through
 OTLP. Override `RASHUB_OTLP_METRICS_ENDPOINT` only when using another collector.
 
+The anonymous probe endpoints are:
+
+- `/health/live` — the Web process is responding;
+- `/health/ready` — RasHub database connectivity and the supervised
+  background-task runtime are ready, with queue and active-task capacity
+  included in the engine result.
+
 Create the bootstrap administrator password file once:
 
 ```bash

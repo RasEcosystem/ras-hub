@@ -56,6 +56,8 @@ inject a scoped handler, `DbContext`, repository, or scoped service into these s
   service providers, clients, tracked entities, scopes, or large object graphs.
 - `IBackgroundTaskHandler<TTask>.ExecuteAsync` is resolved from a new DI scope on each attempt. It must propagate and
   observe the supplied token.
+- `IBackgroundTask<TResult>` and `IBackgroundTaskHandler<TTask, TResult>` return small values only to a waiting
+  in-process caller. Typed values are not durable, retained in completed snapshots, or public wire contracts.
 - `IBackgroundTaskEngine.Enqueue` either returns a live handle or throws. A rejected or faulted admission must leave no
   active reservation, dedup entry, queue/rescheduler placement, or public execution.
 - `BackgroundTaskHandle.WaitAsync` only cancels the caller's wait. It does not cancel shared work. `Cancel(id)` requests
@@ -75,11 +77,12 @@ inject a scoped handler, `DbContext`, repository, or scoped service into these s
 - `BackgroundTaskTelemetry.MeterName` (`RasHub.BackgroundTasks`) is a public instrumentation name. The readiness check
   is registered as `background-tasks` with the `ready` tag.
 
-Current defaults are part of the operational baseline: lane capacities are `256 / 1024 / 256`, workers are
+Current configurable defaults are: lane capacities `256 / 1024 / 256`, workers
 `8 / 16 / 2`, `MaxActiveTasks` is `10_000`, and completed history is capped at `1_000` snapshots with 10-minute
 retention and one-minute cleanup. Per execution, the defaults are three attempts, one-second retry delay, factor `2`,
 one-minute maximum retry delay, and five-minute attempt timeout. Worker counts validate to `1..1024` per lane and
-`<= 2048` total; keys are limited to 512 characters and schedule IDs to 200.
+`<= 2048` total; keys are limited to 512 characters and schedule IDs to 200. Treat these as tunable defaults, not
+execution-protocol guarantees.
 
 The three lanes are semantic API, not numerical priority levels:
 
@@ -233,7 +236,7 @@ reflection where an internal memory invariant must be observed.
 
 Test-file responsibilities:
 
-- `BackgroundTaskEngineTests.cs`: minimal composed enqueue/execute smoke test.
+- `BackgroundTaskEngineTests.cs`: composed enqueue/execute smoke tests and typed-result dispatch.
 - `BackgroundTaskEngineBehaviorTests.cs`: public failure, retry, timeout, cancel, dedup, keyed serialization, lane FIFO,
   periodic schedule, rejection, pre-start cancellation, and missing-handler behavior.
 - `.Admission.cs`: transactional rollback when clock/queue admission throws, including dedup cleanup and recovery.
@@ -271,21 +274,6 @@ counts.
   history keeps only a bounded safe message; external adapters remain responsible for sanitization.
 - Metrics listeners execute synchronously in .NET. The engine contains listener exceptions and ordering re-entrancy, but
   a malicious listener that blocks forever can still block its producer thread.
-
-## Current baseline
-
-As of 2026-08-11, the library targets .NET 10 and has 67 focused integration tests. The latest subsystem audit and
-regression work completed with:
-
-- Release build: zero warnings and errors;
-- library suite: 67/67 passed;
-- full solution: 283/283 passed;
-- 20 consecutive complete library-suite runs: all passed;
-- `dotnet format --verify-no-changes` and diff whitespace checks: clean.
-
-This is a well-covered in-process engine, including adversarial race, lifecycle, rollback, timer, and retention cases.
-It is not a durable job system. Do not weaken existing protocols merely because a simpler implementation passes the
-happy-path tests.
 
 ## Verification commands
 

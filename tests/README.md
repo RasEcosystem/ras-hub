@@ -11,9 +11,13 @@ tests/
     └── RasHub.Web.IntegrationTests/
 ```
 
-- Unit tests cover deterministic logic without I/O.
-- Infrastructure tests use an isolated in-memory SQLite database.
-- Web tests exercise the ASP.NET Core pipeline through `WebApplicationFactory`.
+- Unit tests cover deterministic contracts, RAC parsing/adapters, and the
+  composed RasGate session/resource gateways without external I/O.
+- Infrastructure integration tests cover repositories, shadow-state stores,
+  guarded publication, queries, and task handlers with isolated SQLite
+  databases.
+- Web tests exercise authentication, authorization, cached reads, explicit
+  synchronization, and remote mutations through `WebApplicationFactory`.
 - Background task tests cover queues, workers, scheduling, retry, cancellation,
   deduplication, concurrency, limits, shutdown, and diagnostics.
 

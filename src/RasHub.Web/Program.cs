@@ -1,7 +1,9 @@
 using MudBlazor.Services;
 using Nava.Settings.Abstractions;
 using Nava.Settings.Extensions;
-using RasHub.Application.RasGates.Tasks;
+using RasHub.Application.RasGates.Tasks.Clusters;
+using RasHub.Application.RasGates.Tasks.Infobases;
+using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Configuration;
 using RasHub.Infrastructure.Database;
@@ -111,6 +113,12 @@ public class Program
         builder.Services.AddScoped<
             IBackgroundTaskHandler<UpdateClusterTask>,
             UpdateClusterTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<SynchronizeInfobasesTask>,
+            SynchronizeInfobasesTaskHandler>();
+        builder.Services.AddScoped<
+            IBackgroundTaskHandler<SynchronizeInfobaseTask>,
+            SynchronizeInfobaseTaskHandler>();
 
         builder.Services
             .AddOptions<RasGateMonitoringOptions>()

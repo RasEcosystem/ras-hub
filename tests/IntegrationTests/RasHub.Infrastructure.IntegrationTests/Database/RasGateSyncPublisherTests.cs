@@ -142,6 +142,50 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     }
 
     [Fact]
+    public async Task Publish_infobases_when_revision_changed_rolls_back_snapshot()
+    {
+        var rasGate = RasGateTestData.Create();
+        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var existing = RasInfobaseTestData.Create(cluster.Id);
+
+        await using (var seedDb = _database.CreateContext())
+        {
+            seedDb.AddRange(rasGate, cluster, existing);
+            await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var publicationDb = _database.CreateContext();
+        _ = await publicationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        await ChangeGateAsync(rasGate.Id, "reconfigured");
+        var publisher = CreatePublisher(publicationDb);
+
+        var published = await publisher.TryPublishInfobasesAsync(
+            rasGate.Id,
+            1,
+            cluster.ExternalId,
+            [CreateInfobaseSnapshot(Guid.NewGuid())],
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+
+        await using var verificationDb = _database.CreateContext();
+        var stored = await verificationDb.RasInfobases
+            .IgnoreQueryFilters()
+            .SingleAsync(TestContext.Current.CancellationToken);
+        var storedGate = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(existing.ExternalId, stored.ExternalId);
+        Assert.False(stored.IsDeleted);
+        Assert.Null(storedGate.LastSeenAt);
+    }
+
+    [Fact]
     public async Task Remove_cluster_when_revision_changed_rolls_back_removal()
     {
         var rasGate = RasGateTestData.Create();
@@ -220,7 +264,8 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     {
         return new RasGateSyncPublisher(
             db,
-            new RasClusterSnapshotStore(db));
+            new RasClusterSnapshotStore(db),
+            new RasInfobaseSnapshotStore(db));
     }
 
     private static RasClusterSnapshot CreateSnapshot(Guid externalId)
@@ -240,6 +285,16 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             LoadBalancingMode = RasClusterLoadBalancingMode.Performance,
             ErrorsCountThresholdPercent = 0,
             KillProblemProcesses = false
+        };
+    }
+
+    private static RasInfobaseSnapshot CreateInfobaseSnapshot(Guid externalId)
+    {
+        return new RasInfobaseSnapshot
+        {
+            ExternalId = externalId,
+            Name = "Replacement infobase",
+            Description = "Replacement description"
         };
     }
 }

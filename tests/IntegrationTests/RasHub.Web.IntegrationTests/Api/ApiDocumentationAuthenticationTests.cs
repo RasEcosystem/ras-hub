@@ -1,6 +1,8 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using RasHub.Contracts.RasHub.Models;
+using RasHub.Contracts.RasHub.Requests;
 using RasHub.Web.Authentication;
 using RasHub.Web.IntegrationTests.Infrastructure;
 
@@ -278,6 +280,39 @@ public sealed class ApiDocumentationAuthenticationTests
         Assert.False(paths.TryGetProperty(
             "/api/v1/ras-gates/{rasGateId}/status/check",
             out _));
+    }
+
+    [Fact]
+    public async Task OpenApi_uses_current_cluster_and_infobase_schema_names()
+    {
+        using var factory = CreateFactory();
+        await factory.SeedIdentityUserAsync(UserEmail, UserPassword);
+        using var client = CreateClient(factory);
+        using var login = await LoginAsync(client, UserEmail, UserPassword);
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        using var response = await client.GetAsync(
+            "/openapi/v1.json",
+            TestContext.Current.CancellationToken);
+        await using var stream = await response.Content.ReadAsStreamAsync(
+            TestContext.Current.CancellationToken);
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var schemas = document.RootElement
+            .GetProperty("components")
+            .GetProperty("schemas");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(schemas.TryGetProperty(nameof(ClusterModel), out _));
+        Assert.True(schemas.TryGetProperty(nameof(InfobaseModel), out _));
+        Assert.True(schemas.TryGetProperty(nameof(CreateClusterRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(UpdateClusterRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(RemoveClusterRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(SynchronizeInfobaseRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(SynchronizeInfobasesRequest), out _));
+        Assert.False(schemas.TryGetProperty("RasClusterModel", out _));
+        Assert.False(schemas.TryGetProperty("RasInfobaseModel", out _));
     }
 
     private static async Task<HttpResponseMessage> LoginAsync(

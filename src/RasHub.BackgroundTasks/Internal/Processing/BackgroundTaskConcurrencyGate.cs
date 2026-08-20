@@ -253,8 +253,7 @@ internal sealed class BackgroundTaskConcurrencyGate(
 
         public Dictionary<
             BackgroundTaskExecution,
-            LinkedListNode<BackgroundTaskExecution>> WaiterNodes
-        { get; } =
+            LinkedListNode<BackgroundTaskExecution>> WaiterNodes { get; } =
             new(ReferenceEqualityComparer.Instance);
     }
 

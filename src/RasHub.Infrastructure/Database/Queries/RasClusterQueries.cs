@@ -4,15 +4,15 @@ using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Domain;
 using RasHub.Infrastructure.Extensions;
-using ContractLoadBalancingMode = RasHub.Contracts.RasHub.Models.RasClusterLoadBalancingMode;
+using ContractLoadBalancingMode = RasHub.Contracts.RasHub.Models.ClusterLoadBalancingMode;
 using DomainLoadBalancingMode = RasHub.Domain.Enums.RasClusterLoadBalancingMode;
 
 namespace RasHub.Infrastructure.Database.Queries;
 
 public sealed class RasClusterQueries(RasHubDbContext db)
 {
-    private static readonly Expression<Func<RasCluster, RasClusterModel>>
-        ModelProjection = cluster => new RasClusterModel(
+    private static readonly Expression<Func<RasCluster, ClusterModel>>
+        ModelProjection = cluster => new ClusterModel(
             cluster.ExternalId,
             cluster.Name,
             cluster.Host,
@@ -35,7 +35,7 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             cluster.RestartSchedule,
             cluster.ObservedAt);
 
-    public async Task<PageResult<RasClusterModel>> GetPagedAsync(
+    public async Task<PageResult<ClusterModel>> GetPagedAsync(
         Guid rasGateId,
         PageRequest request,
         CancellationToken cancellationToken)
@@ -51,7 +51,7 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             .Select(ModelProjection)
             .ToListAsync(cancellationToken);
 
-        return new PageResult<RasClusterModel>
+        return new PageResult<ClusterModel>
         {
             Items = items,
             TotalCount = totalCount,
@@ -60,7 +60,7 @@ public sealed class RasClusterQueries(RasHubDbContext db)
         };
     }
 
-    public Task<RasClusterModel?> GetByExternalIdAsync(
+    public Task<ClusterModel?> GetByExternalIdAsync(
         Guid rasGateId,
         Guid clusterId,
         CancellationToken cancellationToken)

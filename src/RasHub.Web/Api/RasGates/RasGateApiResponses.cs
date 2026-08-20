@@ -57,12 +57,26 @@ internal static class RasGateApiResponses
             "RasGate configuration changed concurrently. Retry with current data.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterNotFound(Guid clusterId)
+    public static ApiResponse<ClusterModel> ClusterNotFound(Guid clusterId)
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ClusterNotFound<ClusterModel>(clusterId);
+    }
+
+    public static ApiResponse<T> ClusterNotFound<T>(Guid clusterId)
+    {
+        return ApiResponse<T>.Fail(
             HttpStatusCode.NotFound,
             "ras_cluster_not_found",
             $"RasCluster '{clusterId}' was not found.");
+    }
+
+    public static ApiResponse<InfobaseModel> InfobaseNotFound(
+        Guid infobaseId)
+    {
+        return ApiResponse<InfobaseModel>.Fail(
+            HttpStatusCode.NotFound,
+            "ras_infobase_not_found",
+            $"RasInfobase '{infobaseId}' was not found.");
     }
 
     public static ApiResponse<RasGateStatusResponse>
@@ -105,102 +119,182 @@ internal static class RasGateApiResponses
             "RasGate status could not be retrieved.");
     }
 
-    public static ApiResponse<RasClusterModel>
+    public static ApiResponse<ClusterModel>
         ClusterSynchronizationRejected()
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.ServiceUnavailable,
             "ras_gate_cluster_sync_unavailable",
             "RasGate cluster synchronization could not be scheduled.");
     }
 
-    public static ApiResponse<RasClusterModel>
+    public static ApiResponse<ClusterModel>
         ClusterSynchronizationFailed(BackgroundTaskResult result)
     {
         if (result.Outcome == BackgroundTaskOutcome.Canceled)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.ServiceUnavailable,
                 "ras_gate_cluster_sync_canceled",
                 "RasGate cluster synchronization was canceled.");
 
         if (result.Exception is RasGateInactiveException inactiveException)
-            return GateInactive<RasClusterModel>(inactiveException.RasGateId);
+            return GateInactive<ClusterModel>(inactiveException.RasGateId);
 
         if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.Conflict,
                 "ras_gate_configuration_changed",
                 "RasGate configuration changed during cluster synchronization.");
 
         if (result.Exception is TimeoutException)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.GatewayTimeout,
                 "ras_gate_cluster_timeout",
                 "RasGate cluster synchronization timed out.");
 
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.BadGateway,
             "ras_gate_cluster_sync_failed",
             "RasGate cluster could not be synchronized.");
     }
 
-    public static ApiResponse<PageResult<RasClusterModel>>
+    public static ApiResponse<PageResult<ClusterModel>>
         ClustersSynchronizationRejected()
     {
-        return ApiResponse<PageResult<RasClusterModel>>.Fail(
+        return ApiResponse<PageResult<ClusterModel>>.Fail(
             HttpStatusCode.ServiceUnavailable,
             "ras_gate_clusters_sync_unavailable",
             "RasGate cluster synchronization could not be scheduled.");
     }
 
-    public static ApiResponse<PageResult<RasClusterModel>>
+    public static ApiResponse<PageResult<ClusterModel>>
         ClustersSynchronizationFailed(BackgroundTaskResult result)
     {
         if (result.Outcome == BackgroundTaskOutcome.Canceled)
-            return ApiResponse<PageResult<RasClusterModel>>.Fail(
+            return ApiResponse<PageResult<ClusterModel>>.Fail(
                 HttpStatusCode.ServiceUnavailable,
                 "ras_gate_clusters_sync_canceled",
                 "RasGate cluster synchronization was canceled.");
 
         if (result.Exception is RasGateInactiveException inactiveException)
-            return GateInactive<PageResult<RasClusterModel>>(
+            return GateInactive<PageResult<ClusterModel>>(
                 inactiveException.RasGateId);
 
         if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<PageResult<RasClusterModel>>.Fail(
+            return ApiResponse<PageResult<ClusterModel>>.Fail(
                 HttpStatusCode.Conflict,
                 "ras_gate_configuration_changed",
                 "RasGate configuration changed during cluster synchronization.");
 
         if (result.Exception is TimeoutException)
-            return ApiResponse<PageResult<RasClusterModel>>.Fail(
+            return ApiResponse<PageResult<ClusterModel>>.Fail(
                 HttpStatusCode.GatewayTimeout,
                 "ras_gate_clusters_timeout",
                 "RasGate cluster synchronization timed out.");
 
-        return ApiResponse<PageResult<RasClusterModel>>.Fail(
+        return ApiResponse<PageResult<ClusterModel>>.Fail(
             HttpStatusCode.BadGateway,
             "ras_gate_clusters_sync_failed",
             "RasGate clusters could not be synchronized.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterRemovalRejected()
+    public static ApiResponse<InfobaseModel>
+        InfobaseSynchronizationRejected()
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<InfobaseModel>.Fail(
+            HttpStatusCode.ServiceUnavailable,
+            "ras_gate_infobase_sync_unavailable",
+            "RasGate infobase synchronization could not be scheduled.");
+    }
+
+    public static ApiResponse<InfobaseModel>
+        InfobaseSynchronizationFailed(BackgroundTaskResult result)
+    {
+        if (result.Outcome == BackgroundTaskOutcome.Canceled)
+            return ApiResponse<InfobaseModel>.Fail(
+                HttpStatusCode.ServiceUnavailable,
+                "ras_gate_infobase_sync_canceled",
+                "RasGate infobase synchronization was canceled.");
+
+        if (result.Exception is RasGateInactiveException inactiveException)
+            return GateInactive<InfobaseModel>(
+                inactiveException.RasGateId);
+
+        if (result.Exception is RasGateConfigurationChangedException)
+            return ApiResponse<InfobaseModel>.Fail(
+                HttpStatusCode.Conflict,
+                "ras_gate_configuration_changed",
+                "RasGate configuration changed during infobase synchronization.");
+
+        if (result.Exception is TimeoutException)
+            return ApiResponse<InfobaseModel>.Fail(
+                HttpStatusCode.GatewayTimeout,
+                "ras_gate_infobase_timeout",
+                "RasGate infobase synchronization timed out.");
+
+        return ApiResponse<InfobaseModel>.Fail(
+            HttpStatusCode.BadGateway,
+            "ras_gate_infobase_sync_failed",
+            "RasGate infobase could not be synchronized.");
+    }
+
+    public static ApiResponse<PageResult<InfobaseModel>>
+        InfobasesSynchronizationRejected()
+    {
+        return ApiResponse<PageResult<InfobaseModel>>.Fail(
+            HttpStatusCode.ServiceUnavailable,
+            "ras_gate_infobases_sync_unavailable",
+            "RasGate infobase synchronization could not be scheduled.");
+    }
+
+    public static ApiResponse<PageResult<InfobaseModel>>
+        InfobasesSynchronizationFailed(BackgroundTaskResult result)
+    {
+        if (result.Outcome == BackgroundTaskOutcome.Canceled)
+            return ApiResponse<PageResult<InfobaseModel>>.Fail(
+                HttpStatusCode.ServiceUnavailable,
+                "ras_gate_infobases_sync_canceled",
+                "RasGate infobase synchronization was canceled.");
+
+        if (result.Exception is RasGateInactiveException inactiveException)
+            return GateInactive<PageResult<InfobaseModel>>(
+                inactiveException.RasGateId);
+
+        if (result.Exception is RasGateConfigurationChangedException)
+            return ApiResponse<PageResult<InfobaseModel>>.Fail(
+                HttpStatusCode.Conflict,
+                "ras_gate_configuration_changed",
+                "RasGate configuration changed during infobase synchronization.");
+
+        if (result.Exception is TimeoutException)
+            return ApiResponse<PageResult<InfobaseModel>>.Fail(
+                HttpStatusCode.GatewayTimeout,
+                "ras_gate_infobases_timeout",
+                "RasGate infobase synchronization timed out.");
+
+        return ApiResponse<PageResult<InfobaseModel>>.Fail(
+            HttpStatusCode.BadGateway,
+            "ras_gate_infobases_sync_failed",
+            "RasGate infobases could not be synchronized.");
+    }
+
+    public static ApiResponse<ClusterModel> ClusterRemovalRejected()
+    {
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.ServiceUnavailable,
             "ras_gate_cluster_remove_unavailable",
             "RasGate cluster removal could not be scheduled.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterCreationRejected()
+    public static ApiResponse<ClusterModel> ClusterCreationRejected()
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.ServiceUnavailable,
             "ras_gate_cluster_create_unavailable",
             "RasGate cluster creation could not be scheduled.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterCreationFailed(
+    public static ApiResponse<ClusterModel> ClusterCreationFailed(
         BackgroundTaskResult result)
     {
         return ClusterMutationFailed(
@@ -210,23 +304,23 @@ internal static class RasGateApiResponses
             "RasGate cluster could not be created or its creation could not be confirmed.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterCreationNotPublished()
+    public static ApiResponse<ClusterModel> ClusterCreationNotPublished()
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.BadGateway,
             "ras_gate_cluster_create_not_published",
             "RasGate cluster creation could not be confirmed. Synchronize clusters before retrying.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterUpdateRejected()
+    public static ApiResponse<ClusterModel> ClusterUpdateRejected()
     {
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.ServiceUnavailable,
             "ras_gate_cluster_update_unavailable",
             "RasGate cluster update could not be scheduled.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterUpdateFailed(
+    public static ApiResponse<ClusterModel> ClusterUpdateFailed(
         BackgroundTaskResult result)
     {
         return ClusterMutationFailed(
@@ -236,7 +330,7 @@ internal static class RasGateApiResponses
             "RasGate cluster could not be updated.");
     }
 
-    public static ApiResponse<RasClusterModel> ClusterRemovalFailed(
+    public static ApiResponse<ClusterModel> ClusterRemovalFailed(
         BackgroundTaskResult result)
     {
         return ClusterMutationFailed(
@@ -246,41 +340,41 @@ internal static class RasGateApiResponses
             "RasGate cluster could not be removed.");
     }
 
-    private static ApiResponse<RasClusterModel> ClusterMutationFailed(
+    private static ApiResponse<ClusterModel> ClusterMutationFailed(
         BackgroundTaskResult result,
         string operationCode,
         string operationNoun,
         string fallbackMessage)
     {
         if (result.Outcome == BackgroundTaskOutcome.Canceled)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.ServiceUnavailable,
                 $"ras_gate_cluster_{operationCode}_canceled",
                 $"RasGate cluster {operationNoun} was canceled.");
 
         if (result.Exception is RasGateInactiveException inactiveException)
-            return GateInactive<RasClusterModel>(inactiveException.RasGateId);
+            return GateInactive<ClusterModel>(inactiveException.RasGateId);
 
         if (result.Exception is RasGateMutationOutcomeUnknownException)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.BadGateway,
                 $"ras_gate_cluster_{operationCode}_outcome_unknown",
                 $"RasGate could not confirm the cluster {operationNoun} " +
                 "outcome. Synchronize cluster state before retrying.");
 
         if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.Conflict,
                 "ras_gate_configuration_changed",
                 $"RasGate configuration changed during cluster {operationNoun}.");
 
         if (result.Exception is TimeoutException)
-            return ApiResponse<RasClusterModel>.Fail(
+            return ApiResponse<ClusterModel>.Fail(
                 HttpStatusCode.GatewayTimeout,
                 $"ras_gate_cluster_{operationCode}_timeout",
                 $"RasGate cluster {operationNoun} timed out.");
 
-        return ApiResponse<RasClusterModel>.Fail(
+        return ApiResponse<ClusterModel>.Fail(
             HttpStatusCode.BadGateway,
             $"ras_gate_cluster_{operationCode}_failed",
             fallbackMessage);

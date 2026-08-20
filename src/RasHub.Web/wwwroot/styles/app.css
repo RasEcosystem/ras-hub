@@ -1,6 +1,5 @@
 html {
     background: var(--mud-palette-background);
-    scrollbar-gutter: stable;
 }
 
 /* =========================================================

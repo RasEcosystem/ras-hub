@@ -4,7 +4,8 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
-using RasHub.Application.RasGates.Tasks;
+using RasHub.Application.RasGates.Tasks.Clusters;
+using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Contracts.RasHub.Requests;
 using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
@@ -33,14 +34,14 @@ public sealed partial class RasGatesApiTests
         Assert.Equal("Cached Gate", data.GetProperty("instanceName").GetString());
         Assert.Equal("1.2.3", data.GetProperty("version").GetString());
         Assert.Equal(observedAt, data.GetProperty("observedAt").GetDateTime());
-        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Fact]
     public async Task Synchronize_status_calls_gate_persists_and_returns_status()
     {
         var rasGate = await _factory.SeedRasGateAsync();
-        _factory.RasGateClientFactory.Status =
+        _factory.RasGateBoundary.Status =
             new RasGateStatus(
                 "Remote Gate",
                 "2.3.4");
@@ -57,8 +58,8 @@ public sealed partial class RasGatesApiTests
         Assert.Equal("Remote Gate", data.GetProperty("instanceName").GetString());
         Assert.Equal("2.3.4", data.GetProperty("version").GetString());
         Assert.NotEqual(JsonValueKind.Null, data.GetProperty("observedAt").ValueKind);
-        Assert.Equal(1, _factory.RasGateClientFactory.StatusRequestCount);
-        Assert.Equal("stored-secret", _factory.RasGateClientFactory.LastApiKey);
+        Assert.Equal(1, _factory.RasGateBoundary.StatusRequestCount);
+        Assert.Equal("stored-secret", _factory.RasGateBoundary.LastApiKey);
 
         var stored = await _factory.FindRasGateAsync(rasGate.Id);
         Assert.NotNull(stored);
@@ -73,16 +74,16 @@ public sealed partial class RasGatesApiTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, cachedResponse.StatusCode);
-        Assert.Equal(1, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(1, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Fact]
     public async Task Status_response_from_previous_configuration_is_not_published()
     {
         var rasGate = await _factory.SeedRasGateAsync();
-        _factory.RasGateClientFactory.Status =
+        _factory.RasGateBoundary.Status =
             new RasGateStatus("Old remote Gate", "1.0.0");
-        _factory.RasGateClientFactory.PauseStatusRequests();
+        _factory.RasGateBoundary.PauseStatusRequests();
         using var client = _factory.CreateAuthenticatedClient();
         var synchronizationTask = client.PostAsync(
             $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
@@ -91,7 +92,7 @@ public sealed partial class RasGatesApiTests
 
         try
         {
-            await _factory.RasGateClientFactory.WaitForStatusRequestAsync(
+            await _factory.RasGateBoundary.WaitForStatusRequestAsync(
                 TestContext.Current.CancellationToken);
 
             using var updateResponse = await client.PutAsJsonAsync(
@@ -106,7 +107,7 @@ public sealed partial class RasGatesApiTests
         }
         finally
         {
-            _factory.RasGateClientFactory.ReleaseStatusRequests();
+            _factory.RasGateBoundary.ReleaseStatusRequests();
         }
 
         using var synchronizationResponse = await synchronizationTask;
@@ -137,7 +138,7 @@ public sealed partial class RasGatesApiTests
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("ras_gate_not_found", GetErrorCode(json));
-        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Fact]
@@ -152,7 +153,7 @@ public sealed partial class RasGatesApiTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
-        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Theory]
@@ -176,7 +177,7 @@ public sealed partial class RasGatesApiTests
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("ras_gate_inactive", GetErrorCode(json));
-        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
     }
 
     [Fact]
@@ -198,7 +199,7 @@ public sealed partial class RasGatesApiTests
                 new SynchronizeClustersTask(rasGate.Id),
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal(0, _factory.RasGateClientFactory.StatusRequestCount);
-        Assert.Equal(0, _factory.RasGateClientFactory.ClusterRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.ClusterRequestCount);
     }
 }

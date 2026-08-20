@@ -27,6 +27,7 @@ public sealed class SynchronizeGateTaskHandler
         SynchronizeGateTask task,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         return Task.CompletedTask;
     }
 }
@@ -38,8 +39,8 @@ var handle = engine.Enqueue(
         Queue = BackgroundTaskQueue.Interactive,
         MaxAttempts = 2,
         Timeout = TimeSpan.FromSeconds(30),
-        DeduplicationKey = $"gate-sync:{gateId}",
-        ConcurrencyKey = $"gate:{gateId}"
+        DeduplicationKey = $"ras-gate-sync:{gateId}",
+        ConcurrencyKey = $"ras-gate:{gateId}"
     });
 
 var result = await handle.WaitAsync(requestCancellationToken);
@@ -58,13 +59,14 @@ request task cancellation.
 
 ```csharp
 using var schedule = scheduler.Schedule(
-    $"gate-sync:{gateId}",
+    $"ras-gate-sync:{gateId}",
     () => new SynchronizeGateTask(gateId),
     TimeSpan.FromMinutes(1),
     new BackgroundTaskOptions
     {
         Queue = BackgroundTaskQueue.Synchronization,
-        ConcurrencyKey = $"gate:{gateId}"
+        DeduplicationKey = $"ras-gate-sync:{gateId}",
+        ConcurrencyKey = $"ras-gate:{gateId}"
     },
     runImmediately: true);
 ```
@@ -75,7 +77,7 @@ capture scoped services in them.
 
 ## Failure and monitoring
 
-Exceptions retry until `MaxAttempts` is reached. Throw
+Retryable failures are retried until `MaxAttempts` is reached. Throw
 `NonRetryableBackgroundTaskException` for permanent failures. Timeout and cancellation remain cooperative.
 
 The `BackgroundTasks` configuration section controls lane capacities and worker counts, retention, cleanup, and

@@ -13,14 +13,14 @@ public sealed class BackgroundTaskEngineOptions
     public const int DefaultSynchronizationQueueCapacity = 1_024;
     public const int DefaultSynchronizationWorkerCount = 16;
 
-    /// <summary>Maximum number of waiting interactive tasks.</summary>
+    /// <summary>External admission capacity for waiting interactive tasks.</summary>
     public int InteractiveQueueCapacity { get; set; } = 256;
 
-    /// <summary>Maximum number of waiting synchronization tasks.</summary>
+    /// <summary>External admission capacity for waiting synchronization tasks.</summary>
     public int SynchronizationQueueCapacity { get; set; } =
         DefaultSynchronizationQueueCapacity;
 
-    /// <summary>Maximum number of waiting maintenance tasks.</summary>
+    /// <summary>External admission capacity for waiting maintenance tasks.</summary>
     public int MaintenanceQueueCapacity { get; set; } = 256;
 
     /// <summary>Workers reserved for user-facing interactive work.</summary>

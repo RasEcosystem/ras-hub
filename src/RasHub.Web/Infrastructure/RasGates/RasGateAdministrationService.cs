@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
-using RasHub.Application.RasGates.Tasks;
+using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database;

@@ -40,8 +40,66 @@ Use `make dev-stack-up` to run the complete stack in containers and
 `make dev-down` to stop it. See [deploy/README.md](deploy/README.md) for
 production setup and migrations.
 
+In Development, authenticated API documentation is available at `/swagger`.
+
+## Architecture
+
+RasHub keeps a local shadow of remote 1C:Enterprise infrastructure. Cached
+query endpoints read that database state. Explicit synchronization, hosted
+status monitoring, and remote mutations use the in-process background task
+engine.
+
+```text
+RasStudio / Blazor / API
+          |
+       RasHub.Web
+       /       \
+cached query  sync / mutation / monitoring
+     |                    |
+query service    BackgroundTasks engine
+     |                    |
+  EF Core       Application task handler
+     |                /             \
+PostgreSQL     resource gateway   sync publisher
+                      |                 |
+                RasGate session      EF Core
+                      |                 |
+              RasGate -> RAC -> RAS  PostgreSQL
+```
+
+- `RasHub.Domain` contains Hub-owned persisted entities.
+- `RasHub.Application` contains normalized remote models, background handlers,
+  and the status, cluster, and infobase gateway contracts.
+- `RasHub.Infrastructure` implements those gateways, EF Core persistence, and
+  version-aware RAC adapters. A per-Gate session owns the common HTTP envelope,
+  endpoint, authentication, RAC-version handling, and error semantics.
+- `RasHub.BackgroundTasks` is generic in-process execution machinery; its
+  queues, schedules, deduplication, and concurrency keys are not durable or
+  distributed.
+- `RasHub.Contracts` contains the versioned wire models shared with API clients
+  and has no dependency on server implementation projects.
+- `RasHub.Web` owns HTTP, Blazor, Identity, monitoring, and process composition.
+
+The current remote boundary supports RasGate status, cluster snapshot and
+administration operations, and cluster-scoped infobase snapshot/detail
+synchronization. Complete collection snapshots may remove missing cached rows;
+targeted synchronization updates only the requested resource. Every remote
+publication is guarded by the captured RasGate configuration revision.
+Hosted monitoring refreshes RasGate status only; cluster and infobase
+synchronization is initiated through explicit API commands.
+
+## API
+
+The versioned HTTP surface is under `/api/v1` and returns the shared
+`ApiResponse<T>` envelope. API controllers authenticate the user-owned
+`X-Api-Key`. RasGate configuration writes and remote cluster mutations also
+require the `ManageRasGates` policy, currently granted to administrators.
+Cached queries never contact RasGate; synchronization endpoints explicitly
+enqueue remote work and await its in-process handle.
+
 ## Internals
 
+- [Code map and execution flows](docs/code-map.md)
 - [Background task engine](src/RasHub.BackgroundTasks/README.md)
 - [Test suites](tests/README.md)
 - [RAC compatibility boundary](docs/rac-compatibility.md)

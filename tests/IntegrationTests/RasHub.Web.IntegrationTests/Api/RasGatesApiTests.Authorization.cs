@@ -153,11 +153,11 @@ public sealed partial class RasGatesApiTests
         if (method == "PUT")
         {
             path += $"/{Guid.NewGuid()}";
-            body = new UpdateRasClusterRequest("Updated");
+            body = new UpdateClusterRequest("Updated");
         }
         else
         {
-            body = new CreateRasClusterRequest("localhost", 1587);
+            body = new CreateClusterRequest("localhost", 1587);
         }
 
         using var request = new HttpRequestMessage(new HttpMethod(method), path)

@@ -53,7 +53,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         _identityConnection.Open();
     }
 
-    public FakeRasGateClientFactory RasGateClientFactory { get; } = new();
+    public FakeRasGateBoundary RasGateBoundary { get; } = new();
 
     public HttpClient CreateAuthenticatedClient()
     {
@@ -181,13 +181,53 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             .ToListAsync(TestContext.Current.CancellationToken);
     }
 
+    public async Task<RasCluster> SeedRasClusterAsync(
+        Guid rasGateId,
+        Guid? externalId = null,
+        string name = "Main cluster")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var cluster = new RasCluster
+        {
+            RasGateId = rasGateId,
+            ExternalId = externalId ?? Guid.NewGuid(),
+            Name = name,
+            Host = "cluster.example.test",
+            Port = 1541,
+            ObservedAt = DateTime.UtcNow
+        };
+
+        db.RasClusters.Add(cluster);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return cluster;
+    }
+
+    public async Task<IReadOnlyList<RasInfobase>> FindRasInfobasesAsync(
+        Guid rasClusterId,
+        bool includeDeleted = false)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var query = includeDeleted
+            ? db.RasInfobases.IgnoreQueryFilters()
+            : db.RasInfobases;
+
+        return await query
+            .AsNoTracking()
+            .Where(infobase => infobase.RasClusterId == rasClusterId)
+            .OrderBy(infobase => infobase.ExternalId)
+            .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
     public void ResetDatabase()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        db.RasInfobases.IgnoreQueryFilters().ExecuteDelete();
         db.RasClusters.IgnoreQueryFilters().ExecuteDelete();
         db.RasGates.IgnoreQueryFilters().ExecuteDelete();
-        RasGateClientFactory.Reset();
+        RasGateBoundary.Reset();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -218,7 +258,9 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ApplicationDbContext>();
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
-            services.RemoveAll<IRasGateClientFactory>();
+            services.RemoveAll<IRasGateStatusGateway>();
+            services.RemoveAll<IRasClusterGateway>();
+            services.RemoveAll<IRasInfobaseGateway>();
 
             services.AddDbContext<RasHubDbContext>((serviceProvider, options) =>
             {
@@ -236,7 +278,9 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(_identityConnection));
 
-            services.AddSingleton<IRasGateClientFactory>(RasGateClientFactory);
+            services.AddSingleton(RasGateBoundary.StatusGateway);
+            services.AddSingleton(RasGateBoundary.ClusterGateway);
+            services.AddSingleton(RasGateBoundary.InfobaseGateway);
         });
     }
 
@@ -295,16 +339,31 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     }
 }
 
-public sealed class FakeRasGateClientFactory : IRasGateClientFactory
+public sealed class FakeRasGateBoundary
 {
     private int _clusterCreateRequestCount;
     private int _clusterInfoRequestCount;
     private int _clusterRemoveRequestCount;
     private int _clusterRequestCount;
     private int _clusterUpdateRequestCount;
+    private int _infobaseInfoRequestCount;
+    private int _infobaseRequestCount;
     private int _statusRequestCount;
     private TaskCompletionSource<bool>? _statusRequestRelease;
     private TaskCompletionSource<bool>? _statusRequestStarted;
+
+    public FakeRasGateBoundary()
+    {
+        StatusGateway = new FakeRasGateStatusGateway(this);
+        ClusterGateway = new FakeRasClusterGateway(this);
+        InfobaseGateway = new FakeRasInfobaseGateway(this);
+    }
+
+    public IRasGateStatusGateway StatusGateway { get; }
+
+    public IRasClusterGateway ClusterGateway { get; }
+
+    public IRasInfobaseGateway InfobaseGateway { get; }
 
     public int ClusterRequestCount => Volatile.Read(ref _clusterRequestCount);
 
@@ -320,6 +379,12 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
     public int ClusterUpdateRequestCount => Volatile.Read(
         ref _clusterUpdateRequestCount);
 
+    public int InfobaseRequestCount => Volatile.Read(
+        ref _infobaseRequestCount);
+
+    public int InfobaseInfoRequestCount => Volatile.Read(
+        ref _infobaseInfoRequestCount);
+
     public int StatusRequestCount => Volatile.Read(ref _statusRequestCount);
 
     public string? LastApiKey { get; private set; }
@@ -328,7 +393,14 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public RasClusterSnapshot? Cluster { get; set; }
 
+    public IReadOnlyList<RasInfobaseSnapshot> Infobases { get; set; } = [];
+
+    public RasInfobaseSnapshot? Infobase { get; set; }
+
     public SnapshotCompleteness ClusterSnapshotCompleteness { get; set; } =
+        SnapshotCompleteness.Complete;
+
+    public SnapshotCompleteness InfobaseSnapshotCompleteness { get; set; } =
         SnapshotCompleteness.Complete;
 
     public bool SupportsClusterSnapshots { get; set; } = true;
@@ -341,6 +413,10 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public bool SupportsClusterUpdate { get; set; } = true;
 
+    public bool SupportsInfobaseSnapshots { get; set; } = true;
+
+    public bool SupportsInfobaseInfo { get; set; } = true;
+
     public Exception? ClustersException { get; set; }
 
     public Exception? ClusterException { get; set; }
@@ -350,6 +426,10 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
     public Exception? ClusterCreateException { get; set; }
 
     public Exception? ClusterUpdateException { get; set; }
+
+    public Exception? InfobasesException { get; set; }
+
+    public Exception? InfobaseException { get; set; }
 
     public Guid CreatedClusterId { get; set; } = Guid.NewGuid();
 
@@ -365,13 +445,118 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
 
     public string? LastClusterPassword { get; private set; }
 
+    public Guid? RequestedInfobaseClusterId { get; private set; }
+
+    public Guid? RequestedInfobaseId { get; private set; }
+
     public RasGateStatus Status { get; set; } =
         new("Test RasGate", "1.0.0");
 
-    public IRasGateClient Create(RasGate rasGate)
+    private FakeRasGateClient Create(RasGate rasGate)
     {
         LastApiKey = rasGate.ApiKey;
         return new FakeRasGateClient(this);
+    }
+
+    public async Task<RasGateStatus> GetStatusAsync(
+        RasGate rasGate,
+        CancellationToken cancellationToken)
+    {
+        LastApiKey = rasGate.ApiKey;
+        cancellationToken.ThrowIfCancellationRequested();
+        Interlocked.Increment(ref _statusRequestCount);
+        _statusRequestStarted?.TrySetResult(true);
+
+        if (_statusRequestRelease is not null)
+            await _statusRequestRelease.Task.WaitAsync(cancellationToken);
+
+        return Status;
+    }
+
+    public Task<RasGateCapabilities> GetCapabilitiesAsync(
+        RasGate rasGate,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).GetCapabilitiesAsync(cancellationToken);
+    }
+
+    public Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
+        RasGate rasGate,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).GetClustersAsync(cancellationToken);
+    }
+
+    public Task<RasClusterSnapshot> GetClusterAsync(
+        RasGate rasGate,
+        Guid clusterId,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).GetClusterAsync(clusterId, cancellationToken);
+    }
+
+    public Task<Guid> CreateClusterAsync(
+        RasGate rasGate,
+        RasClusterCreationOptions options,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).CreateClusterAsync(options, cancellationToken);
+    }
+
+    public Task UpdateClusterAsync(
+        RasGate rasGate,
+        Guid clusterId,
+        RasClusterUpdateOptions options,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).UpdateClusterAsync(
+            clusterId,
+            options,
+            cancellationToken);
+    }
+
+    public Task RemoveClusterAsync(
+        RasGate rasGate,
+        Guid clusterId,
+        string? clusterUser,
+        string? clusterPassword,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).RemoveClusterAsync(
+            clusterId,
+            clusterUser,
+            clusterPassword,
+            cancellationToken);
+    }
+
+    public Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
+        RasGate rasGate,
+        Guid clusterId,
+        string? clusterUser,
+        string? clusterPassword,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).GetInfobasesAsync(
+            clusterId,
+            clusterUser,
+            clusterPassword,
+            cancellationToken);
+    }
+
+    public Task<RasInfobaseSnapshot> GetInfobaseAsync(
+        RasGate rasGate,
+        Guid clusterId,
+        Guid infobaseId,
+        string? clusterUser,
+        string? clusterPassword,
+        CancellationToken cancellationToken)
+    {
+        return Create(rasGate).GetInfobaseAsync(
+            clusterId,
+            infobaseId,
+            clusterUser,
+            clusterPassword,
+            cancellationToken);
     }
 
     public void PauseStatusRequests()
@@ -405,21 +590,30 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         Volatile.Write(ref _clusterUpdateRequestCount, 0);
         Volatile.Write(ref _clusterRemoveRequestCount, 0);
         Volatile.Write(ref _clusterRequestCount, 0);
+        Volatile.Write(ref _infobaseRequestCount, 0);
+        Volatile.Write(ref _infobaseInfoRequestCount, 0);
         Volatile.Write(ref _statusRequestCount, 0);
         LastApiKey = null;
         Clusters = [];
         Cluster = null;
+        Infobases = [];
+        Infobase = null;
         ClusterSnapshotCompleteness = SnapshotCompleteness.Complete;
+        InfobaseSnapshotCompleteness = SnapshotCompleteness.Complete;
         SupportsClusterSnapshots = true;
         SupportsClusterInfo = true;
         SupportsClusterRemove = true;
         SupportsClusterInsert = true;
         SupportsClusterUpdate = true;
+        SupportsInfobaseSnapshots = true;
+        SupportsInfobaseInfo = true;
         ClustersException = null;
         ClusterException = null;
         ClusterRemoveException = null;
         ClusterCreateException = null;
         ClusterUpdateException = null;
+        InfobasesException = null;
+        InfobaseException = null;
         CreatedClusterId = Guid.NewGuid();
         LastClusterCreationOptions = null;
         UpdatedClusterId = null;
@@ -427,11 +621,12 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         RemovedClusterId = null;
         LastClusterUser = null;
         LastClusterPassword = null;
+        RequestedInfobaseClusterId = null;
+        RequestedInfobaseId = null;
         Status = new RasGateStatus("Test RasGate", "1.0.0");
     }
 
-    private sealed class FakeRasGateClient(FakeRasGateClientFactory owner)
-        : IRasGateClient
+    private sealed class FakeRasGateClient(FakeRasGateBoundary owner)
     {
         public async Task<RasGateStatus> GetStatusAsync(
             CancellationToken cancellationToken)
@@ -493,6 +688,56 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
                 $"Cluster '{clusterId}' is unavailable."));
         }
 
+        public Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
+            Guid clusterId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._infobaseRequestCount);
+
+            if (owner.InfobasesException is not null)
+                throw owner.InfobasesException;
+
+            owner.RequestedInfobaseClusterId = clusterId;
+            owner.LastClusterUser = clusterUser;
+            owner.LastClusterPassword = clusterPassword;
+
+            return Task.FromResult(
+                new RasResourceSnapshot<RasInfobaseSnapshot>
+                {
+                    SchemaVersion = 1,
+                    SourceVersion = "8.3.27.2214",
+                    Completeness = owner.InfobaseSnapshotCompleteness,
+                    Items = owner.Infobases
+                });
+        }
+
+        public Task<RasInfobaseSnapshot> GetInfobaseAsync(
+            Guid clusterId,
+            Guid infobaseId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Interlocked.Increment(ref owner._infobaseInfoRequestCount);
+
+            if (owner.InfobaseException is not null)
+                throw owner.InfobaseException;
+
+            owner.RequestedInfobaseClusterId = clusterId;
+            owner.RequestedInfobaseId = infobaseId;
+            owner.LastClusterUser = clusterUser;
+            owner.LastClusterPassword = clusterPassword;
+            var infobase = owner.Infobase ?? owner.Infobases
+                .SingleOrDefault(item => item.ExternalId == infobaseId);
+
+            return Task.FromResult(infobase ?? throw new RasGateClientException(
+                $"Infobase '{infobaseId}' is unavailable."));
+        }
+
         public Task RemoveClusterAsync(
             Guid clusterId,
             string? clusterUser,
@@ -542,7 +787,7 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
         }
 
         private static IReadOnlyList<RasResourceCapability> GetCapabilities(
-            FakeRasGateClientFactory owner)
+            FakeRasGateBoundary owner)
         {
             var capabilities = new List<RasResourceCapability>();
 
@@ -576,7 +821,138 @@ public sealed class FakeRasGateClientFactory : IRasGateClientFactory
                     "update",
                     1));
 
+            if (owner.SupportsInfobaseSnapshots)
+                capabilities.Add(new RasResourceCapability(
+                    "infobases",
+                    "snapshot",
+                    1));
+
+            if (owner.SupportsInfobaseInfo)
+                capabilities.Add(new RasResourceCapability(
+                    "infobases",
+                    "info",
+                    1));
+
             return capabilities;
+        }
+    }
+
+    private sealed class FakeRasGateStatusGateway(
+        FakeRasGateBoundary owner)
+        : IRasGateStatusGateway
+    {
+        public Task<RasGateStatus> GetStatusAsync(
+            RasGate rasGate,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetStatusAsync(rasGate, cancellationToken);
+        }
+    }
+
+    private sealed class FakeRasClusterGateway(
+        FakeRasGateBoundary owner)
+        : IRasClusterGateway
+    {
+        public Task<RasGateCapabilities> GetCapabilitiesAsync(
+            RasGate rasGate,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetCapabilitiesAsync(rasGate, cancellationToken);
+        }
+
+        public Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
+            RasGate rasGate,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetClustersAsync(rasGate, cancellationToken);
+        }
+
+        public Task<RasClusterSnapshot> GetClusterAsync(
+            RasGate rasGate,
+            Guid clusterId,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetClusterAsync(rasGate, clusterId, cancellationToken);
+        }
+
+        public Task<Guid> CreateClusterAsync(
+            RasGate rasGate,
+            RasClusterCreationOptions options,
+            CancellationToken cancellationToken)
+        {
+            return owner.CreateClusterAsync(rasGate, options, cancellationToken);
+        }
+
+        public Task UpdateClusterAsync(
+            RasGate rasGate,
+            Guid clusterId,
+            RasClusterUpdateOptions options,
+            CancellationToken cancellationToken)
+        {
+            return owner.UpdateClusterAsync(
+                rasGate,
+                clusterId,
+                options,
+                cancellationToken);
+        }
+
+        public Task RemoveClusterAsync(
+            RasGate rasGate,
+            Guid clusterId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            return owner.RemoveClusterAsync(
+                rasGate,
+                clusterId,
+                clusterUser,
+                clusterPassword,
+                cancellationToken);
+        }
+    }
+
+    private sealed class FakeRasInfobaseGateway(
+        FakeRasGateBoundary owner)
+        : IRasInfobaseGateway
+    {
+        public Task<RasGateCapabilities> GetCapabilitiesAsync(
+            RasGate rasGate,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetCapabilitiesAsync(rasGate, cancellationToken);
+        }
+
+        public Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
+            RasGate rasGate,
+            Guid clusterId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetInfobasesAsync(
+                rasGate,
+                clusterId,
+                clusterUser,
+                clusterPassword,
+                cancellationToken);
+        }
+
+        public Task<RasInfobaseSnapshot> GetInfobaseAsync(
+            RasGate rasGate,
+            Guid clusterId,
+            Guid infobaseId,
+            string? clusterUser,
+            string? clusterPassword,
+            CancellationToken cancellationToken)
+        {
+            return owner.GetInfobaseAsync(
+                rasGate,
+                clusterId,
+                infobaseId,
+                clusterUser,
+                clusterPassword,
+                cancellationToken);
         }
     }
 }
