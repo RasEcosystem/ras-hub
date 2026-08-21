@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Contracts.RasHub.Requests.Search;
 using RasHub.Contracts.RasHub.Responses;
 using RasHub.Domain;
 using RasHub.Infrastructure.Extensions;
@@ -114,6 +115,55 @@ public sealed class RasGateQueries(RasHubDbContext db)
         };
     }
 
+    public async Task<PageResult<RasGateModel>> SearchPagedAsync(
+        SearchRasGatesRequest search,
+        PageRequest page,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplySearch(
+            db.RasGates.AsNoTracking(),
+            search);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(rasGate => rasGate.Name)
+            .ThenBy(rasGate => rasGate.Id)
+            .ApplyPagination(page.Page, page.PageSize)
+            .Select(ModelProjection)
+            .ToListAsync(cancellationToken);
+
+        return new PageResult<RasGateModel>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page.Page,
+            PageSize = page.PageSize
+        };
+    }
+
+    public async Task<IReadOnlyList<RasGateModel>> SearchAllAsync(
+        SearchRasGatesRequest search,
+        CancellationToken cancellationToken)
+    {
+        return await ApplySearch(
+                db.RasGates.AsNoTracking(),
+                search)
+            .OrderBy(rasGate => rasGate.Name)
+            .ThenBy(rasGate => rasGate.Id)
+            .Select(ModelProjection)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RasGateModel>> GetAllAsync(
+        CancellationToken cancellationToken)
+    {
+        return await db.RasGates
+            .AsNoTracking()
+            .OrderByDescending(rasGate => rasGate.CreatedAt)
+            .ThenBy(rasGate => rasGate.Id)
+            .Select(ModelProjection)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<RasGateModel?> GetByIdAsync(
         Guid id,
         CancellationToken cancellationToken)
@@ -123,6 +173,22 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .Where(rasGate => rasGate.Id == id)
             .Select(ModelProjection)
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private static IQueryable<RasGate> ApplySearch(
+        IQueryable<RasGate> query,
+        SearchRasGatesRequest search)
+    {
+        var term = search.Query.Trim().ToUpperInvariant();
+        var fields = search.Fields is { Length: > 0 }
+            ? search.Fields.ToHashSet()
+            : [RasGateSearchField.Name];
+        var searchName = fields.Contains(RasGateSearchField.Name);
+        var searchUrl = fields.Contains(RasGateSearchField.Url);
+
+        return query.Where(rasGate =>
+            (searchName && rasGate.Name.ToUpper().Contains(term)) ||
+            (searchUrl && rasGate.Url.ToUpper().Contains(term)));
     }
 
     public Task<RasGateActivity?> GetActivityAsync(

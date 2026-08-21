@@ -16,8 +16,9 @@ tests/
 - Infrastructure integration tests cover repositories, shadow-state stores,
   guarded publication, queries, and task handlers with isolated SQLite
   databases.
-- Web tests exercise authentication, authorization, cached reads, explicit
-  synchronization, and remote mutations through `WebApplicationFactory`.
+- Web tests exercise authentication, authorization, shadow and live reads,
+  global persisted search, explicit shadow refresh, and remote mutations
+  through `WebApplicationFactory`.
 - Background task tests cover queues, workers, scheduling, retry, cancellation,
   deduplication, concurrency, limits, shutdown, and diagnostics.
 

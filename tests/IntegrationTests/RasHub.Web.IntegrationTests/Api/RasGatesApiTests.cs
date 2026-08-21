@@ -419,7 +419,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
-    public async Task List_returns_pagination_metadata_and_never_exposes_api_keys()
+    public async Task Get_paged_returns_pagination_metadata_and_never_exposes_api_keys()
     {
         await _factory.SeedRasGateAsync("First", apiKey: "first-secret");
         await _factory.SeedRasGateAsync("Second", apiKey: "second-secret");
@@ -442,11 +442,119 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.All(items, item => Assert.False(item.TryGetProperty("apiKey", out _)));
     }
 
+    [Fact]
+    public async Task Get_all_returns_complete_collection_and_never_exposes_api_keys()
+    {
+        await _factory.SeedRasGateAsync("First", apiKey: "first-secret");
+        await _factory.SeedRasGateAsync("Second", apiKey: "second-secret");
+        await _factory.SeedRasGateAsync("Third", apiKey: "third-secret");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/all",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, data.Length);
+        Assert.All(
+            data,
+            item => Assert.False(item.TryGetProperty("apiKey", out _)));
+    }
+
+    [Fact]
+    public async Task Search_paged_returns_case_insensitive_name_matches_without_api_keys()
+    {
+        var expected = await _factory.SeedRasGateAsync(
+            "Production Alpha",
+            apiKey: "alpha-secret");
+        await _factory.SeedRasGateAsync(
+            "Production Beta",
+            apiKey: "beta-secret");
+        await _factory.SeedRasGateAsync(
+            "Development",
+            apiKey: "development-secret");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search?query=ALPHA&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+        var item = Assert.Single(
+            data.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, data.GetProperty("totalCount").GetInt32());
+        Assert.Equal(expected.Id, item.GetProperty("id").GetGuid());
+        Assert.False(item.TryGetProperty("apiKey", out _));
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Search_all_can_search_selected_url_field()
+    {
+        var expected = await _factory.SeedRasGateAsync(
+            "Gateway",
+            url: "https://target.example.test");
+        await _factory.SeedRasGateAsync(
+            "Target in name only",
+            url: "https://other.example.test");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search/all?query=TARGET&fields=Url",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var item = Assert.Single(json.GetProperty("data").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected.Id, item.GetProperty("id").GetGuid());
+        Assert.False(item.TryGetProperty("apiKey", out _));
+    }
+
+    [Fact]
+    public async Task Search_all_matches_any_selected_field_and_treats_wildcards_literally()
+    {
+        await _factory.SeedRasGateAsync(
+            "100% Production",
+            url: "https://first.example.test");
+        await _factory.SeedRasGateAsync(
+            "Other",
+            url: "https://100%-gateway.example.test");
+        await _factory.SeedRasGateAsync(
+            "Wildcard decoy",
+            url: "https://unrelated.example.test");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search/all?query=100%25&fields=Name&fields=Url",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var items = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, items.Length);
+    }
+
+    [Fact]
+    public async Task Search_rejects_whitespace_query()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search?query=%20%20&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData(0, 10)]
     [InlineData(1, 0)]
     [InlineData(1, 101)]
-    public async Task List_rejects_invalid_page_request(int page, int pageSize)
+    public async Task Get_paged_rejects_invalid_page_request(int page, int pageSize)
     {
         using var client = _factory.CreateAuthenticatedClient();
 

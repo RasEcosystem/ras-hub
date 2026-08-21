@@ -22,7 +22,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
     }
 
     [Fact]
-    public async Task Synchronize_persists_clusters_and_returns_metadata()
+    public async Task Refresh_shadow_persists_clusters_and_returns_metadata()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var snapshot = CreateSnapshot(
@@ -32,7 +32,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -55,7 +55,39 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
     }
 
     [Fact]
-    public async Task List_returns_cached_clusters_without_synchronization()
+    public async Task Get_live_all_refreshes_and_returns_complete_shadow()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var second = CreateSnapshot(Guid.NewGuid(), "Second cluster");
+        var first = CreateSnapshot(Guid.NewGuid(), "First cluster");
+        _factory.RasGateBoundary.Clusters = [second, first];
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/all",
+            null,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(json.GetProperty("success").GetBoolean());
+        Assert.Equal(2, data.Length);
+        Assert.Equal(first.ExternalId, data[0].GetProperty("id").GetGuid());
+        Assert.Equal(second.ExternalId, data[1].GetProperty("id").GetGuid());
+        Assert.All(
+            data,
+            cluster => Assert.NotEqual(
+                default,
+                cluster.GetProperty("observedAt").GetDateTime()));
+        Assert.Equal(1, _factory.RasGateBoundary.ClusterRequestCount);
+
+        var stored = await _factory.FindRasClustersAsync(rasGate.Id);
+        Assert.Equal(2, stored.Count);
+    }
+
+    [Fact]
+    public async Task Get_shadow_paged_returns_persisted_clusters_without_live_request()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         _factory.RasGateBoundary.Clusters =
@@ -63,7 +95,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -71,7 +103,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Clusters = [];
 
         using var cachedResponse = await client.GetAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters?page=1&pageSize=10",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow?page=1&pageSize=10",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(cachedResponse);
 
@@ -81,7 +113,141 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
     }
 
     [Fact]
-    public async Task Synchronize_by_id_updates_only_requested_cluster()
+    public async Task Get_shadow_all_returns_complete_persisted_collection_without_live_request()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var snapshot = CreateSnapshot(Guid.NewGuid(), "Shadow cluster");
+        _factory.RasGateBoundary.Clusters = [snapshot];
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var refreshResponse = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
+            null,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        _factory.RasGateBoundary.Clusters = [];
+
+        using var response = await client.GetAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/all",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(data);
+        Assert.Equal(snapshot.ExternalId, data[0].GetProperty("id").GetGuid());
+        Assert.Equal(1, _factory.RasGateBoundary.ClusterRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_live_paged_refreshes_complete_shadow_and_returns_requested_page()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var first = CreateSnapshot(Guid.NewGuid(), "First cluster");
+        var second = CreateSnapshot(Guid.NewGuid(), "Second cluster");
+        var third = CreateSnapshot(Guid.NewGuid(), "Third cluster");
+        _factory.RasGateBoundary.Clusters = [third, first, second];
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live?page=2&pageSize=2",
+            null,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+        var items = data.GetProperty("items").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, data.GetProperty("totalCount").GetInt32());
+        Assert.Equal(2, data.GetProperty("page").GetInt32());
+        Assert.Equal(2, data.GetProperty("pageSize").GetInt32());
+        var item = Assert.Single(items);
+        Assert.Equal(third.ExternalId, item.GetProperty("id").GetGuid());
+        Assert.Equal(1, _factory.RasGateBoundary.ClusterRequestCount);
+        Assert.Equal(
+            3,
+            (await _factory.FindRasClustersAsync(rasGate.Id)).Count);
+    }
+
+    [Fact]
+    public async Task Search_shadow_paged_searches_all_gates_and_returns_parent_context()
+    {
+        var firstGate = await _factory.SeedRasGateAsync("First Gate");
+        var secondGate = await _factory.SeedRasGateAsync("Second Gate");
+        var firstCluster = await _factory.SeedRasClusterAsync(
+            firstGate.Id,
+            name: "Alpha target");
+        var secondCluster = await _factory.SeedRasClusterAsync(
+            secondGate.Id,
+            name: "Beta target");
+        await _factory.SeedRasClusterAsync(
+            secondGate.Id,
+            name: "Unrelated");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            "/api/v1/clusters/shadow/search?query=TARGET&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+        var items = data.GetProperty("items").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, data.GetProperty("totalCount").GetInt32());
+        Assert.Collection(
+            items,
+            item =>
+            {
+                Assert.Equal(firstGate.Id, item.GetProperty("rasGateId").GetGuid());
+                Assert.Equal("First Gate", item.GetProperty("rasGateName").GetString());
+                Assert.Equal(
+                    firstCluster.ExternalId,
+                    item.GetProperty("cluster").GetProperty("id").GetGuid());
+            },
+            item =>
+            {
+                Assert.Equal(secondGate.Id, item.GetProperty("rasGateId").GetGuid());
+                Assert.Equal("Second Gate", item.GetProperty("rasGateName").GetString());
+                Assert.Equal(
+                    secondCluster.ExternalId,
+                    item.GetProperty("cluster").GetProperty("id").GetGuid());
+            });
+        Assert.Equal(0, _factory.RasGateBoundary.ClusterRequestCount);
+        Assert.Equal(0, _factory.RasGateBoundary.ClusterInfoRequestCount);
+    }
+
+    [Fact]
+    public async Task Search_shadow_all_applies_optional_gate_and_selected_host_field()
+    {
+        var expectedGate = await _factory.SeedRasGateAsync("Expected Gate");
+        var otherGate = await _factory.SeedRasGateAsync("Other Gate");
+        var expectedCluster = await _factory.SeedRasClusterAsync(
+            expectedGate.Id,
+            name: "Name does not match",
+            host: "target-host.example.test");
+        await _factory.SeedRasClusterAsync(
+            otherGate.Id,
+            name: "Target appears only in name",
+            host: "target-host.example.test");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"/api/v1/clusters/shadow/search/all?query=TARGET&rasGateId={expectedGate.Id}&fields=Host",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var item = Assert.Single(json.GetProperty("data").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expectedGate.Id, item.GetProperty("rasGateId").GetGuid());
+        Assert.Equal(
+            expectedCluster.ExternalId,
+            item.GetProperty("cluster").GetProperty("id").GetGuid());
+        Assert.Equal(0, _factory.RasGateBoundary.ClusterRequestCount);
+    }
+
+    [Fact]
+    public async Task Get_live_one_updates_only_requested_cluster()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var first = CreateSnapshot(Guid.NewGuid(), "First cluster");
@@ -90,7 +256,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var initialResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, initialResponse.StatusCode);
@@ -99,7 +265,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Cluster = updated;
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{first.ExternalId}/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{first.ExternalId}",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -134,13 +300,13 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
 
         using var response = await client.GetAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/{cluster.ExternalId}",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -160,7 +326,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{Guid.NewGuid()}/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{Guid.NewGuid()}",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -182,14 +348,14 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{clusterId}/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{clusterId}",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Equal(
-            "cluster_synchronization_failed",
+            "cluster_live_refresh_failed",
             json.GetProperty("error").GetProperty("code").GetString());
         Assert.Equal(2, _factory.RasGateBoundary.ClusterInfoRequestCount);
     }
@@ -204,7 +370,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{clusterId}/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{clusterId}",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -235,8 +401,8 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
         var path = $"/api/v1/ras-gates/{rasGate.Id}/clusters" +
                    (singleResource
-                       ? $"/{clusterId}/synchronize"
-                       : "/synchronize");
+                       ? $"/live/{clusterId}"
+                       : "/shadow/refresh");
 
         using var response = await client.PostAsync(
             path,
@@ -260,7 +426,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -298,7 +464,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/synchronize",
+            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -319,7 +485,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
         using var client = _factory.CreateAuthenticatedClient();
         var path = $"/api/v1/ras-gates/{rasGate.Id}/clusters" +
-                   (synchronize ? "/synchronize" : string.Empty);
+                   (synchronize ? "/shadow/refresh" : "/shadow");
 
         using var response = synchronize
             ? await client.PostAsync(
@@ -347,17 +513,36 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Equal(
-            "clusters_synchronization_failed",
+            "cluster_shadow_refresh_failed",
             json.GetProperty("error").GetProperty("code").GetString());
         Assert.Equal(2, _factory.RasGateBoundary.ClusterRequestCount);
         Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+    }
+
+    [Fact]
+    public async Task Get_live_all_returns_live_refresh_error_when_refresh_fails()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        _factory.RasGateBoundary.ClustersException =
+            new RasGateClientException("Gate unavailable.");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/all",
+            null,
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal("cluster_live_refresh_failed", GetErrorCode(json));
+        Assert.DoesNotContain("Gate unavailable", json.ToString());
     }
 
     [Fact]
@@ -369,7 +554,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var initialResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, initialResponse.StatusCode);
@@ -379,7 +564,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
             SnapshotCompleteness.Partial;
 
         using var partialResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
 
@@ -398,7 +583,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -433,7 +618,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(clusterId, json.GetProperty("data").GetProperty("id").GetGuid());
         Assert.Equal(
-            $"/api/v1/ras-gates/{rasGate.Id:D}/clusters/{clusterId:D}",
+            $"/api/v1/ras-gates/{rasGate.Id:D}/clusters/shadow/{clusterId:D}",
             response.Headers.Location?.AbsolutePath);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
@@ -513,7 +698,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         Assert.Equal(
             "cluster_create_outcome_unknown",
             json.GetProperty("error").GetProperty("code").GetString());
-        Assert.Contains("Synchronize", json.ToString());
+        Assert.Contains("Refresh", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(0, _factory.RasGateBoundary.ClusterInfoRequestCount);
         Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
@@ -543,7 +728,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Equal("cluster_create_not_confirmed", GetErrorCode(json));
-        Assert.Contains("Synchronize", json.ToString());
+        Assert.Contains("Refresh", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
         Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
@@ -649,7 +834,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Clusters = [initial];
         using var client = _factory.CreateAuthenticatedClient();
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -686,7 +871,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Clusters = [initial];
         using var client = _factory.CreateAuthenticatedClient();
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -719,7 +904,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Clusters = [initial];
         using var client = _factory.CreateAuthenticatedClient();
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -734,7 +919,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
         Assert.Equal("cluster_update_not_confirmed", GetErrorCode(json));
-        Assert.Contains("Synchronize", json.ToString());
+        Assert.Contains("Refresh", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterUpdateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
         Assert.Equal(initial.ExternalId, _factory.RasGateBoundary.UpdatedClusterId);
@@ -753,7 +938,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var configurationClient = _factory.CreateAuthenticatedClient();
         var cancellationToken = TestContext.Current.CancellationToken;
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -805,7 +990,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         _factory.RasGateBoundary.Clusters = [initial];
         using var client = _factory.CreateAuthenticatedClient();
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -876,7 +1061,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -949,7 +1134,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -980,7 +1165,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -1015,7 +1200,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var configurationClient = _factory.CreateAuthenticatedClient();
         var cancellationToken = TestContext.Current.CancellationToken;
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -1066,7 +1251,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
         using var client = _factory.CreateAuthenticatedClient();
 
         using var synchronizationResponse = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/synchronize",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
             null,
             TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, synchronizationResponse.StatusCode);
@@ -1171,7 +1356,7 @@ public sealed class RasGateClustersApiTests : IClassFixture<RasHubWebApplication
             .GetProperty("error")
             .GetProperty("message")
             .GetString());
-        Assert.Contains("Synchronize cluster state", message);
+        Assert.Contains("Refresh the cluster shadow", message);
         Assert.Contains("verify the target RasGate", message);
         Assert.Contains("Do not retry the mutation automatically", message);
     }

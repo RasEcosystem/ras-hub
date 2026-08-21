@@ -175,7 +175,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     public async Task<RasCluster> SeedRasClusterAsync(
         Guid rasGateId,
         Guid? externalId = null,
-        string name = "Main cluster")
+        string name = "Main cluster",
+        string host = "cluster.example.test")
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
@@ -184,7 +185,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             RasGateId = rasGateId,
             ExternalId = externalId ?? Guid.NewGuid(),
             Name = name,
-            Host = "cluster.example.test",
+            Host = host,
             Port = 1541,
             ObservedAt = DateTime.UtcNow
         };
@@ -209,6 +210,28 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
             .Where(infobase => infobase.RasClusterId == rasClusterId)
             .OrderBy(infobase => infobase.ExternalId)
             .ToListAsync(TestContext.Current.CancellationToken);
+    }
+
+    public async Task<RasInfobase> SeedRasInfobaseAsync(
+        Guid rasClusterId,
+        Guid? externalId = null,
+        string name = "Main infobase",
+        string description = "")
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var infobase = new RasInfobase
+        {
+            RasClusterId = rasClusterId,
+            ExternalId = externalId ?? Guid.NewGuid(),
+            Name = name,
+            Description = description,
+            ObservedAt = DateTime.UtcNow
+        };
+
+        db.RasInfobases.Add(infobase);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return infobase;
     }
 
     public void ResetDatabase()

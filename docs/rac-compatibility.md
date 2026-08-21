@@ -86,9 +86,9 @@ remote identifier, name, and description.
 
 `clusters.info` executes `cluster info --cluster=<uuid>` and validates that RAC
 returned exactly one cluster with the requested identifier. Its result is
-published as a targeted upsert and therefore never removes other cached
+published as a targeted upsert and therefore never removes other shadow
 clusters. Only `clusters.snapshot` is authoritative for collection deletion;
-removing an absent cluster also invalidates its cached infobases.
+removing an absent cluster also invalidates its shadow infobases.
 
 `clusters.insert` executes `cluster insert` with the required host and port and
 the settings supplied by the API caller. A successful result must contain
@@ -103,9 +103,9 @@ timeout, malformed or incomplete success response, inconsistent execution
 outcome, or unparseable insert identifier is treated as an unknown outcome.
 It is never retried automatically. A confirmed mutation whose authoritative
 read-back or guarded local publication fails is reported as not confirmed;
-clients must synchronize, verify the target RasGate, and avoid automatic
-retry. Explicit pre-start rejection and a consistent RAC `failed` outcome
-remain ordinary failures.
+clients must refresh the shadow, verify the target RasGate, and avoid
+automatic retry. Explicit pre-start rejection and a consistent RAC `failed`
+outcome remain ordinary failures.
 
 Optional `--agent-user` and `--agent-pwd` values are accepted for insert and
 update. They remain request-scoped and are not persisted or included in logs,
@@ -118,12 +118,12 @@ administrator credentials. Credentials remain request-scoped and are not
 persisted or included in logs, errors, or responses. The adapter validates only
 the process outcome and never publishes RAC output. Automatic retries are
 disabled because removal is a remote mutation. After RAC confirms success, the
-matching cached cluster and its infobases are soft-deleted under the same
-RasGate configuration-revision guard used by synchronization.
+matching shadow cluster and its infobases are soft-deleted under the same
+RasGate configuration-revision guard used by remote publication.
 
 `infobases.snapshot` executes
 `infobase summary list --cluster=<cluster-uuid>`. A complete result reconciles
-only the infobases owned by that cached cluster and may soft-delete absent
+only the infobases owned by that shadow cluster and may soft-delete absent
 siblings. `infobases.info` adds `--infobase=<infobase-uuid>`, requires exactly
 one matching result, and performs a targeted upsert without changing siblings.
 Both operations may carry request-scoped `--cluster-user` and `--cluster-pwd`

@@ -25,15 +25,19 @@ atomic transaction.
 
 | Behavior | Entry point |
 |---|---|
-| RasGate CRUD API | `src/RasHub.Web/Controllers/RasGates/RasGatesController.cs` |
+| RasGate registration reads | `src/RasHub.Web/Controllers/RasGates/RasGateQueryController.cs` |
+| RasGate registration search | `src/RasHub.Web/Controllers/RasGates/RasGateSearchController.cs` |
+| RasGate registration administration | `src/RasHub.Web/Controllers/RasGates/RasGateAdministrationController.cs` |
 | Blazor RasGate administration | `src/RasHub.Web/Infrastructure/RasGates/RasGateAdministrationService.cs` |
 | Shared RasGate configuration lifecycle | `src/RasHub.Application/RasGates/Services/RasGateRegistry.cs` |
-| Cached and synchronized status | `src/RasHub.Web/Controllers/RasGates/RasGateStatusController.cs` |
-| Cached cluster reads | `src/RasHub.Web/Controllers/RasClusters/RasGateClustersController.cs` |
-| Cluster synchronization | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterSynchronizationController.cs` |
+| RasGate status shadow and live observation | `src/RasHub.Web/Controllers/RasGates/RasGateStatusController.cs` |
+| Cluster shadow reads | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterShadowController.cs` |
+| Global cluster shadow search | `src/RasHub.Web/Controllers/RasClusters/RasClusterShadowSearchController.cs` |
+| Live cluster reads and shadow refresh | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterLiveController.cs` |
 | Cluster create/update/remove | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterAdministrationController.cs` |
-| Cached infobase reads | `src/RasHub.Web/Controllers/RasInfobases/RasClusterInfobasesController.cs` |
-| Infobase synchronization | `src/RasHub.Web/Controllers/RasInfobases/RasClusterInfobaseSynchronizationController.cs` |
+| Infobase shadow reads | `src/RasHub.Web/Controllers/RasInfobases/RasClusterInfobaseShadowController.cs` |
+| Global infobase shadow search | `src/RasHub.Web/Controllers/RasInfobases/RasInfobaseShadowSearchController.cs` |
+| Live infobase reads and shadow refresh | `src/RasHub.Web/Controllers/RasInfobases/RasClusterInfobaseLiveController.cs` |
 | Hosted Gate status monitoring | `src/RasHub.Web/Infrastructure/RasGates/RasGateMonitoringService.cs` |
 | DI and handler registration | `src/RasHub.Web/Program.cs` and `src/RasHub.Infrastructure/Extensions/ServiceCollectionExtensions.cs` |
 
@@ -43,20 +47,22 @@ invalidation there; authorization and presentation remain adapter-specific.
 
 ## Real execution flows
 
-### Cached API query
+### Persisted API query
 
 ```text
-Controller -> ActiveRasGateLookup -> Ras*Queries
+Controller -> [ActiveRasGateLookup for parent-scoped reads] -> Ras*Queries
            -> AsNoTracking EF projection -> Contracts response/model
            -> ApiResponse<T>
 ```
 
-Gate-scoped status, cluster, and infobase queries use `ActiveRasGateLookup`;
-top-level Gate queries go directly to `RasGateQueries`. Cached queries call
-Infrastructure projections directly, do not use Application handlers, and do
-not contact RasGate.
+Gate-scoped cluster and infobase shadow queries use `ActiveRasGateLookup`;
+top-level Gate registration, status-shadow, and global search queries go
+directly to their Infrastructure query modules. Global cluster and infobase
+searches read across the persisted shadow and optionally filter by their
+parent identities. These persisted queries do not use Application handlers
+and do not contact RasGate.
 
-### Explicit synchronization or remote mutation
+### Live read, shadow refresh, or remote mutation
 
 ```text
 Controller -> ActiveRasGateLookup + optional parent/resource lookup
@@ -83,7 +89,7 @@ RasGateMonitoringService -> PeriodicTimer -> scoped RasGateQueries
 
 Monitoring refreshes the aggregate RasGate/RAC status only. It does not use the
 generic periodic scheduler, and it does not schedule cluster or infobase
-synchronization. A reachable Gate with `available: false` RAC is recorded as
+shadow refreshes. A reachable Gate with `available: false` RAC is recorded as
 degraded; a failed RAC probe records RAC as unknown without discarding the
 successful Gate observation.
 
@@ -108,9 +114,9 @@ infobases by cluster—and are distinct from Hub IDs.
 
 | Change | Follow through |
 |---|---|
-| Public request/response | Contracts submodule -> Web controller -> Infrastructure query projection when cached -> OpenAPI and Contracts/Web tests |
+| Public request/response | Contracts submodule -> Web controller -> Infrastructure query projection for persisted reads -> OpenAPI and Contracts/Web tests |
 | Remote-derived persisted field | Application snapshot -> RAC deserializer -> Domain entity -> EF mapping/migration -> snapshot store -> query contract -> tests |
-| New read/sync operation | Application gateway/task -> Infrastructure gateway/adapter/DI -> publisher/store when shadow state changes -> Web controller/task options/handler registration -> tests |
+| New live read or shadow refresh | Application gateway/task -> Infrastructure gateway/adapter/DI -> publisher/store when shadow state changes -> Web controller/task options/handler registration -> tests |
 | Cluster mutation | Contract mapping -> task/options -> gateway/adapter -> read-back or guarded removal -> unknown-outcome and Web tests |
 | RAC output-format-only change | Resource deserializer and resolver registration/tests; keep the command adapter |
 | RAC command or outcome change | Operation adapter -> typed interface plus descriptor registration -> capability and gateway tests |

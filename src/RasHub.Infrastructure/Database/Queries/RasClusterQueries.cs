@@ -2,6 +2,8 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Contracts.RasHub.Models.Search;
+using RasHub.Contracts.RasHub.Requests.Search;
 using RasHub.Domain;
 using RasHub.Infrastructure.Extensions;
 using ContractLoadBalancingMode = RasHub.Contracts.RasHub.Models.ClusterLoadBalancingMode;
@@ -37,6 +39,8 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             RestartSchedule = cluster.RestartSchedule,
             ObservedAt = cluster.ObservedAt
         };
+    private static readonly Func<RasCluster, ClusterModel> ModelMapper =
+        ModelProjection.Compile();
 
     public async Task<PageResult<ClusterModel>> GetPagedAsync(
         Guid rasGateId,
@@ -63,6 +67,49 @@ public sealed class RasClusterQueries(RasHubDbContext db)
         };
     }
 
+    public async Task<IReadOnlyList<ClusterModel>> GetAllAsync(
+        Guid rasGateId,
+        CancellationToken cancellationToken)
+    {
+        return await db.RasClusters
+            .AsNoTracking()
+            .Where(cluster => cluster.RasGateId == rasGateId)
+            .OrderBy(cluster => cluster.Name)
+            .ThenBy(cluster => cluster.ExternalId)
+            .Select(ModelProjection)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PageResult<ClusterSearchResultModel>> SearchPagedAsync(
+        SearchClustersRequest search,
+        PageRequest page,
+        CancellationToken cancellationToken)
+    {
+        var query = CreateSearchQuery(search);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var rows = await query
+            .ApplyPagination(page.Page, page.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PageResult<ClusterSearchResultModel>
+        {
+            Items = rows.Select(ToSearchResult).ToList(),
+            TotalCount = totalCount,
+            Page = page.Page,
+            PageSize = page.PageSize
+        };
+    }
+
+    public async Task<IReadOnlyList<ClusterSearchResultModel>> SearchAllAsync(
+        SearchClustersRequest search,
+        CancellationToken cancellationToken)
+    {
+        var rows = await CreateSearchQuery(search)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(ToSearchResult).ToList();
+    }
+
     public Task<ClusterModel?> GetByExternalIdAsync(
         Guid rasGateId,
         Guid clusterId,
@@ -75,4 +122,56 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             .Select(ModelProjection)
             .SingleOrDefaultAsync(cancellationToken);
     }
+
+    private static IQueryable<RasCluster> ApplySearch(
+        IQueryable<RasCluster> query,
+        SearchClustersRequest search)
+    {
+        if (search.RasGateId is { } rasGateId)
+            query = query.Where(cluster => cluster.RasGateId == rasGateId);
+
+        var term = search.Query.Trim().ToUpperInvariant();
+        var fields = search.Fields is { Length: > 0 }
+            ? search.Fields.ToHashSet()
+            : [ClusterSearchField.Name];
+        var searchName = fields.Contains(ClusterSearchField.Name);
+        var searchHost = fields.Contains(ClusterSearchField.Host);
+
+        return query.Where(cluster =>
+            (searchName && cluster.Name.ToUpper().Contains(term)) ||
+            (searchHost && cluster.Host.ToUpper().Contains(term)));
+    }
+
+    private IQueryable<ClusterSearchRow> CreateSearchQuery(
+        SearchClustersRequest search)
+    {
+        var clusters = ApplySearch(
+            db.RasClusters.AsNoTracking(),
+            search);
+
+        return from cluster in clusters
+               join rasGate in db.RasGates.AsNoTracking()
+                   on cluster.RasGateId equals rasGate.Id
+               orderby cluster.Name, rasGate.Id, cluster.ExternalId
+               select new ClusterSearchRow(
+                   rasGate.Id,
+                   rasGate.Name,
+                   cluster);
+    }
+
+    private static ClusterSearchResultModel ToSearchResult(
+        ClusterSearchRow row)
+    {
+        return new ClusterSearchResultModel
+        {
+            RasGateId = row.RasGateId,
+            RasGateName = row.RasGateName,
+            Cluster = ModelMapper(row.Cluster)
+        };
+    }
+
+    private sealed record ClusterSearchRow(
+        Guid RasGateId,
+        string RasGateName,
+        RasCluster Cluster);
 }

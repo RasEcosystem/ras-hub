@@ -5,11 +5,9 @@ using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Services;
 using RasHub.Contracts.Common;
-using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Domain;
-using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
 using RasHub.Web.Api.RasGates;
 using RasHub.Web.Authentication;
@@ -23,59 +21,19 @@ namespace RasHub.Web.Controllers.RasGates;
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("RasGates")]
 [ControllerDescription("RasGates",
-    "Manage registered gateways and inspect their synchronized status.")]
-public sealed class RasGatesController : ControllerBase
+    "Inspect and manage Hub-owned RasGate registrations and their observed status.")]
+public sealed class RasGateAdministrationController(
+    RasGateRegistry rasGateRegistry) : ControllerBase
 {
-    [HttpGet(Name = "ListRasGates")]
-    [EndpointSummary("List gateways")]
-    [EndpointDescription(
-        "Returns a paginated collection of registered gateways.")]
-    [ProducesResponseType<ApiResponse<PageResult<RasGateModel>>>(
-        StatusCodes.Status200OK)]
-    [ProducesApiErrors(StatusCodes.Status400BadRequest)]
-    public async Task<ApiResponse<PageResult<RasGateModel>>> List(
-        [FromQuery] PageRequest request,
-        [FromServices] RasGateQueries query,
-        CancellationToken cancellationToken)
-    {
-        var result = await query.GetPagedAsync(
-            request,
-            cancellationToken);
-
-        return ApiResponse<PageResult<RasGateModel>>.Ok(result);
-    }
-
-    [HttpGet("{rasGateId:guid}", Name = "GetRasGate")]
-    [EndpointSummary("Get gateway")]
-    [EndpointDescription(
-        "Returns the gateway connection details. The stored API key is never returned.")]
-    [ProducesResponseType<ApiResponse<RasGateModel>>(StatusCodes.Status200OK)]
-    [ProducesApiErrors(StatusCodes.Status404NotFound)]
-    public async Task<ApiResponse<RasGateModel>> Get(
-        Guid rasGateId,
-        [FromServices] RasGateQueries query,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await query.GetByIdAsync(
-            rasGateId,
-            cancellationToken);
-
-        if (rasGate is null)
-            return RasGateApiResponses.GateNotFound<RasGateModel>(rasGateId);
-
-        return ApiResponse<RasGateModel>.Ok(rasGate);
-    }
-
     [HttpPost(Name = "RegisterRasGate")]
     [Authorize(Policy = AppPolicies.ManageRasGates)]
     [EndpointSummary("Register gateway")]
     [EndpointDescription(
-        "Registers a gateway connection and returns its public details.")]
+        "Registers a RasGate connection in the Hub and returns its public details.")]
     [ProducesResponseType<ApiResponse<RasGateModel>>(StatusCodes.Status201Created)]
     [ProducesApiErrors(StatusCodes.Status400BadRequest)]
     public async Task<ApiResponse<RasGateModel>> Register(
         [FromBody] CreateRasGateRequest request,
-        [FromServices] RasGateRegistry rasGateRegistry,
         CancellationToken cancellationToken)
     {
         RasGate rasGate;
@@ -110,7 +68,7 @@ public sealed class RasGatesController : ControllerBase
     [Authorize(Policy = AppPolicies.ManageRasGates)]
     [EndpointSummary("Update gateway")]
     [EndpointDescription(
-        "Replaces the gateway connection and activity state. Endpoint changes require a new API key; otherwise an omitted API key is preserved.")]
+        "Replaces the registered connection and activity state. Endpoint changes require a new API key; otherwise an omitted API key is preserved.")]
     [ProducesResponseType<ApiResponse<RasGateModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,
@@ -119,7 +77,6 @@ public sealed class RasGatesController : ControllerBase
     public async Task<ApiResponse<RasGateModel>> Update(
         Guid rasGateId,
         [FromBody] UpdateRasGateRequest request,
-        [FromServices] RasGateRegistry rasGateRegistry,
         CancellationToken cancellationToken)
     {
         RasGate? rasGate;
@@ -158,14 +115,13 @@ public sealed class RasGatesController : ControllerBase
     [Authorize(Policy = AppPolicies.ManageRasGates)]
     [EndpointSummary("Unregister gateway")]
     [EndpointDescription(
-        "Removes the gateway from regular queries while retaining its stored record.")]
+        "Removes the RasGate registration from regular queries while retaining its stored record.")]
     [ProducesResponseType<ApiResponse<RasGateModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
     public async Task<ApiResponse<RasGateModel>> Unregister(
         Guid rasGateId,
-        [FromServices] RasGateRegistry rasGateRegistry,
         CancellationToken cancellationToken)
     {
         RasGate? rasGate;

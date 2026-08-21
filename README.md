@@ -44,27 +44,27 @@ In Development, authenticated API documentation is available at `/swagger`.
 
 ## Architecture
 
-RasHub keeps a local shadow of remote 1C:Enterprise infrastructure. Cached
-query endpoints read that database state. Explicit synchronization, hosted
-status monitoring, and remote mutations use the in-process background task
-engine.
+RasHub keeps a local shadow of remote 1C:Enterprise infrastructure. Shadow
+endpoints read that persisted state without contacting RasGate. Live reads,
+explicit shadow refresh, hosted status monitoring, and remote mutations use
+the in-process background task engine.
 
 ```text
 RasStudio / Blazor / API
           |
        RasHub.Web
        /       \
-cached query  sync / mutation / monitoring
-     |                    |
-query service    BackgroundTasks engine
-     |                    |
-  EF Core       Application task handler
-     |                /             \
-PostgreSQL     resource gateway   sync publisher
-                      |                 |
-                RasGate session      EF Core
-                      |                 |
-              RasGate -> RAC -> RAS  PostgreSQL
+shadow query  live / refresh / mutation / monitoring
+     |                         |
+query service         BackgroundTasks engine
+     |                         |
+  EF Core            Application task handler
+     |                     /             \
+PostgreSQL          resource gateway   shadow publisher
+                           |                 |
+                     RasGate session      EF Core
+                           |                 |
+                   RasGate -> RAC -> RAS  PostgreSQL
 ```
 
 - `RasHub.Domain` contains Hub-owned persisted entities.
@@ -81,13 +81,13 @@ PostgreSQL     resource gateway   sync publisher
 - `RasHub.Web` owns HTTP, Blazor, Identity, monitoring, and process composition.
 
 The current remote boundary supports aggregate RasGate/RAC status, cluster
-snapshot and administration operations, and cluster-scoped infobase
-snapshot/detail synchronization. Complete collection snapshots may remove
-missing cached rows; targeted synchronization updates only the requested
-resource. Every remote publication is guarded by the captured RasGate
-configuration revision. Hosted monitoring refreshes the aggregate RasGate/RAC
-status only; cluster and infobase synchronization is initiated through
-explicit API commands.
+snapshot and administration operations, and cluster-scoped infobase snapshot
+and detail reads. Complete collection snapshots may remove missing shadow
+rows; targeted live reads update only the requested resource. Every remote
+publication is guarded by the captured RasGate configuration revision. Hosted
+monitoring refreshes the aggregate RasGate/RAC status only; cluster and
+infobase shadow state is updated through live reads or explicit refresh
+commands.
 
 ## API
 
@@ -95,10 +95,15 @@ The versioned HTTP surface is under `/api/v1` and returns the shared
 `ApiResponse<T>` envelope. API controllers authenticate the user-owned
 `X-Api-Key`. RasGate configuration writes and remote cluster mutations also
 require the `ManageRasGates` policy, currently granted to administrators.
-Cached queries never contact RasGate; synchronization endpoints explicitly
-enqueue remote work and await its in-process handle.
+Shadow queries never contact RasGate. Live reads and explicit shadow refresh
+commands enqueue remote work, publish the validated result to the shadow, and
+await the in-process task handle before responding.
 
-The cached Gate status reports RasGate identity/version and RAC
+Global search for RasGate registrations, clusters, and infobases runs only
+against persisted state. Cluster and infobase search results include their
+parent context and can be narrowed by the corresponding parent identifiers.
+
+The shadow Gate status reports RasGate identity/version and RAC
 availability/version. Its state is `Unknown`, `Offline`, `Degraded`, or `Ready`;
 a reachable RasGate with unavailable or unobservable RAC is degraded rather
 than reported as fully ready.

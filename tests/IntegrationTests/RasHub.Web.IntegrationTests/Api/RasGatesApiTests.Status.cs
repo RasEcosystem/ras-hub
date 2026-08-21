@@ -17,13 +17,13 @@ namespace RasHub.Web.IntegrationTests.Api;
 public sealed partial class RasGatesApiTests
 {
     [Fact]
-    public async Task Get_status_without_observation_returns_unknown()
+    public async Task Get_shadow_status_without_observation_returns_unknown()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status",
+            $"{RasGatesPath}/{rasGate.Id}/status/shadow",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
@@ -37,7 +37,7 @@ public sealed partial class RasGatesApiTests
     }
 
     [Fact]
-    public async Task Get_status_with_stale_gate_observation_returns_offline()
+    public async Task Get_shadow_status_with_stale_gate_observation_returns_offline()
     {
         var staleObservedAt = DateTime.UtcNow.AddHours(-1);
         var recentlySeenAt = DateTime.UtcNow;
@@ -61,7 +61,7 @@ public sealed partial class RasGatesApiTests
 
         using var client = _factory.CreateAuthenticatedClient();
         using var response = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status",
+            $"{RasGatesPath}/{rasGate.Id}/status/shadow",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -75,7 +75,7 @@ public sealed partial class RasGatesApiTests
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]
-    public async Task Get_status_with_fresh_gate_and_unavailable_or_stale_RAC_returns_degraded(
+    public async Task Get_shadow_status_with_fresh_gate_and_unavailable_or_stale_RAC_returns_degraded(
         bool racAvailable,
         bool racObservationIsStale)
     {
@@ -102,7 +102,7 @@ public sealed partial class RasGatesApiTests
 
         using var client = _factory.CreateAuthenticatedClient();
         using var response = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status",
+            $"{RasGatesPath}/{rasGate.Id}/status/shadow",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
@@ -116,7 +116,7 @@ public sealed partial class RasGatesApiTests
     }
 
     [Fact]
-    public async Task Get_status_returns_cached_status()
+    public async Task Get_shadow_status_returns_persisted_status_without_live_request()
     {
         var observedAt = DateTime.UtcNow;
         var rasGate = await _factory.SeedRasGateAsync(
@@ -140,7 +140,7 @@ public sealed partial class RasGatesApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status",
+            $"{RasGatesPath}/{rasGate.Id}/status/shadow",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
@@ -161,7 +161,7 @@ public sealed partial class RasGatesApiTests
     }
 
     [Fact]
-    public async Task Synchronize_status_calls_gate_persists_and_returns_status()
+    public async Task Get_live_status_calls_gate_persists_and_returns_updated_shadow()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         _factory.RasGateBoundary.Status =
@@ -173,7 +173,7 @@ public sealed partial class RasGatesApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
+            $"{RasGatesPath}/{rasGate.Id}/status/live",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -206,11 +206,11 @@ public sealed partial class RasGatesApiTests
         Assert.Equal(stored.StatusObservedAt, stored.LastSeenAt);
         Assert.Equal(stored.StatusObservedAt, stored.RacStatusObservedAt);
 
-        using var cachedResponse = await client.GetAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status",
+        using var shadowResponse = await client.GetAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/shadow",
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(HttpStatusCode.OK, cachedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, shadowResponse.StatusCode);
         Assert.Equal(1, _factory.RasGateBoundary.StatusRequestCount);
     }
 
@@ -222,8 +222,8 @@ public sealed partial class RasGatesApiTests
             new RasGateStatus("Old remote Gate", "1.0.0");
         _factory.RasGateBoundary.PauseStatusRequests();
         using var client = _factory.CreateAuthenticatedClient();
-        var synchronizationTask = client.PostAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
+        var liveRequestTask = client.PostAsync(
+            $"{RasGatesPath}/{rasGate.Id}/status/live",
             null,
             TestContext.Current.CancellationToken);
 
@@ -248,10 +248,10 @@ public sealed partial class RasGatesApiTests
             _factory.RasGateBoundary.ReleaseStatusRequests();
         }
 
-        using var synchronizationResponse = await synchronizationTask;
-        var json = await ReadJsonAsync(synchronizationResponse);
+        using var liveResponse = await liveRequestTask;
+        var json = await ReadJsonAsync(liveResponse);
 
-        Assert.Equal(HttpStatusCode.Conflict, synchronizationResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, liveResponse.StatusCode);
         Assert.Equal("ras_gate_configuration_changed", GetErrorCode(json));
 
         var stored = await _factory.FindRasGateAsync(rasGate.Id);
@@ -267,12 +267,12 @@ public sealed partial class RasGatesApiTests
     }
 
     [Fact]
-    public async Task Synchronize_status_for_unknown_gate_returns_not_found_without_scheduling()
+    public async Task Get_live_status_for_unknown_gate_returns_not_found_without_scheduling()
     {
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"{RasGatesPath}/{Guid.NewGuid()}/status/synchronize",
+            $"{RasGatesPath}/{Guid.NewGuid()}/status/live",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -283,7 +283,7 @@ public sealed partial class RasGatesApiTests
     }
 
     [Fact]
-    public async Task Synchronize_status_when_task_loses_gate_returns_not_found()
+    public async Task Get_live_status_when_task_loses_gate_returns_not_found()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         _factory.RasGateBoundary.StatusException =
@@ -291,7 +291,7 @@ public sealed partial class RasGatesApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"{RasGatesPath}/{rasGate.Id}/status/synchronize",
+            $"{RasGatesPath}/{rasGate.Id}/status/live",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -323,14 +323,14 @@ public sealed partial class RasGatesApiTests
     [InlineData(false)]
     [InlineData(true)]
     public async Task Status_endpoints_for_inactive_gate_return_conflict_without_calling_gate(
-        bool synchronize)
+        bool live)
     {
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
         using var client = _factory.CreateAuthenticatedClient();
-        var path = $"{RasGatesPath}/{rasGate.Id}/status" +
-                   (synchronize ? "/synchronize" : string.Empty);
+        var path = $"{RasGatesPath}/{rasGate.Id}/status/" +
+                   (live ? "live" : "shadow");
         using var request = new HttpRequestMessage(
-            synchronize ? HttpMethod.Post : HttpMethod.Get,
+            live ? HttpMethod.Post : HttpMethod.Get,
             path);
 
         using var response = await client.SendAsync(

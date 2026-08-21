@@ -25,7 +25,7 @@ namespace RasHub.Web.Controllers.RasClusters;
     Policy = AppPolicies.ManageRasGates)]
 [Tags("Clusters")]
 [ControllerDescription("Clusters",
-    "Inspect, synchronize, and manage 1C:Enterprise clusters through a registered gateway.")]
+    "Manage 1C:Enterprise clusters, inspect their persisted shadow, and refresh it from live RasGate data.")]
 public sealed class RasGateClusterAdministrationController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries,
@@ -34,7 +34,7 @@ public sealed class RasGateClusterAdministrationController(
     [HttpPost(Name = "CreateCluster")]
     [EndpointSummary("Create cluster")]
     [EndpointDescription(
-        "Creates a cluster through RAC, reads its authoritative state, and publishes that state to the local cache. Agent credentials are used only for this request.")]
+        "Creates a cluster through RAC, reads its authoritative state, and publishes that state to the persisted shadow. Agent credentials are used only for this request.")]
     [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status201Created)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,
@@ -80,7 +80,7 @@ public sealed class RasGateClusterAdministrationController(
             return RasGateApiResponses.ClusterCreationNotConfirmed();
 
         var location = Url.Link(
-            "GetCluster",
+            "GetShadowCluster",
             new { rasGateId, clusterId });
 
         if (location is not null)
@@ -92,7 +92,7 @@ public sealed class RasGateClusterAdministrationController(
     [HttpPatch("{clusterId:guid}", Name = "UpdateCluster")]
     [EndpointSummary("Update cluster")]
     [EndpointDescription(
-        "Updates cluster settings through RAC, reads the authoritative state, and publishes that state to the local cache. Agent credentials are used only for this request.")]
+        "Updates cluster settings through RAC, reads its authoritative state, and publishes that state to the persisted shadow. Agent credentials are used only for this request.")]
     [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,

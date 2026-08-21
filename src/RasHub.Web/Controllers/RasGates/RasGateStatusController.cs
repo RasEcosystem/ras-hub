@@ -18,23 +18,23 @@ namespace RasHub.Web.Controllers.RasGates;
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("RasGates")]
 [ControllerDescription("RasGates",
-    "Manage registered gateways and inspect their synchronized status.")]
+    "Inspect and manage Hub-owned RasGate registrations and their observed status.")]
 public sealed class RasGateStatusController(
     RasGateQueries queries,
     InteractiveTaskRunner taskRunner,
     TimeProvider timeProvider,
     IOptions<RasGateMonitoringOptions> monitoringOptions) : ControllerBase
 {
-    [HttpGet(Name = "GetRasGateStatus")]
-    [EndpointSummary("Get status")]
+    [HttpGet("shadow", Name = "GetShadowRasGateStatus")]
+    [EndpointSummary("Get gateway status shadow")]
     [EndpointDescription(
-        "Returns the last observed RasGate and RAC status without contacting the gateway.")]
+        "Returns the last persisted RasGate and RAC status observation without contacting the gateway.")]
     [ProducesResponseType<ApiResponse<RasGateStatusResponse>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<RasGateStatusResponse>> Get(
+    public async Task<ApiResponse<RasGateStatusResponse>> GetShadow(
         Guid rasGateId,
         CancellationToken cancellationToken)
     {
@@ -53,10 +53,10 @@ public sealed class RasGateStatusController(
                         rasGateId);
     }
 
-    [HttpPost("synchronize", Name = "SynchronizeRasGateStatus")]
-    [EndpointSummary("Synchronize status")]
+    [HttpPost("live", Name = "GetLiveRasGateStatus")]
+    [EndpointSummary("Get live gateway status")]
     [EndpointDescription(
-        "Observes RasGate and RAC, persists their aggregate status, and returns it.")]
+        "Observes RasGate and RAC, atomically refreshes their persisted status shadow, and returns the updated shadow.")]
     [ProducesResponseType<ApiResponse<RasGateStatusResponse>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -65,7 +65,7 @@ public sealed class RasGateStatusController(
         StatusCodes.Status502BadGateway,
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
-    public async Task<ApiResponse<RasGateStatusResponse>> Synchronize(
+    public async Task<ApiResponse<RasGateStatusResponse>> GetLive(
         Guid rasGateId,
         CancellationToken cancellationToken)
     {
@@ -90,12 +90,12 @@ public sealed class RasGateStatusController(
             cancellationToken);
 
         if (execution.WasRejected)
-            return RasGateApiResponses.StatusSynchronizationRejected();
+            return RasGateApiResponses.StatusLiveRefreshRejected();
 
         var taskResult = execution.Result!;
 
         if (!taskResult.IsSucceeded)
-            return RasGateApiResponses.StatusSynchronizationFailed(
+            return RasGateApiResponses.StatusLiveRefreshFailed(
                 taskResult);
 
         var refreshed = await queries.GetStatusAsync(

@@ -16,22 +16,22 @@ namespace RasHub.Web.Controllers.RasClusters;
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("Clusters")]
 [ControllerDescription("Clusters",
-    "Inspect, synchronize, and manage 1C:Enterprise clusters through a registered gateway.")]
-public sealed class RasGateClustersController(
+    "Manage 1C:Enterprise clusters, inspect their persisted shadow, and refresh it from live RasGate data.")]
+public sealed class RasGateClusterShadowController(
     ActiveRasGateLookup rasGateLookup,
     RasClusterQueries clusterQueries) : ControllerBase
 {
-    [HttpGet(Name = "ListClusters")]
-    [EndpointSummary("List clusters")]
+    [HttpGet("shadow", Name = "GetShadowPagedClusters")]
+    [EndpointSummary("Get paged cluster shadow")]
     [EndpointDescription(
-        "Returns cached clusters without contacting the gateway.")]
+        "Returns one page from the persisted cluster shadow without contacting RasGate.")]
     [ProducesResponseType<ApiResponse<PageResult<ClusterModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,
         StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<PageResult<ClusterModel>>> List(
+    public async Task<ApiResponse<PageResult<ClusterModel>>> GetShadowPaged(
         Guid rasGateId,
         [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
@@ -54,15 +54,45 @@ public sealed class RasGateClustersController(
         return ApiResponse<PageResult<ClusterModel>>.Ok(result);
     }
 
-    [HttpGet("{clusterId:guid}", Name = "GetCluster")]
-    [EndpointSummary("Get cluster")]
+    [HttpGet("shadow/all", Name = "GetShadowAllClusters")]
+    [EndpointSummary("Get all cluster shadow entries")]
     [EndpointDescription(
-        "Returns a cached cluster without contacting the gateway.")]
+        "Returns the complete persisted cluster shadow without pagination and without contacting RasGate.")]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<ClusterModel>>>(
+        StatusCodes.Status200OK)]
+    [ProducesApiErrors(
+        StatusCodes.Status404NotFound,
+        StatusCodes.Status409Conflict)]
+    public async Task<ApiResponse<IReadOnlyList<ClusterModel>>> GetShadowAll(
+        Guid rasGateId,
+        CancellationToken cancellationToken)
+    {
+        var state = await rasGateLookup.GetStateAsync(
+            rasGateId,
+            cancellationToken);
+
+        if (state != ActiveRasGateState.Active)
+            return RasGateApiResponses
+                .ForUnavailableGate<IReadOnlyList<ClusterModel>>(
+                    state,
+                    rasGateId);
+
+        var result = await clusterQueries.GetAllAsync(
+            rasGateId,
+            cancellationToken);
+
+        return ApiResponse<IReadOnlyList<ClusterModel>>.Ok(result);
+    }
+
+    [HttpGet("shadow/{clusterId:guid}", Name = "GetShadowCluster")]
+    [EndpointSummary("Get cluster shadow entry")]
+    [EndpointDescription(
+        "Returns one cluster from the persisted shadow without contacting RasGate.")]
     [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status404NotFound,
         StatusCodes.Status409Conflict)]
-    public async Task<ApiResponse<ClusterModel>> Get(
+    public async Task<ApiResponse<ClusterModel>> GetShadowOne(
         Guid rasGateId,
         Guid clusterId,
         CancellationToken cancellationToken)
