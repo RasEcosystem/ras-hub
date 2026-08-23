@@ -24,7 +24,7 @@ public sealed class RasHubController : ControllerBase
     {
         return ApiResponse<RasHubInfoResponse>.Ok(new RasHubInfoResponse
         {
-            Version = ThisAssembly.AssemblyInformationalVersion
+            Version = RasHubVersion.Informational
         });
     }
 }

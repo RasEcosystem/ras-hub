@@ -1,5 +1,4 @@
 using System.Net;
-using System.Reflection;
 using System.Text.Json;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Models.Search;
@@ -45,17 +44,13 @@ public sealed class ApiDocumentationAuthenticationTests
             TestContext.Current.CancellationToken);
         var html = await response.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
-        var webAssemblyFileVersion = typeof(Program).Assembly
-            .GetCustomAttribute<AssemblyFileVersionAttribute>()!
-            .Version;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("documentation-login", html);
         Assert.Contains("brand-orbit", html);
         Assert.Contains("RasHub", html);
         Assert.Contains("Development Environment", html);
-        Assert.Contains($"v{webAssemblyFileVersion}", html);
-        Assert.DoesNotContain("v@ThisAssembly.AssemblyFileVersion", html);
+        Assert.Contains($"v{ThisAssembly.NuGetPackageVersion}", html);
         Assert.Contains("type=\"password\"", html);
         Assert.Contains("Log in with a passkey", html);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString());

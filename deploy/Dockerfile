@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 
+ARG RASHUB_PUBLIC_RELEASE=false
+
 WORKDIR /src
 
 COPY Directory.Build.props version.json RasHub.sln ./
@@ -19,6 +21,7 @@ RUN dotnet publish src/RasHub.Web/RasHub.Web.csproj \
     --no-restore \
     --output /app/publish \
     -m:1 \
+    -p:PublicRelease=${RASHUB_PUBLIC_RELEASE} \
     -p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
@@ -26,6 +29,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
 COPY --from=build --chown=app:app /app/publish .
+COPY --chown=app:app LICENSE /licenses/LICENSE
 
 RUN mkdir -p /home/app/.aspnet/DataProtection-Keys
 RUN chown -R app:app /home/app/.aspnet

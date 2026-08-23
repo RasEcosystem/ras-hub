@@ -24,13 +24,19 @@ set `SEQ_DEV_PUBLIC_URL` to the browser-accessible Seq URL.
 
 ## Production
 
-Create the ignored environment file and replace every placeholder:
+From a source checkout, create the ignored environment file, replace every
+placeholder, and build the image locally:
 
 ```bash
 cp deploy/environments/.env.production.example \
    deploy/environments/.env.production
 make -C deploy prod-up
 ```
+
+The source deployment combines `compose.production.yaml` with
+`compose.production.build.yaml`. Published GitHub releases contain only the
+image-based production Compose file and pin `RASHUB_IMAGE` to the released GHCR
+tag, so the target host never builds application source.
 
 The one-shot `migrate` container updates both databases before the API starts.
 The API and Seq bind to localhost by default for publication through a TLS
@@ -113,6 +119,12 @@ make -C deploy prod-down
 Pushes to `dev` run formatting, a warning-free Release build, and all tests,
 then publish and deploy the immutable `dev-<commit-sha>` image. Production is
 manual; pushes to `main` do not deploy it.
+
+Tags matching the semantic version committed in `version.json` run the release
+workflow. The tagged commit must be contained in `main`. The workflow publishes
+a Linux AMD64 image, an SBOM and provenance attestations in GHCR, a deployment
+archive, checksums, and a GitHub release. Versions containing a prerelease
+suffix are marked as prereleases and do not update `latest`.
 
 The self-hosted runner uses a root-owned deployment helper. Install or update
 it after changing `deploy/scripts/rashub-dev-deploy`:

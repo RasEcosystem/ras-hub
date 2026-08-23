@@ -1,9 +1,13 @@
+[English](README.md) | [Русский](README.ru.md)
+
 # RasHub
 
-RasHub is the central .NET backend for
-[RasStudio](https://github.com/RasEcosystem/ras-studio) and
-[RasGate](https://github.com/RasEcosystem/ras-gate). Shared API models live in the
-[`RasHub.Contracts`](src/RasHub.Contracts) submodule.
+RasHub is the central management service for
+[RasStudio Mono](https://github.com/RasEcosystem/ras-studio-mono). It exposes the
+versioned management API, persists the infrastructure shadow state, and
+coordinates one or more [RasGate](https://github.com/RasEcosystem/ras-gate)
+instances that execute RAC operations through RAS. Shared API models live in
+the [`RasHub.Contracts`](src/RasHub.Contracts) submodule.
 
 ## Requirements
 
@@ -15,14 +19,14 @@ RasHub is the central .NET backend for
 
 ```bash
 git submodule update --init --recursive
-make release
+make build
 make test
 ```
 
 Useful commands:
 
 ```bash
-make publish            # self-contained linux-x64 build
+make release            # verify and create the deployment bundle
 make submodules-update  # update submodule revisions
 make help               # all root commands
 ```
@@ -42,6 +46,30 @@ production setup and migrations.
 
 In Development, authenticated API documentation is available at `/swagger`.
 
+## Releases
+
+RasHub is released as a Linux AMD64 container. A release tag matching the
+version committed in `version.json` runs formatting, a warning-free Release
+build, all tests, deployment packaging, and the Docker build. It publishes the
+versioned image to `ghcr.io/rasecosystem/ras-hub` and creates a GitHub release
+with the deployment bundle and `SHA256SUMS`.
+
+Run the same verification and packaging locally before tagging:
+
+```bash
+make release
+```
+
+Release tags use the exact semantic version with a `v` prefix, for example
+`v0.1.0-beta.1`, and must point to a commit contained in `main`. Prerelease
+images never update `latest`. The release bundle pins its image version and
+contains production Compose, an environment template, deployment instructions,
+and the license; it never contains secrets.
+
+The Web interface reports the package version generated from `version.json`.
+The authenticated `GET /api/v1/info` endpoint returns the full informational
+version, including the build identity, for diagnostics.
+
 ## Architecture
 
 RasHub keeps a local shadow of remote 1C:Enterprise infrastructure. Shadow
@@ -50,7 +78,7 @@ explicit shadow refresh, hosted status monitoring, and remote mutations use
 the in-process background task engine.
 
 ```text
-RasStudio / Blazor / API
+RasStudio Mono / Blazor / API
           |
        RasHub.Web
        /       \
@@ -111,6 +139,21 @@ than reported as fully ready.
 ## Internals
 
 - [Code map and execution flows](docs/code-map.md)
+- [Release process](docs/releasing.md)
 - [Background task engine](src/RasHub.BackgroundTasks/README.md)
 - [Test suites](tests/README.md)
 - [RAC compatibility boundary](docs/rac-compatibility.md)
+
+## Related projects
+
+RasHub is part of the [Ras Ecosystem](https://github.com/RasEcosystem):
+
+- [RasGate](https://github.com/RasEcosystem/ras-gate) — a lightweight service
+  that exposes controlled RAC execution to RasHub over HTTP;
+- [RasStudio Mono](https://github.com/RasEcosystem/ras-studio-mono) — an
+  experimental monolithic web client for administering 1C:Enterprise
+  infrastructure through RasHub.
+
+## License
+
+RasHub is licensed under the [MIT License](LICENSE).

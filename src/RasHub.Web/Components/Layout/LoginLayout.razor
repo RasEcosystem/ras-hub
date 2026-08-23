@@ -26,7 +26,7 @@
 
                 <MudText Typo="Typo.overline"
                          Color="Color.Primary">
-                    @SolutionVersion
+                    @RasHubVersion.Display
                 </MudText>
 
             </MudStack>
@@ -58,7 +58,3 @@
     </span>
 
 </div>
-
-@code {
-    private const string SolutionVersion = ThisAssembly.AssemblyFileVersion;
-}

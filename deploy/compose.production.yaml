@@ -46,9 +46,6 @@ services:
 
   migrate:
     image: ${RASHUB_IMAGE:-rashub:latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     init: true
     command:
       - --mode=migrate
@@ -73,9 +70,6 @@ services:
 
   rashub:
     image: ${RASHUB_IMAGE:-rashub:latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     init: true
     environment:
       ASPNETCORE_ENVIRONMENT: Production

@@ -1,0 +1,10 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+
+  rashub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
