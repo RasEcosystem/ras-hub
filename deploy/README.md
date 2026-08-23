@@ -113,3 +113,12 @@ make -C deploy prod-down
 Pushes to `dev` run formatting, a warning-free Release build, and all tests,
 then publish and deploy the immutable `dev-<commit-sha>` image. Production is
 manual; pushes to `main` do not deploy it.
+
+The self-hosted runner uses a root-owned deployment helper. Install or update
+it after changing `deploy/scripts/rashub-dev-deploy`:
+
+```bash
+sudo install -o root -g root -m 0755 \
+  deploy/scripts/rashub-dev-deploy \
+  /usr/local/sbin/rashub-dev-deploy
+```

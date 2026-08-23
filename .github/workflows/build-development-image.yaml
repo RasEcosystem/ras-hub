@@ -12,7 +12,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: rasecosystem/ras-hub
 
 jobs:
   verify:
@@ -113,5 +113,5 @@ jobs:
         run: |
           printf '%s' "$GHCR_TOKEN" |
             sudo /usr/local/sbin/rashub-dev-deploy \
-              "ghcr.io/${{ github.repository }}:dev-$REVISION" \
-              "${{ github.repository_owner }}"
+              "$REGISTRY/$IMAGE_NAME:dev-$REVISION" \
+              "${{ github.actor }}"

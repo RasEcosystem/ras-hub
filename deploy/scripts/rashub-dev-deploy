@@ -4,7 +4,7 @@ set -eu
 
 compose_file=/opt/rashub-dev/compose.development.yaml
 environment_file=/opt/rashub-dev/.env.development
-image_prefix=ghcr.io/zmaxb/ras-hub:dev-
+image_prefix=ghcr.io/rasecosystem/ras-hub:dev-
 
 image=${1:-}
 registry_user=${2:-}

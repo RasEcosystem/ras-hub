@@ -1,8 +1,8 @@
 # RasHub
 
 RasHub is the central .NET backend for
-[RasStudio](https://github.com/zmaxb/ras-studio) and
-[RasGate](https://github.com/zmaxb/ras-gate). Shared API models live in the
+[RasStudio](https://github.com/RasEcosystem/ras-studio) and
+[RasGate](https://github.com/RasEcosystem/ras-gate). Shared API models live in the
 [`RasHub.Contracts`](src/RasHub.Contracts) submodule.
 
 ## Requirements
