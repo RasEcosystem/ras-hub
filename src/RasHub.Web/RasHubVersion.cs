@@ -4,7 +4,8 @@ internal static class RasHubVersion
 {
     public const string Informational = ThisAssembly.AssemblyInformationalVersion;
 
-    public const string Display = ThisAssembly.NuGetPackageVersion;
+    public static string Display { get; } = GetDisplayVersion(
+        ThisAssembly.NuGetPackageVersion);
 
     public static string? PrereleaseLabel { get; } = GetPrereleaseLabel(Display);
 
@@ -24,5 +25,27 @@ internal static class RasHubVersion
             : version[labelStart..labelEnd];
 
         return label.ToUpperInvariant();
+    }
+
+    private static string GetDisplayVersion(string version)
+    {
+        var gitSuffixIndex = version.LastIndexOf(".g", StringComparison.Ordinal);
+
+        if (gitSuffixIndex < 0 || gitSuffixIndex == version.Length - 2)
+        {
+            return version;
+        }
+
+        var gitRevision = version.AsSpan(gitSuffixIndex + 2);
+
+        foreach (var character in gitRevision)
+        {
+            if (!Uri.IsHexDigit(character))
+            {
+                return version;
+            }
+        }
+
+        return version[..gitSuffixIndex];
     }
 }

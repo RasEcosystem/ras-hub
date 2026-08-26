@@ -50,7 +50,14 @@ public sealed class ApiDocumentationAuthenticationTests
         Assert.Contains("brand-orbit", html);
         Assert.Contains("RasHub", html);
         Assert.Contains("Development Environment", html);
-        Assert.Contains($"v{ThisAssembly.NuGetPackageVersion}", html);
+        var gitVersionSuffix = $".g{ThisAssembly.GitCommitId[..10]}";
+        var displayVersion = ThisAssembly.NuGetPackageVersion.EndsWith(
+            gitVersionSuffix,
+            StringComparison.Ordinal)
+            ? ThisAssembly.NuGetPackageVersion[..^gitVersionSuffix.Length]
+            : ThisAssembly.NuGetPackageVersion;
+        Assert.Contains($"v{displayVersion}", html);
+        Assert.DoesNotContain($"v{displayVersion}{gitVersionSuffix}", html);
         Assert.Contains("type=\"password\"", html);
         Assert.Contains("Log in with a passkey", html);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
