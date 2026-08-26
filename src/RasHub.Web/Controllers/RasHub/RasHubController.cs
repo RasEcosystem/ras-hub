@@ -22,9 +22,6 @@ public sealed class RasHubController : ControllerBase
     [ProducesResponseType<ApiResponse<RasHubInfoResponse>>(StatusCodes.Status200OK)]
     public ApiResponse<RasHubInfoResponse> GetInfo()
     {
-        return ApiResponse<RasHubInfoResponse>.Ok(new RasHubInfoResponse
-        {
-            Version = RasHubVersion.Informational
-        });
+        return ApiResponse<RasHubInfoResponse>.Ok(new RasHubInfoResponse { Version = RasHubVersion.Informational });
     }
 }

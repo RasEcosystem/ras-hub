@@ -13,10 +13,7 @@ internal static class RasHubVersion
     {
         var prereleaseIndex = version.IndexOf('-', StringComparison.Ordinal);
 
-        if (prereleaseIndex < 0 || prereleaseIndex == version.Length - 1)
-        {
-            return null;
-        }
+        if (prereleaseIndex < 0 || prereleaseIndex == version.Length - 1) return null;
 
         var labelStart = prereleaseIndex + 1;
         var labelEnd = version.IndexOf('.', labelStart);
@@ -31,20 +28,13 @@ internal static class RasHubVersion
     {
         var gitSuffixIndex = version.LastIndexOf(".g", StringComparison.Ordinal);
 
-        if (gitSuffixIndex < 0 || gitSuffixIndex == version.Length - 2)
-        {
-            return version;
-        }
+        if (gitSuffixIndex < 0 || gitSuffixIndex == version.Length - 2) return version;
 
         var gitRevision = version.AsSpan(gitSuffixIndex + 2);
 
         foreach (var character in gitRevision)
-        {
             if (!Uri.IsHexDigit(character))
-            {
                 return version;
-            }
-        }
 
         return version[..gitSuffixIndex];
     }

@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using RasHub.Contracts.RasHub.Requests;
 using RasHub.Contracts.RasHub.Requests.Infobases;
 
 namespace RasHub.Contracts.UnitTests.RasHub.Requests.Infobases;
@@ -9,10 +8,7 @@ public sealed class InfobaseCredentialsRequestTests
     [Fact]
     public void Validate_password_without_user_rejects_request()
     {
-        var results = Validate(new InfobaseCredentialsRequest
-        {
-            ClusterPassword = "cluster-secret"
-        });
+        var results = Validate(new InfobaseCredentialsRequest { ClusterPassword = "cluster-secret" });
 
         Assert.Contains(
             nameof(InfobaseCredentialsRequest.ClusterUser),

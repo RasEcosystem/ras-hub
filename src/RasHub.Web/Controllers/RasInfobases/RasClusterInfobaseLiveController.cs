@@ -6,7 +6,6 @@ using RasHub.Application.RasGates.Tasks.Infobases;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Models;
-using RasHub.Contracts.RasHub.Requests;
 using RasHub.Contracts.RasHub.Requests.Infobases;
 using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Database.Queries;
@@ -284,11 +283,7 @@ public sealed class RasClusterInfobaseLiveController(
         var result = execution.Value!;
 
         return ApiResponse<ShadowRefreshResponse>.Ok(
-            new ShadowRefreshResponse
-            {
-                TotalCount = result.TotalCount,
-                ObservedAt = result.ObservedAt
-            });
+            new ShadowRefreshResponse { TotalCount = result.TotalCount, ObservedAt = result.ObservedAt });
     }
 
     private Task<InteractiveTaskExecution<CollectionSynchronizationResult>>

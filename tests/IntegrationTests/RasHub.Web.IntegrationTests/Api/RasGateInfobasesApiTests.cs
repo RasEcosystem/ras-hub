@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
-using RasHub.Contracts.RasHub.Requests;
 using RasHub.Contracts.RasHub.Requests.Infobases;
 using RasHub.Web.IntegrationTests.Infrastructure;
 using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
@@ -72,11 +71,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         using var response = await client.PostAsJsonAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/live/all",
-            new InfobaseCredentialsRequest
-            {
-                ClusterUser = "cluster-admin",
-                ClusterPassword = "cluster-secret"
-            },
+            new InfobaseCredentialsRequest { ClusterUser = "cluster-admin", ClusterPassword = "cluster-secret" },
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data").EnumerateArray().ToArray();
@@ -171,11 +166,7 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
 
         using var response = await client.PostAsJsonAsync(
             $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/live?page=2&pageSize=2",
-            new InfobaseCredentialsRequest
-            {
-                ClusterUser = "cluster-admin",
-                ClusterPassword = "cluster-secret"
-            },
+            new InfobaseCredentialsRequest { ClusterUser = "cluster-admin", ClusterPassword = "cluster-secret" },
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");

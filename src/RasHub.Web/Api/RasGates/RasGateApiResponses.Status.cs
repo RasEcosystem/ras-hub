@@ -2,7 +2,6 @@ using System.Net;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Contracts.Common;
-using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Responses;
 
 namespace RasHub.Web.Api.RasGates;

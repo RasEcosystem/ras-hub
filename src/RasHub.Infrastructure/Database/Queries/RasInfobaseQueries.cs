@@ -19,6 +19,7 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
             Description = infobase.Description,
             ObservedAt = infobase.ObservedAt
         };
+
     private static readonly Func<RasInfobase, InfobaseModel> ModelMapper =
         ModelProjection.Compile();
 
@@ -132,10 +133,10 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
                       rasGate.Id == search.RasGateId) &&
                      (search.ClusterId == null ||
                       cluster.ExternalId == search.ClusterId) &&
-                     (searchName &&
-                          infobase.Name.ToUpper().Contains(term) ||
-                      searchDescription &&
-                          infobase.Description.ToUpper().Contains(term))
+                     ((searchName &&
+                       infobase.Name.ToUpper().Contains(term)) ||
+                      (searchDescription &&
+                       infobase.Description.ToUpper().Contains(term)))
                orderby infobase.Name,
                    rasGate.Id,
                    cluster.ExternalId,

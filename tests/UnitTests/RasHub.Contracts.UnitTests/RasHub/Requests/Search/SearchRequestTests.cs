@@ -18,11 +18,7 @@ public sealed class SearchRequestTests
     [Fact]
     public void Validate_empty_gate_filter_rejects_request()
     {
-        var results = Validate(new SearchClustersRequest
-        {
-            Query = "cluster",
-            RasGateId = Guid.Empty
-        });
+        var results = Validate(new SearchClustersRequest { Query = "cluster", RasGateId = Guid.Empty });
 
         Assert.Contains(
             nameof(SearchClustersRequest.RasGateId),
@@ -32,11 +28,7 @@ public sealed class SearchRequestTests
     [Fact]
     public void Validate_cluster_filter_without_gate_filter_rejects_request()
     {
-        var results = Validate(new SearchInfobasesRequest
-        {
-            Query = "infobase",
-            ClusterId = Guid.NewGuid()
-        });
+        var results = Validate(new SearchInfobasesRequest { Query = "infobase", ClusterId = Guid.NewGuid() });
 
         Assert.Contains(
             nameof(SearchInfobasesRequest.RasGateId),
@@ -46,11 +38,7 @@ public sealed class SearchRequestTests
     [Fact]
     public void Validate_undefined_search_field_rejects_request()
     {
-        var results = Validate(new SearchInfobasesRequest
-        {
-            Query = "infobase",
-            Fields = [(InfobaseSearchField)999]
-        });
+        var results = Validate(new SearchInfobasesRequest { Query = "infobase", Fields = [(InfobaseSearchField)999] });
 
         Assert.Contains(
             nameof(SearchInfobasesRequest.Fields),

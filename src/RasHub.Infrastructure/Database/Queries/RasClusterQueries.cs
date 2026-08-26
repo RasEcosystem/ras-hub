@@ -39,6 +39,7 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             RestartSchedule = cluster.RestartSchedule,
             ObservedAt = cluster.ObservedAt
         };
+
     private static readonly Func<RasCluster, ClusterModel> ModelMapper =
         ModelProjection.Compile();
 

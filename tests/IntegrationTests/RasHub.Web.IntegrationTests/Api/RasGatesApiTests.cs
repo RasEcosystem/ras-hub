@@ -497,10 +497,10 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
     {
         var expected = await _factory.SeedRasGateAsync(
             "Gateway",
-            url: "https://target.example.test");
+            "https://target.example.test");
         await _factory.SeedRasGateAsync(
             "Target in name only",
-            url: "https://other.example.test");
+            "https://other.example.test");
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(
@@ -519,13 +519,13 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
     {
         await _factory.SeedRasGateAsync(
             "100% Production",
-            url: "https://first.example.test");
+            "https://first.example.test");
         await _factory.SeedRasGateAsync(
             "Other",
-            url: "https://100%-gateway.example.test");
+            "https://100%-gateway.example.test");
         await _factory.SeedRasGateAsync(
             "Wildcard decoy",
-            url: "https://unrelated.example.test");
+            "https://unrelated.example.test");
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync(

@@ -222,8 +222,22 @@ public sealed class ApiDocumentationAuthenticationTests
         AssertOperation(root, "/api/v1/ras-gates", "get", "GetPagedRasGates", "RasGates", "200", "400", "401");
         AssertOperation(root, "/api/v1/ras-gates/all", "get", "GetAllRasGates", "RasGates", "200", "401");
         AssertResponseDataIsArray(root, "/api/v1/ras-gates/all", "get", "200");
-        AssertOperation(root, "/api/v1/ras-gates/search", "get", "SearchPagedRasGates", "RasGates", "200", "400", "401");
-        AssertOperation(root, "/api/v1/ras-gates/search/all", "get", "SearchAllRasGates", "RasGates", "200", "400", "401");
+        AssertOperation(root,
+            "/api/v1/ras-gates/search",
+            "get",
+            "SearchPagedRasGates",
+            "RasGates",
+            "200",
+            "400",
+            "401");
+        AssertOperation(root,
+            "/api/v1/ras-gates/search/all",
+            "get",
+            "SearchAllRasGates",
+            "RasGates",
+            "200",
+            "400",
+            "401");
         AssertResponseDataIsArray(root, "/api/v1/ras-gates/search/all", "get", "200");
         AssertOperation(root, "/api/v1/ras-gates", "post", "RegisterRasGate", "RasGates", "201", "400", "401", "403");
         AssertOperation(root, "/api/v1/ras-gates/{rasGateId}", "get", "GetRasGate", "RasGates", "200", "401", "404");

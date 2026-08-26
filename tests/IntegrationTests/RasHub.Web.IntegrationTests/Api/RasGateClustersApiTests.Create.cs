@@ -1,15 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Contracts.RasHub.Requests;
-using RasHub.Domain.Enums;
-using RasHub.Web.IntegrationTests.Infrastructure;
 using static RasHub.Web.IntegrationTests.Api.ApiResponseTestHelpers;
 
 namespace RasHub.Web.IntegrationTests.Api;
-
 
 public sealed partial class RasGateClustersApiTests
 {

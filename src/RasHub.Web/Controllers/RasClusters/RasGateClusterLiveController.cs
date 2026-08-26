@@ -221,11 +221,7 @@ public sealed class RasGateClusterLiveController(
         var result = execution.Value!;
 
         return ApiResponse<ShadowRefreshResponse>.Ok(
-            new ShadowRefreshResponse
-            {
-                TotalCount = result.TotalCount,
-                ObservedAt = result.ObservedAt
-            });
+            new ShadowRefreshResponse { TotalCount = result.TotalCount, ObservedAt = result.ObservedAt });
     }
 
     private Task<InteractiveTaskExecution<CollectionSynchronizationResult>>
