@@ -71,6 +71,8 @@ services:
   rashub:
     image: ${RASHUB_IMAGE:-rashub:latest}
     init: true
+    group_add:
+      - ${RASHUB_SECRET_GID:?RASHUB_SECRET_GID is required}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080

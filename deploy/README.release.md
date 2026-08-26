@@ -15,10 +15,12 @@ distributed coordination and durable task recovery have been implemented.
 ## First deployment
 
 1. Copy `.env.example` to `.env` and replace every placeholder.
-2. Create the bootstrap administrator password and Data Protection files
-   referenced by `.env`:
+2. Create a dedicated host group plus the bootstrap administrator password and
+   Data Protection files referenced by `.env`:
 
    ```bash
+   sudo groupadd --system rashub-secrets
+   getent group rashub-secrets
    sudo install -d -m 700 /opt/rashub/secrets
    sudo openssl rand -base64 \
      -out /opt/rashub/secrets/bootstrap-admin-password 32
@@ -33,8 +35,13 @@ distributed coordination and durable task recovery have been implemented.
      -inkey /opt/rashub/secrets/data-protection.key \
      -in /opt/rashub/secrets/data-protection.crt \
      -passout file:/opt/rashub/secrets/data-protection-password
-   sudo chmod 600 /opt/rashub/secrets/*
+   sudo chown root:rashub-secrets /opt/rashub/secrets/*
+   sudo chmod 640 /opt/rashub/secrets/*
    ```
+
+   Set `RASHUB_SECRET_GID` in `.env` to the numeric GID printed by `getent`.
+   Compose adds only that supplemental group to the non-root RasHub process, so
+   the secret files remain unreadable to unrelated host and container users.
 
    Generate the Seq administrator password hash as documented by Seq and put
    only the resulting hash in `.env`.

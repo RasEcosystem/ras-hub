@@ -52,17 +52,22 @@ The anonymous probe endpoints are:
   background-task runtime are ready, with queue and active-task capacity
   included in the engine result.
 
-Create the bootstrap administrator password file once:
+Create a dedicated host group and the bootstrap administrator password file
+once:
 
 ```bash
+sudo groupadd --system rashub-secrets
+getent group rashub-secrets
 sudo install -d -m 700 /opt/rashub/secrets
 sudo openssl rand -base64 -out /opt/rashub/secrets/bootstrap-admin-password 32
-sudo chmod 600 /opt/rashub/secrets/bootstrap-admin-password
+sudo chown root:rashub-secrets /opt/rashub/secrets/bootstrap-admin-password
+sudo chmod 640 /opt/rashub/secrets/bootstrap-admin-password
 ```
 
 Set `RASHUB_BOOTSTRAP_ADMIN_EMAIL` and
-`RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE`. Bootstrap is a no-op after an
-administrator exists.
+`RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE`, and set `RASHUB_SECRET_GID` to the
+numeric GID printed by `getent`. Bootstrap is a no-op after an administrator
+exists.
 
 Generate the required Seq administrator password hash:
 
@@ -91,7 +96,9 @@ sudo openssl pkcs12 -export \
   -inkey /opt/rashub/secrets/data-protection.key \
   -in /opt/rashub/secrets/data-protection.crt \
   -passout file:/opt/rashub/secrets/data-protection-password
-sudo chmod 600 /opt/rashub/secrets/data-protection.pfx \
+sudo chown root:rashub-secrets /opt/rashub/secrets/data-protection.pfx \
+  /opt/rashub/secrets/data-protection-password
+sudo chmod 640 /opt/rashub/secrets/data-protection.pfx \
   /opt/rashub/secrets/data-protection-password
 ```
 
