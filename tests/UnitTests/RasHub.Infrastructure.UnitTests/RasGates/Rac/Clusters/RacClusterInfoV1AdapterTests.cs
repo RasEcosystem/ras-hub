@@ -1,7 +1,8 @@
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.RasGates.Rac;
-using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Deserialization;
 using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.UnitTests.RasGates.Rac.Clusters;
@@ -50,12 +51,16 @@ public sealed class RacClusterInfoV1AdapterTests
     }
 
     [Fact]
-    public void Parse_empty_successful_output_rejects_result()
+    public void Parse_empty_successful_output_reports_missing_cluster()
     {
-        Assert.Throws<RasGateClientException>(() => _adapter.Parse(
-            new Version(8, 3, 27, 2214),
-            SuccessfulExecution(string.Empty),
-            ClusterId));
+        var exception = Assert.Throws<RacResourceNotFoundException>(() =>
+            _adapter.Parse(
+                new Version(8, 3, 27, 2214),
+                SuccessfulExecution(string.Empty),
+                ClusterId));
+
+        Assert.Equal("clusters", exception.Resource);
+        Assert.Equal(ClusterId, exception.ExternalId);
     }
 
     [Fact]

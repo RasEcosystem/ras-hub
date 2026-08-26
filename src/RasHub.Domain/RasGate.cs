@@ -25,6 +25,12 @@ public sealed class RasGate : IEntity, IAuditable, ISoftDeletable
 
     public DateTime? StatusObservedAt { get; set; }
 
+    public bool? RacAvailable { get; set; }
+
+    public string? RacVersion { get; set; }
+
+    public DateTime? RacStatusObservedAt { get; set; }
+
     public DateTime? LastSeenAt { get; set; }
 
     public DateTime CreatedAt { get; set; }

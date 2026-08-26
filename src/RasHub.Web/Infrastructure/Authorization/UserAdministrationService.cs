@@ -189,11 +189,7 @@ public sealed class UserAdministrationService(
     private static IdentityResult Failed(string description)
     {
         return IdentityResult.Failed(
-            new IdentityError
-            {
-                Code = "AdministrationError",
-                Description = description
-            });
+            new IdentityError { Code = "AdministrationError", Description = description });
     }
 
     private void LogApiKeyChange(

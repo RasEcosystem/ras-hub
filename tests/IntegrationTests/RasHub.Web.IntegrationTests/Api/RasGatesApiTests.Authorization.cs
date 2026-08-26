@@ -18,7 +18,7 @@ public sealed partial class RasGatesApiTests
         using var client = _factory.CreateClient();
 
         using var response = await client.GetAsync(
-            "/api/v1/ras-hub/status",
+            "/api/v1/info",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -34,7 +34,7 @@ public sealed partial class RasGatesApiTests
         using var client = _factory.CreateClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
-            "/api/v1/ras-hub/status");
+            "/api/v1/info");
         request.Headers.TryAddWithoutValidation(
             ApiKeyAuthenticationDefaults.HeaderName,
             ["invalid", RasHubWebApplicationFactory.ApiKey]);
@@ -110,8 +110,9 @@ public sealed partial class RasGatesApiTests
             ApiKeyAuthenticationDefaults.HeaderName,
             apiKey);
 
-        using var response = await client.DeleteAsync(
-            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}",
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}/remove",
+            null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -122,7 +123,7 @@ public sealed partial class RasGatesApiTests
 
     [Theory]
     [InlineData("POST")]
-    [InlineData("PUT")]
+    [InlineData("PATCH")]
     public async Task Non_admin_api_key_cannot_create_or_update_cluster(
         string method)
     {
@@ -150,20 +151,17 @@ public sealed partial class RasGatesApiTests
         var path = $"/api/v1/ras-gates/{gateId}/clusters";
         object body;
 
-        if (method == "PUT")
+        if (method == "PATCH")
         {
             path += $"/{Guid.NewGuid()}";
-            body = new UpdateRasClusterRequest("Updated");
+            body = new UpdateClusterRequest("Updated");
         }
         else
         {
-            body = new CreateRasClusterRequest("localhost", 1587);
+            body = new CreateClusterRequest("localhost", 1587);
         }
 
-        using var request = new HttpRequestMessage(new HttpMethod(method), path)
-        {
-            Content = JsonContent.Create(body)
-        };
+        using var request = new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(body) };
         using var response = await client.SendAsync(
             request,
             TestContext.Current.CancellationToken);

@@ -10,12 +10,13 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
 
     public void Configure(EntityTypeBuilder<RasGate> builder)
     {
-        builder.ToTable("ras_gates", tableBuilder =>
-        {
-            tableBuilder.HasCheckConstraint(
-                "ck_ras_gates_port",
-                "port BETWEEN 1 AND 65535");
-        });
+        builder.ToTable("ras_gates",
+            tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint(
+                    "ck_ras_gates_port",
+                    "port BETWEEN 1 AND 65535");
+            });
 
         builder.ConfigureCommonFields();
 
@@ -61,6 +62,15 @@ public sealed class RasGateEntityTypeConfiguration : IEntityTypeConfiguration<Ra
 
         builder.Property(rasGate => rasGate.StatusObservedAt)
             .HasColumnName("status_observed_at");
+
+        builder.Property(rasGate => rasGate.RacAvailable)
+            .HasColumnName("rac_available");
+
+        builder.Property(rasGate => rasGate.RacVersion)
+            .HasColumnName("rac_version");
+
+        builder.Property(rasGate => rasGate.RacStatusObservedAt)
+            .HasColumnName("rac_status_observed_at");
 
         builder.Property(rasGate => rasGate.LastSeenAt)
             .HasColumnName("last_seen_at");

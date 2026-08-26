@@ -128,12 +128,14 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
                 .ToListAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(2, clusters.Count);
-            Assert.Contains(clusters, cluster =>
-                cluster.ExternalId == firstId &&
-                cluster.Name == "First updated");
-            Assert.Contains(clusters, cluster =>
-                cluster.ExternalId == secondId &&
-                cluster.Name == "Second");
+            Assert.Contains(clusters,
+                cluster =>
+                    cluster.ExternalId == firstId &&
+                    cluster.Name == "First updated");
+            Assert.Contains(clusters,
+                cluster =>
+                    cluster.ExternalId == secondId &&
+                    cluster.Name == "Second");
         }
     }
 
@@ -170,6 +172,37 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
             Assert.Equal(second.ExternalId, active.ExternalId);
             Assert.True(removed.IsDeleted);
             Assert.NotNull(removed.DeletedAt);
+        }
+    }
+
+    [Fact]
+    public async Task Remove_cluster_soft_deletes_its_infobases()
+    {
+        var rasGate = RasGateTestData.Create();
+        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var infobase = RasInfobaseTestData.Create(cluster.Id);
+
+        await using (var db = _database.CreateContext())
+        {
+            db.AddRange(rasGate, cluster, infobase);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var store = new RasClusterSnapshotStore(db);
+            await store.RemoveAsync(
+                rasGate.Id,
+                cluster.ExternalId,
+                TestContext.Current.CancellationToken);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var db = _database.CreateContext())
+        {
+            var removedInfobase = await db.RasInfobases
+                .IgnoreQueryFilters()
+                .SingleAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(removedInfobase.IsDeleted);
+            Assert.NotNull(removedInfobase.DeletedAt);
         }
     }
 

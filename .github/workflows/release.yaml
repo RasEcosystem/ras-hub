@@ -1,0 +1,207 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      image: ${{ steps.version.outputs.image }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate release tag and source
+        id: version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          version="$(./scripts/package-release.sh --version)"
+          image="$(./scripts/package-release.sh --image)"
+
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag '$GITHUB_REF_NAME' does not match version.json '$version'." >&2
+            exit 2
+          fi
+
+          git fetch --no-tags origin main:refs/remotes/origin/main
+
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tags must point to a commit contained in origin/main." >&2
+            exit 2
+          fi
+
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore dependencies
+        run: dotnet restore RasHub.sln
+
+      - name: Verify formatting
+        run: dotnet format RasHub.sln --no-restore --verify-no-changes
+
+      - name: Build
+        run: >-
+          dotnet build RasHub.sln
+          --configuration Release
+          --no-restore
+          --warnaserror
+          -p:PublicRelease=true
+          -m:1
+
+      - name: Test
+        run: >-
+          dotnet test RasHub.sln
+          --configuration Release
+          --no-build
+          --no-restore
+          -m:1
+
+      - name: Package deployment bundle
+        run: ./scripts/package-release.sh
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ steps.version.outputs.value }}
+          path: |
+            artifacts/release/*.tar.gz
+            artifacts/release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Download deployment bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-${{ needs.verify.outputs.version }}
+          path: artifacts/release
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image metadata
+        id: image
+        shell: bash
+        env:
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          VERSIONED_IMAGE: ${{ needs.verify.outputs.image }}
+        run: |
+          set -Eeuo pipefail
+
+          repository="${VERSIONED_IMAGE%:*}"
+
+          {
+            echo "tags<<EOF"
+            echo "$VERSIONED_IMAGE"
+
+            if [[ "$PRERELEASE" == "false" ]]; then
+              echo "$repository:latest"
+            fi
+
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push release image
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: RASHUB_PUBLIC_RELEASE=true
+          tags: ${{ steps.image.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          VERSIONED_IMAGE: ${{ needs.verify.outputs.image }}
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -Eeuo pipefail
+
+          notes="## Container image
+
+          \`$VERSIONED_IMAGE\`
+
+          Digest: \`$IMAGE_DIGEST\`
+
+          The deployment archive pins this immutable version and contains the
+          production Compose file, environment template, deployment guide, and
+          license. It does not contain secrets."
+
+          release_flags=()
+
+          if [[ "$PRERELEASE" == "true" ]]; then
+            release_flags+=(--prerelease --latest=false)
+          else
+            release_flags+=(--latest)
+          fi
+
+          gh release create "$GITHUB_REF_NAME" \
+            artifacts/release/* \
+            --verify-tag \
+            --generate-notes \
+            --title "RasHub $VERSION" \
+            --notes "$notes" \
+            "${release_flags[@]}"

@@ -1,5 +1,5 @@
 using RasHub.Domain.Enums;
-using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Deserialization;
 using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.UnitTests.RasGates.Rac.Clusters;

@@ -25,6 +25,22 @@ public interface IRasGateSyncPublisher
         DateTime observedAt,
         CancellationToken cancellationToken);
 
+    Task<bool> TryPublishInfobasesAsync(
+        Guid rasGateId,
+        long expectedConfigurationRevision,
+        Guid clusterId,
+        IReadOnlyList<RasInfobaseSnapshot> snapshot,
+        DateTime observedAt,
+        CancellationToken cancellationToken);
+
+    Task<bool> TryPublishInfobaseAsync(
+        Guid rasGateId,
+        long expectedConfigurationRevision,
+        Guid clusterId,
+        RasInfobaseSnapshot snapshot,
+        DateTime observedAt,
+        CancellationToken cancellationToken);
+
     Task<bool> TryRemoveClusterAsync(
         Guid rasGateId,
         long expectedConfigurationRevision,

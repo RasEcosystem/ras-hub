@@ -67,8 +67,7 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
         var identity = new ClaimsIdentity(
             new[]
             {
-                new Claim(ClaimTypes.NameIdentifier, authenticatedUser.Id),
-                new Claim(
+                new Claim(ClaimTypes.NameIdentifier, authenticatedUser.Id), new Claim(
                     ClaimTypes.Name,
                     authenticatedUser.UserName ??
                     authenticatedUser.Email ??

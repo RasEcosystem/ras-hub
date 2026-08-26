@@ -54,6 +54,105 @@ public sealed class RasGateEntityConfigurationTests : IDisposable
             _database.ApiKeyProtector.Unprotect(storedApiKey));
     }
 
+    [Theory]
+    [InlineData("endpoint")]
+    [InlineData("api-key")]
+    [InlineData("deactivate")]
+    [InlineData("delete")]
+    public async Task Save_remote_access_change_invalidates_status_observations(
+        string change)
+    {
+        await using var db = _database.CreateContext();
+        var rasGate = RasGateTestData.Create();
+        rasGate.InstanceName = "Remote Gate";
+        rasGate.Version = "1.2.3";
+        rasGate.StatusObservedAt = DateTime.UtcNow;
+        rasGate.RacAvailable = true;
+        rasGate.RacVersion = "8.3.27.2214";
+        rasGate.RacStatusObservedAt = DateTime.UtcNow;
+        rasGate.LastSeenAt = DateTime.UtcNow;
+        db.RasGates.Add(rasGate);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        switch (change)
+        {
+            case "endpoint":
+                rasGate.Url = "https://replacement.example.test";
+                break;
+            case "api-key":
+                rasGate.ApiKey = "replacement-secret";
+                break;
+            case "deactivate":
+                rasGate.IsActive = false;
+                break;
+            case "delete":
+                db.RasGates.Remove(rasGate);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(change));
+        }
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, rasGate.ConfigurationRevision);
+        Assert.Null(rasGate.InstanceName);
+        Assert.Null(rasGate.Version);
+        Assert.Null(rasGate.StatusObservedAt);
+        Assert.Null(rasGate.RacAvailable);
+        Assert.Null(rasGate.RacVersion);
+        Assert.Null(rasGate.RacStatusObservedAt);
+        Assert.Null(rasGate.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Save_restore_advances_revision_without_restoring_observations()
+    {
+        await using var db = _database.CreateContext();
+        var rasGate = RasGateTestData.Create();
+        rasGate.InstanceName = "Remote Gate";
+        rasGate.Version = "1.2.3";
+        rasGate.StatusObservedAt = DateTime.UtcNow;
+        rasGate.RacAvailable = true;
+        rasGate.RacVersion = "8.3.27.2214";
+        rasGate.RacStatusObservedAt = DateTime.UtcNow;
+        rasGate.LastSeenAt = DateTime.UtcNow;
+        db.RasGates.Add(rasGate);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        db.RasGates.Remove(rasGate);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        rasGate.IsDeleted = false;
+        rasGate.DeletedAt = null;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, rasGate.ConfigurationRevision);
+        Assert.Null(rasGate.InstanceName);
+        Assert.Null(rasGate.Version);
+        Assert.Null(rasGate.StatusObservedAt);
+        Assert.Null(rasGate.RacAvailable);
+        Assert.Null(rasGate.RacVersion);
+        Assert.Null(rasGate.RacStatusObservedAt);
+        Assert.Null(rasGate.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Save_reactivation_advances_revision_without_restoring_observations()
+    {
+        await using var db = _database.CreateContext();
+        var rasGate = RasGateTestData.Create();
+        rasGate.IsActive = false;
+        db.RasGates.Add(rasGate);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        rasGate.IsActive = true;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, rasGate.ConfigurationRevision);
+        Assert.Null(rasGate.RacAvailable);
+        Assert.Null(rasGate.RacVersion);
+        Assert.Null(rasGate.RacStatusObservedAt);
+    }
+
     [Fact]
     public async Task Save_api_key_encrypts_storage_and_materializes_plaintext()
     {

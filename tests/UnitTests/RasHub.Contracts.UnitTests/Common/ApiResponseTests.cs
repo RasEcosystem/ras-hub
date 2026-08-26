@@ -1,10 +1,14 @@
 using System.Net;
+using System.Text.Json;
 using RasHub.Contracts.Common;
 
 namespace RasHub.Contracts.UnitTests.Common;
 
 public sealed class ApiResponseTests
 {
+    private static readonly JsonSerializerOptions SerializerOptions =
+        new(JsonSerializerDefaults.Web);
+
     [Fact]
     public void Ok_creates_successful_response_with_data()
     {
@@ -55,8 +59,7 @@ public sealed class ApiResponseTests
     {
         var errors = new[]
         {
-            new ApiError("validation_error", "First", "Name"),
-            new ApiError("validation_error", "Second", "Port")
+            new ApiError("validation_error", "First", "Name"), new ApiError("validation_error", "Second", "Port")
         };
 
         var response = ApiResponse<object>.Fail(HttpStatusCode.BadRequest, errors);
@@ -64,5 +67,65 @@ public sealed class ApiResponseTests
         Assert.False(response.Success);
         Assert.Equal("bad_request", response.Error?.Code);
         Assert.Equal(errors, response.Errors);
+    }
+
+    [Fact]
+    public void Json_round_trip_success_response_preserves_wire_payload()
+    {
+        var response = ApiResponse<string>.Ok("value");
+
+        var result = RoundTrip(response);
+
+        Assert.True(result.Success);
+        Assert.Equal("value", result.Data);
+        Assert.Null(result.Error);
+        Assert.Null(result.Errors);
+    }
+
+    [Fact]
+    public void Json_round_trip_single_error_response_preserves_wire_payload()
+    {
+        var response = ApiResponse<object>.Fail(
+            HttpStatusCode.Conflict,
+            "resource_conflict",
+            "Resource has changed");
+
+        var result = RoundTrip(response);
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            new ApiError("resource_conflict", "Resource has changed"),
+            result.Error);
+        Assert.Null(result.Data);
+        Assert.Null(result.Errors);
+    }
+
+    [Fact]
+    public void Json_round_trip_validation_error_response_preserves_wire_payload()
+    {
+        var errors = new[]
+        {
+            new ApiError("validation_error", "Name is required", "Name"),
+            new ApiError("validation_error", "Port is invalid", "Port")
+        };
+        var response = ApiResponse<object>.Fail(
+            HttpStatusCode.BadRequest,
+            errors);
+
+        var result = RoundTrip(response);
+
+        Assert.False(result.Success);
+        Assert.Equal(new ApiError("bad_request", "Bad request"), result.Error);
+        Assert.Equal(errors, result.Errors);
+        Assert.Null(result.Data);
+    }
+
+    private static ApiResponse<T> RoundTrip<T>(ApiResponse<T> response)
+    {
+        var json = JsonSerializer.Serialize(response, SerializerOptions);
+
+        Assert.DoesNotContain("statusCode", json, StringComparison.OrdinalIgnoreCase);
+
+        return JsonSerializer.Deserialize<ApiResponse<T>>(json, SerializerOptions)!;
     }
 }

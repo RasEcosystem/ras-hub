@@ -1,6 +1,6 @@
 namespace RasHub.Application.RasGates.Exceptions;
 
-public sealed class RasGateClientException : Exception
+public class RasGateClientException : Exception
 {
     public RasGateClientException(string message)
         : base(message)

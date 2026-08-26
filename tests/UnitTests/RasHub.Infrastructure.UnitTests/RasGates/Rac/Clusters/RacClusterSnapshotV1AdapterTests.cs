@@ -1,7 +1,8 @@
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.RasGates.Rac;
-using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Deserialization;
 using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.UnitTests.RasGates.Rac.Clusters;

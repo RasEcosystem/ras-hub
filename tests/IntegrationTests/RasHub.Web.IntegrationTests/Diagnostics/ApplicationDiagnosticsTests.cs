@@ -14,7 +14,13 @@ public sealed class ApplicationDiagnosticsTests
             new DateTimeOffset(2026, 8, 9, 9, 5, 0, TimeSpan.Zero));
         var diagnostics = new ApplicationDiagnostics(timeProvider);
         timeProvider.UtcNow = new DateTimeOffset(
-            2026, 8, 9, 12, 30, 0, TimeSpan.Zero);
+            2026,
+            8,
+            9,
+            12,
+            30,
+            0,
+            TimeSpan.Zero);
 
         diagnostics.Emit(CreateEvent(
             new DateTimeOffset(2026, 8, 9, 10, 10, 0, TimeSpan.Zero),

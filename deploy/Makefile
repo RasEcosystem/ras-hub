@@ -13,11 +13,12 @@ MIGRATION_NAME ?=
 DEV_COMPOSE_FILE ?= compose.development.yaml
 DEV_ENV_FILE ?= environments/.env.development.example
 PROD_COMPOSE_FILE ?= compose.production.yaml
+PROD_BUILD_COMPOSE_FILE ?= compose.production.build.yaml
 PROD_ENV_FILE ?= environments/.env.production
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools ef-build migrations-add database-update docker-build dev-config dev-up dev-stack-up dev-down prod-env prod-up prod-down
+.PHONY: help tools ef-build migrations-add database-update docker-build dev-config dev-up dev-stack-up dev-down prod-env prod-config prod-up prod-down
 
 help:
 	@echo "Database targets:"
@@ -31,6 +32,7 @@ help:
 	@echo ""
 	@echo "Production targets:"
 	@echo "  make docker-build       Build the application image"
+	@echo "  make prod-config        Validate the local production configuration"
 	@echo "  make prod-up            Build, migrate, and start the stack"
 	@echo "  make prod-down          Stop the production stack"
 
@@ -103,10 +105,18 @@ prod-env:
 		exit 2; \
 	}
 
-prod-up: prod-env
+prod-config: prod-env
 	$(DOCKER) compose \
 		--env-file "$(PROD_ENV_FILE)" \
 		--file "$(PROD_COMPOSE_FILE)" \
+		--file "$(PROD_BUILD_COMPOSE_FILE)" \
+		config --quiet
+
+prod-up: prod-config
+	$(DOCKER) compose \
+		--env-file "$(PROD_ENV_FILE)" \
+		--file "$(PROD_COMPOSE_FILE)" \
+		--file "$(PROD_BUILD_COMPOSE_FILE)" \
 		up --detach --build --remove-orphans
 
 prod-down: prod-env

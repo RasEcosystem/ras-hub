@@ -54,6 +54,7 @@ internal static class ApiServiceCollectionExtensions
             options.AddDocumentTransformer<ApiKeySecurityTransformer>();
             options.AddDocumentTransformer<ControllerDescriptionTransformer>();
             options.AddOperationTransformer<ApiKeySecurityTransformer>();
+            options.AddOperationTransformer<ApiErrorResponseTransformer>();
         });
 
         return services;

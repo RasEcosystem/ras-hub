@@ -44,10 +44,7 @@ public sealed class ApiKeySecurityTransformer : IOpenApiDocumentTransformer,
             context.Document);
 
         operation.Security ??= [];
-        operation.Security.Add(new OpenApiSecurityRequirement
-        {
-            [scheme] = []
-        });
+        operation.Security.Add(new OpenApiSecurityRequirement { [scheme] = [] });
 
         return Task.CompletedTask;
     }

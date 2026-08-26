@@ -10,12 +10,6 @@ internal static class RasGateTestData
         int port = 443,
         string apiKey = "secret")
     {
-        return new RasGate
-        {
-            Name = name,
-            Url = url,
-            Port = port,
-            ApiKey = apiKey
-        };
+        return new RasGate { Name = name, Url = url, Port = port, ApiKey = apiKey };
     }
 }

@@ -46,9 +46,6 @@ services:
 
   migrate:
     image: ${RASHUB_IMAGE:-rashub:latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     init: true
     command:
       - --mode=migrate
@@ -73,10 +70,9 @@ services:
 
   rashub:
     image: ${RASHUB_IMAGE:-rashub:latest}
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     init: true
+    group_add:
+      - ${RASHUB_SECRET_GID:?RASHUB_SECRET_GID is required}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080

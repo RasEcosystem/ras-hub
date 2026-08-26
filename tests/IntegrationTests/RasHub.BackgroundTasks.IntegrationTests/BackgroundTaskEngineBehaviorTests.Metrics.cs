@@ -149,10 +149,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var queued = engine.Enqueue(new MetricsProbeTask(1));
         var delayed = engine.Enqueue(
             new MetricsProbeTask(2),
-            new BackgroundTaskOptions
-            {
-                NotBefore = DateTimeOffset.UtcNow + TimeSpan.FromDays(1)
-            });
+            new BackgroundTaskOptions { NotBefore = DateTimeOffset.UtcNow + TimeSpan.FromDays(1) });
 
         listener.RecordObservableInstruments();
 
@@ -202,10 +199,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
                 (await Await(failed, cancellationToken)).Outcome);
             Assert.Equal(0, Interlocked.Read(ref activeBalance));
 
-            var concurrencyOptions = new BackgroundTaskOptions
-            {
-                ConcurrencyKey = "metrics:gate"
-            };
+            var concurrencyOptions = new BackgroundTaskOptions { ConcurrencyKey = "metrics:gate" };
             var first = engine.Enqueue(
                 new BlockingTask(),
                 concurrencyOptions);

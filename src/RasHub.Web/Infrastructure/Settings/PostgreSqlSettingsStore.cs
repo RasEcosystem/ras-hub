@@ -13,10 +13,7 @@ public sealed class PostgreSqlSettingsStore(
     : ISettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions =
-        new(JsonSerializerDefaults.Web)
-        {
-            WriteIndented = false
-        };
+        new(JsonSerializerDefaults.Web) { WriteIndented = false };
 
     public async Task<T?> GetAsync<T>(string? scope = null)
         where T : class
@@ -64,12 +61,7 @@ public sealed class PostgreSqlSettingsStore(
             return;
         }
 
-        dbContext.Settings.Add(new SettingEntry
-        {
-            Key = key,
-            Value = value,
-            UpdatedAt = updatedAt
-        });
+        dbContext.Settings.Add(new SettingEntry { Key = key, Value = value, UpdatedAt = updatedAt });
 
         try
         {

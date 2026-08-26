@@ -49,6 +49,27 @@ internal static class RasGateTaskOptions
             rasGateId);
     }
 
+    public static BackgroundTaskOptions InteractiveInfobasesSynchronization(
+        Guid rasGateId,
+        Guid clusterId)
+    {
+        return Interactive(
+            TimeSpan.FromSeconds(30),
+            $"ras-gate-infobases:{rasGateId}:{clusterId}",
+            rasGateId);
+    }
+
+    public static BackgroundTaskOptions InteractiveInfobaseSynchronization(
+        Guid rasGateId,
+        Guid clusterId,
+        Guid infobaseId)
+    {
+        return Interactive(
+            TimeSpan.FromSeconds(30),
+            $"ras-gate-infobase:{rasGateId}:{clusterId}:{infobaseId}",
+            rasGateId);
+    }
+
     public static BackgroundTaskOptions InteractiveClusterRemoval(
         Guid rasGateId,
         Guid clusterId)

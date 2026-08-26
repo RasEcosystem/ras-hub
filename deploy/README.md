@@ -24,13 +24,19 @@ set `SEQ_DEV_PUBLIC_URL` to the browser-accessible Seq URL.
 
 ## Production
 
-Create the ignored environment file and replace every placeholder:
+From a source checkout, create the ignored environment file, replace every
+placeholder, and build the image locally:
 
 ```bash
 cp deploy/environments/.env.production.example \
    deploy/environments/.env.production
 make -C deploy prod-up
 ```
+
+The source deployment combines `compose.production.yaml` with
+`compose.production.build.yaml`. Published GitHub releases contain only the
+image-based production Compose file and pin `RASHUB_IMAGE` to the released GHCR
+tag, so the target host never builds application source.
 
 The one-shot `migrate` container updates both databases before the API starts.
 The API and Seq bind to localhost by default for publication through a TLS
@@ -39,17 +45,29 @@ reverse proxy; PostgreSQL is not published.
 The container stack exports the `RasHub.BackgroundTasks` meter to Seq through
 OTLP. Override `RASHUB_OTLP_METRICS_ENDPOINT` only when using another collector.
 
-Create the bootstrap administrator password file once:
+The anonymous probe endpoints are:
+
+- `/health/live` — the Web process is responding;
+- `/health/ready` — RasHub database connectivity and the supervised
+  background-task runtime are ready, with queue and active-task capacity
+  included in the engine result.
+
+Create a dedicated host group and the bootstrap administrator password file
+once:
 
 ```bash
+sudo groupadd --system rashub-secrets
+getent group rashub-secrets
 sudo install -d -m 700 /opt/rashub/secrets
 sudo openssl rand -base64 -out /opt/rashub/secrets/bootstrap-admin-password 32
-sudo chmod 600 /opt/rashub/secrets/bootstrap-admin-password
+sudo chown root:rashub-secrets /opt/rashub/secrets/bootstrap-admin-password
+sudo chmod 640 /opt/rashub/secrets/bootstrap-admin-password
 ```
 
 Set `RASHUB_BOOTSTRAP_ADMIN_EMAIL` and
-`RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE`. Bootstrap is a no-op after an
-administrator exists.
+`RASHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE`, and set `RASHUB_SECRET_GID` to the
+numeric GID printed by `getent`. Bootstrap is a no-op after an administrator
+exists.
 
 Generate the required Seq administrator password hash:
 
@@ -78,7 +96,9 @@ sudo openssl pkcs12 -export \
   -inkey /opt/rashub/secrets/data-protection.key \
   -in /opt/rashub/secrets/data-protection.crt \
   -passout file:/opt/rashub/secrets/data-protection-password
-sudo chmod 600 /opt/rashub/secrets/data-protection.pfx \
+sudo chown root:rashub-secrets /opt/rashub/secrets/data-protection.pfx \
+  /opt/rashub/secrets/data-protection-password
+sudo chmod 640 /opt/rashub/secrets/data-protection.pfx \
   /opt/rashub/secrets/data-protection-password
 ```
 
@@ -106,3 +126,18 @@ make -C deploy prod-down
 Pushes to `dev` run formatting, a warning-free Release build, and all tests,
 then publish and deploy the immutable `dev-<commit-sha>` image. Production is
 manual; pushes to `main` do not deploy it.
+
+Tags matching the semantic version committed in `version.json` run the release
+workflow. The tagged commit must be contained in `main`. The workflow publishes
+a Linux AMD64 image, an SBOM and provenance attestations in GHCR, a deployment
+archive, checksums, and a GitHub release. Versions containing a prerelease
+suffix are marked as prereleases and do not update `latest`.
+
+The self-hosted runner uses a root-owned deployment helper. Install or update
+it after changing `deploy/scripts/rashub-dev-deploy`:
+
+```bash
+sudo install -o root -g root -m 0755 \
+  deploy/scripts/rashub-dev-deploy \
+  /usr/local/sbin/rashub-dev-deploy
+```

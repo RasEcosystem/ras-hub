@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using RasHub.Application.RasGates.Tasks;
+using RasHub.Application.RasGates.Tasks.Status;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.BackgroundTasks.Exceptions;
 using RasHub.Infrastructure.Database.Queries;

@@ -23,16 +23,19 @@
                         <a href="/" class="brand-home-link">RasHub</a>
                     </MudText>
 
-                    <MudChip T="string"
-                             Size="Size.Small"
-                             Variant="Variant.Outlined"
-                             Color="Color.Warning">
-                        BETA
-                    </MudChip>
+                    @if (RasHubVersion.PrereleaseLabel is not null)
+                    {
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Variant="Variant.Outlined"
+                                 Color="Color.Warning">
+                            @RasHubVersion.PrereleaseLabel
+                        </MudChip>
+                    }
 
                     <MudText Typo="Typo.overline"
                              Style="color: var(--mud-palette-text-secondary);">
-                        @SolutionVersion
+                        @RasHubVersion.Display
                     </MudText>
 
                 </MudStack>
@@ -63,7 +66,3 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
-
-@code {
-    private const string SolutionVersion = ThisAssembly.AssemblyFileVersion;
-}

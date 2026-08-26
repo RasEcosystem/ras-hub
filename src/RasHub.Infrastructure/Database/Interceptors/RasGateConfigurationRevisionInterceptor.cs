@@ -35,8 +35,19 @@ public sealed class RasGateConfigurationRevisionInterceptor
 
         foreach (var entry in dbContext.ChangeTracker.Entries<RasGate>())
         {
-            if (entry.State != EntityState.Modified ||
-                !RemoteIdentityChanged(entry))
+            if (entry.State != EntityState.Modified)
+                continue;
+
+            var remoteIdentityChanged = RemoteIdentityChanged(entry);
+            var activityChanged = Changed(entry.Property(item => item.IsActive));
+            var deletionChanged = Changed(entry.Property(item => item.IsDeleted));
+
+            if (remoteIdentityChanged ||
+                (activityChanged && !entry.Entity.IsActive) ||
+                deletionChanged)
+                ClearRemoteObservations(entry.Entity);
+
+            if (!remoteIdentityChanged && !activityChanged && !deletionChanged)
                 continue;
 
             var revision = entry.Property(item => item.ConfigurationRevision);
@@ -57,5 +68,16 @@ public sealed class RasGateConfigurationRevisionInterceptor
                !EqualityComparer<T>.Default.Equals(
                    property.OriginalValue,
                    property.CurrentValue);
+    }
+
+    private static void ClearRemoteObservations(RasGate rasGate)
+    {
+        rasGate.InstanceName = null;
+        rasGate.Version = null;
+        rasGate.StatusObservedAt = null;
+        rasGate.RacAvailable = null;
+        rasGate.RacVersion = null;
+        rasGate.RacStatusObservedAt = null;
+        rasGate.LastSeenAt = null;
     }
 }

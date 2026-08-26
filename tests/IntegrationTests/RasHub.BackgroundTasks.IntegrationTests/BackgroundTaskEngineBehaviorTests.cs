@@ -62,11 +62,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         {
             var handle = GetEngine(host).Enqueue(
                 new RetryTask(2),
-                new BackgroundTaskOptions
-                {
-                    MaxAttempts = 3,
-                    RetryDelay = TimeSpan.Zero
-                });
+                new BackgroundTaskOptions { MaxAttempts = 3, RetryDelay = TimeSpan.Zero });
 
             var result = await Await(handle, cancellationToken);
 
@@ -139,11 +135,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         {
             var handle = GetEngine(host).Enqueue(
                 new BlockingTask(),
-                new BackgroundTaskOptions
-                {
-                    MaxAttempts = 1,
-                    Timeout = TimeSpan.FromMilliseconds(50)
-                });
+                new BackgroundTaskOptions { MaxAttempts = 1, Timeout = TimeSpan.FromMilliseconds(50) });
 
             var result = await Await(handle, cancellationToken);
 
@@ -173,10 +165,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         try
         {
             var engine = GetEngine(host);
-            var options = new BackgroundTaskOptions
-            {
-                DeduplicationKey = "same-gate"
-            };
+            var options = new BackgroundTaskOptions { DeduplicationKey = "same-gate" };
 
             var first = engine.Enqueue(new BlockingTask(), options);
             var second = engine.Enqueue(new BlockingTask(), options);
@@ -218,10 +207,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         try
         {
             var engine = GetEngine(host);
-            var options = new BackgroundTaskOptions
-            {
-                ConcurrencyKey = "gate:42"
-            };
+            var options = new BackgroundTaskOptions { ConcurrencyKey = "gate:42" };
 
             var handles = Enumerable.Range(0, 4)
                 .Select(index => engine.Enqueue(new ConcurrentTask(index), options))
@@ -348,11 +334,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         {
             var handle = GetEngine(host).Enqueue(
                 new UnregisteredTask(),
-                new BackgroundTaskOptions
-                {
-                    MaxAttempts = 10,
-                    RetryDelay = TimeSpan.Zero
-                });
+                new BackgroundTaskOptions { MaxAttempts = 10, RetryDelay = TimeSpan.Zero });
 
             var result = await Await(handle, cancellationToken);
 

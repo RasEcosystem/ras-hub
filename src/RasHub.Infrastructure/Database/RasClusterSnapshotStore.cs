@@ -42,10 +42,16 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
             Apply(cluster, item, observedAt);
         }
 
-        foreach (var cluster in storedClusters)
-            if (!cluster.IsDeleted &&
+        var removedClusters = storedClusters
+            .Where(cluster =>
+                !cluster.IsDeleted &&
                 !observedExternalIds.Contains(cluster.ExternalId))
-                db.RasClusters.Remove(cluster);
+            .ToArray();
+
+        await InvalidateInfobasesAsync(
+            removedClusters.Select(cluster => cluster.Id),
+            cancellationToken);
+        db.RasClusters.RemoveRange(removedClusters);
     }
 
     public async Task InvalidateAsync(
@@ -56,6 +62,9 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
             .Where(cluster => cluster.RasGateId == rasGateId)
             .ToListAsync(cancellationToken);
 
+        await InvalidateInfobasesAsync(
+            clusters.Select(cluster => cluster.Id),
+            cancellationToken);
         db.RasClusters.RemoveRange(clusters);
     }
 
@@ -99,7 +108,28 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
                 cancellationToken);
 
         if (cluster is not null)
+        {
+            await InvalidateInfobasesAsync(
+                [cluster.Id],
+                cancellationToken);
             db.RasClusters.Remove(cluster);
+        }
+    }
+
+    private async Task InvalidateInfobasesAsync(
+        IEnumerable<Guid> rasClusterIds,
+        CancellationToken cancellationToken)
+    {
+        var clusterIds = rasClusterIds.Distinct().ToArray();
+
+        if (clusterIds.Length == 0)
+            return;
+
+        var infobases = await db.RasInfobases
+            .Where(infobase => clusterIds.Contains(infobase.RasClusterId))
+            .ToListAsync(cancellationToken);
+
+        db.RasInfobases.RemoveRange(infobases);
     }
 
     private static void Apply(

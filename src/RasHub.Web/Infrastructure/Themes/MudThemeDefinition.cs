@@ -24,10 +24,7 @@ public class MudThemeDefinition
                     "sans-serif"
                 ]
             },
-            Button = new ButtonTypography
-            {
-                TextTransform = "none"
-            }
+            Button = new ButtonTypography { TextTransform = "none" }
         };
     }
 

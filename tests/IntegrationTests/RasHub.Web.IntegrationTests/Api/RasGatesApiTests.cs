@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
-using RasHub.Contracts.Common.Pagination;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Infrastructure.Database.Security;
 using RasHub.Web.IntegrationTests.Infrastructure;
@@ -155,7 +154,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         var request = new UpdateRasGateRequest(
             "Updated gate",
             rasGate.Url,
-            rasGate.Port);
+            rasGate.Port,
+            rasGate.IsActive);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -182,7 +182,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         var request = new UpdateRasGateRequest(
             "Updated gate",
             "https://attacker.example.test",
-            9443);
+            9443,
+            rasGate.IsActive);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -210,6 +211,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "Updated gate",
             "https://updated.example.test",
             9443,
+            rasGate.IsActive,
             "new-secret");
 
         using var response = await client.PutAsJsonAsync(
@@ -224,7 +226,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
-    public async Task Update_changes_activity_and_omission_preserves_it()
+    public async Task Update_replaces_activity_explicitly()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
@@ -232,7 +234,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             rasGate.Name,
             rasGate.Url,
             rasGate.Port,
-            IsActive: false);
+            false);
 
         using var deactivateResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -244,19 +246,20 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.False(deactivateJson.GetProperty("data").GetProperty("isActive").GetBoolean());
         Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
 
-        var updateWithoutActivity = new UpdateRasGateRequest(
+        var updateWhileInactive = new UpdateRasGateRequest(
             "Renamed gate",
             rasGate.Url,
-            rasGate.Port);
+            rasGate.Port,
+            false);
         using var preserveResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
-            updateWithoutActivity,
+            updateWhileInactive,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, preserveResponse.StatusCode);
         Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
 
-        var reactivate = updateWithoutActivity with { IsActive = true };
+        var reactivate = updateWhileInactive with { IsActive = true };
         using var reactivateResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
             reactivate,
@@ -264,6 +267,25 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
 
         Assert.Equal(HttpStatusCode.OK, reactivateResponse.StatusCode);
         Assert.True((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_without_activity_is_rejected_and_preserves_entity()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            new { name = "Renamed gate", url = rasGate.Url, port = rasGate.Port },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(rasGate.Name, stored.Name);
+        Assert.True(stored.IsActive);
     }
 
     [Fact]
@@ -275,6 +297,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "Updated gate",
             "https://updated.example.test",
             9443,
+            rasGate.IsActive,
             string.Empty);
 
         using var response = await client.PutAsJsonAsync(
@@ -293,7 +316,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         var request = new UpdateRasGateRequest(
             "Updated gate",
             "https://updated.example.test",
-            9443);
+            9443,
+            true);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{Guid.NewGuid()}",
@@ -402,9 +426,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         await _factory.SeedRasGateAsync("Third", apiKey: "third-secret");
         using var client = _factory.CreateAuthenticatedClient();
 
-        using var response = await client.PostAsJsonAsync(
-            $"{RasGatesPath}/get-paged",
-            new PageRequest(1, 2),
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}?page=1&pageSize=2",
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
         var data = json.GetProperty("data");
@@ -419,6 +442,114 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.All(items, item => Assert.False(item.TryGetProperty("apiKey", out _)));
     }
 
+    [Fact]
+    public async Task Get_all_returns_complete_collection_and_never_exposes_api_keys()
+    {
+        await _factory.SeedRasGateAsync("First", apiKey: "first-secret");
+        await _factory.SeedRasGateAsync("Second", apiKey: "second-secret");
+        await _factory.SeedRasGateAsync("Third", apiKey: "third-secret");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/all",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(3, data.Length);
+        Assert.All(
+            data,
+            item => Assert.False(item.TryGetProperty("apiKey", out _)));
+    }
+
+    [Fact]
+    public async Task Search_paged_returns_case_insensitive_name_matches_without_api_keys()
+    {
+        var expected = await _factory.SeedRasGateAsync(
+            "Production Alpha",
+            apiKey: "alpha-secret");
+        await _factory.SeedRasGateAsync(
+            "Production Beta",
+            apiKey: "beta-secret");
+        await _factory.SeedRasGateAsync(
+            "Development",
+            apiKey: "development-secret");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search?query=ALPHA&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var data = json.GetProperty("data");
+        var item = Assert.Single(
+            data.GetProperty("items").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, data.GetProperty("totalCount").GetInt32());
+        Assert.Equal(expected.Id, item.GetProperty("id").GetGuid());
+        Assert.False(item.TryGetProperty("apiKey", out _));
+        Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);
+    }
+
+    [Fact]
+    public async Task Search_all_can_search_selected_url_field()
+    {
+        var expected = await _factory.SeedRasGateAsync(
+            "Gateway",
+            "https://target.example.test");
+        await _factory.SeedRasGateAsync(
+            "Target in name only",
+            "https://other.example.test");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search/all?query=TARGET&fields=Url",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var item = Assert.Single(json.GetProperty("data").EnumerateArray());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected.Id, item.GetProperty("id").GetGuid());
+        Assert.False(item.TryGetProperty("apiKey", out _));
+    }
+
+    [Fact]
+    public async Task Search_all_matches_any_selected_field_and_treats_wildcards_literally()
+    {
+        await _factory.SeedRasGateAsync(
+            "100% Production",
+            "https://first.example.test");
+        await _factory.SeedRasGateAsync(
+            "Other",
+            "https://100%-gateway.example.test");
+        await _factory.SeedRasGateAsync(
+            "Wildcard decoy",
+            "https://unrelated.example.test");
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search/all?query=100%25&fields=Name&fields=Url",
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+        var items = json.GetProperty("data").EnumerateArray().ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, items.Length);
+    }
+
+    [Fact]
+    public async Task Search_rejects_whitespace_query()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}/search?query=%20%20&page=1&pageSize=10",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Theory]
     [InlineData(0, 10)]
     [InlineData(1, 0)]
@@ -427,9 +558,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
     {
         using var client = _factory.CreateAuthenticatedClient();
 
-        using var response = await client.PostAsJsonAsync(
-            $"{RasGatesPath}/get-paged",
-            new PageRequest(page, pageSize),
+        using var response = await client.GetAsync(
+            $"{RasGatesPath}?page={page}&pageSize={pageSize}",
             TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);

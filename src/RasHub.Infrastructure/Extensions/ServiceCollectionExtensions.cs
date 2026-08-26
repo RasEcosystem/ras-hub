@@ -13,7 +13,12 @@ using RasHub.Infrastructure.RasGates.Client;
 using RasHub.Infrastructure.RasGates.Endpoints;
 using RasHub.Infrastructure.RasGates.Rac;
 using RasHub.Infrastructure.RasGates.Rac.Adapters;
-using RasHub.Infrastructure.RasGates.Rac.Clusters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Commands;
+using RasHub.Infrastructure.RasGates.Rac.Clusters.Deserialization;
+using RasHub.Infrastructure.RasGates.Rac.Infobases.Adapters;
+using RasHub.Infrastructure.RasGates.Rac.Infobases.Commands;
+using RasHub.Infrastructure.RasGates.Rac.Infobases.Deserialization;
 using RasHub.Infrastructure.RasGates.Rac.Parsing;
 
 namespace RasHub.Infrastructure.Extensions;
@@ -44,17 +49,20 @@ public static class ServiceCollectionExtensions
                 serviceProvider.GetRequiredService<
                     RasGateApiKeyProtectionInterceptor>());
 
-            options.UseNpgsql(connectionString, npgsql =>
-            {
-                npgsql.MigrationsAssembly(typeof(RasHubDbContext).Assembly.FullName);
-                npgsql.EnableRetryOnFailure();
-            });
+            options.UseNpgsql(connectionString,
+                npgsql =>
+                {
+                    npgsql.MigrationsAssembly(typeof(RasHubDbContext).Assembly.FullName);
+                    npgsql.EnableRetryOnFailure();
+                });
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IRasClusterSnapshotStore, RasClusterSnapshotStore>();
+        services.AddScoped<IRasInfobaseSnapshotStore, RasInfobaseSnapshotStore>();
         services.AddScoped<IRasGateSyncPublisher, RasGateSyncPublisher>();
         services.AddScoped<RasClusterQueries>();
+        services.AddScoped<RasInfobaseQueries>();
         services.AddScoped<RasGateQueries>();
         services.AddScoped<RasGateApiKeyProtectionMigrator>();
 
@@ -72,6 +80,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RacClusterInsertV1Adapter>();
         services.AddSingleton<RacClusterUpdateV1Adapter>();
         services.AddSingleton<RacClusterRemoveV1Adapter>();
+        services.AddSingleton<RacInfobaseOutputV1Deserializer>();
+        services.AddSingleton<IRacInfobaseOutputDeserializer>(serviceProvider =>
+            serviceProvider.GetRequiredService<
+                RacInfobaseOutputV1Deserializer>());
+        services.AddSingleton<RacInfobaseOutputDeserializerResolver>();
+        services.AddSingleton<RacInfobaseSnapshotV1Adapter>();
+        services.AddSingleton<RacInfobaseInfoV1Adapter>();
         services.AddSingleton<IRacResourceAdapter<RasClusterSnapshot>>(serviceProvider => serviceProvider
             .GetRequiredService<
                 RacClusterSnapshotV1Adapter>());
@@ -94,11 +109,34 @@ public static class ServiceCollectionExtensions
             .GetRequiredService<RacClusterRemoveV1Adapter>());
         services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider => serviceProvider
             .GetRequiredService<RacClusterRemoveV1Adapter>());
+        services.AddSingleton<IRacResultCommandAdapter<
+            RacInfobaseQuery,
+            RasResourceSnapshot<RasInfobaseSnapshot>>>(serviceProvider =>
+            serviceProvider.GetRequiredService<
+                RacInfobaseSnapshotV1Adapter>());
+        services.AddSingleton<IRacResultCommandAdapter<
+            RacInfobaseQuery,
+            RasResourceSnapshot<RasInfobaseSnapshot>>>(serviceProvider =>
+            serviceProvider.GetRequiredService<RacInfobaseInfoV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider =>
+            serviceProvider.GetRequiredService<
+                RacInfobaseSnapshotV1Adapter>());
+        services.AddSingleton<IRacResourceAdapterDescriptor>(serviceProvider =>
+            serviceProvider.GetRequiredService<RacInfobaseInfoV1Adapter>());
         services.AddSingleton<RacCapabilityResolver>();
         services.AddSingleton(typeof(RacResourceAdapterResolver<>));
         services.AddSingleton(typeof(RacCommandAdapterResolver<>));
         services.AddSingleton(typeof(RacResultCommandAdapterResolver<,>));
-        services.AddSingleton<IRasGateClientFactory, RasGateClientFactory>();
+        services.AddSingleton(serviceProvider => new RasGateSessionFactory(
+            serviceProvider.GetRequiredService<RasGateHttpClientTransport>()
+                .Client,
+            serviceProvider.GetRequiredService<IRasGateEndpointFactory>(),
+            serviceProvider.GetRequiredService<RacVersionCache>(),
+            serviceProvider.GetRequiredService<RacVersionParser>(),
+            serviceProvider.GetRequiredService<RacCapabilityResolver>()));
+        services.AddSingleton<IRasGateStatusGateway, RasGateStatusGateway>();
+        services.AddSingleton<IRasClusterGateway, RasClusterGateway>();
+        services.AddSingleton<IRasInfobaseGateway, RasInfobaseGateway>();
 
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<RasHubDbContext>());
