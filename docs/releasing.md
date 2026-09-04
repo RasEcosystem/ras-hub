@@ -1,83 +1,74 @@
 # Releasing RasHub
 
-RasHub releases are immutable Linux AMD64 container images accompanied by a
-small deployment bundle. Standalone Linux and Windows binaries are not release
-artifacts.
+RasHub releases contain a Linux AMD64 image and a small deployment archive.
+Standalone binaries are not published.
 
-## One-time repository setup
+## Repository setup
 
 - Allow GitHub Actions to create releases and write organization packages.
-- In the `RasEcosystem/ras-hub` GHCR package settings, connect the package to
-  this repository and grant its workflows write access.
-- Change the GHCR package visibility to **Public** before the first public
-  release. GitHub does not allow a public package to become private again.
-- Protect `main` and require the normal verification checks before merging.
+- Connect the `RasEcosystem/ras-hub` GHCR package to this repository and grant
+  its workflows write access.
+- Make the package public before the first public release.
+- Protect `main` and require the `verify` check from
+  `.github/workflows/verify.yaml` on pull requests.
 
-Never put registry credentials, PostgreSQL passwords, bootstrap credentials, or
-Data Protection material in a tag, release asset, image layer, or release note.
+Never put registry credentials, database passwords, bootstrap credentials, or
+Data Protection material in a tag, image, release asset, or release note.
 
-## Prepare a version
+## Prepare the version
 
-The release version is committed in `version.json`. The Git tag records that
-decision; it does not override it. Use a SemVer prerelease suffix while the API
-or operational behavior remains unstable, for example:
+`version.json` is the single release-version source. It drives assembly and Web
+versions, tag validation, the image tag, and the archive name. Use a SemVer
+prerelease suffix while behavior is unstable, for example:
 
 ```json
-"version": "0.1.0-beta.1"
+"version": "0.1.0-beta.2"
 ```
 
-This value drives the assembly, Web display, authenticated `/api/v1/info`
-response, release tag validation, container tag, and deployment archive name.
-Do not maintain a separate release-stage setting or hard-coded UI badge.
-
-Update the version in the feature or release-preparation branch, run the local
-release verification, and merge the reviewed commit into `main`:
+Update it in a reviewed branch and run:
 
 ```bash
 make release
 ```
 
-This runs formatting verification, a warning-free Release build, all tests,
-deployment Compose validation, archive-content validation, and checksum
-generation. Generated files remain under `artifacts/release` and are ignored by
-Git.
+This checks formatting, performs a warning-free Release build, runs all tests,
+validates production Compose and archive contents, and writes the ignored
+artifacts under `artifacts/release`.
 
 ## Tag and publish
 
-Create an annotated tag on the exact reviewed commit in `main`. The tag must be
-`v` followed by the exact version from `version.json`:
+Create one annotated tag on the reviewed commit after it reaches `main`. The
+tag must be `v` followed by the exact value from `version.json`:
 
 ```bash
 git switch main
 git pull --ff-only
-git tag -a v0.1.0-beta.1 -m "RasHub 0.1.0-beta.1"
-git push origin v0.1.0-beta.1
+git tag -a v0.1.0-beta.2 -m "RasHub 0.1.0-beta.2"
+git push origin v0.1.0-beta.2
 ```
 
-Do not move or reuse a published release tag. Fix the problem and publish the
-next version instead.
+The workflow repeats verification, publishes
+`ghcr.io/rasecosystem/ras-hub:<version>` for `linux/amd64`, attaches SBOM and
+provenance, and creates the GitHub release with the deployment archive and
+`SHA256SUMS`. Stable versions additionally update `latest`.
 
-The release workflow verifies that the tag matches `version.json` and belongs
-to `main`, then:
+Never move, reuse, or rebuild a published version tag. The current workflow
+pushes the image before creating the GitHub release, so do not rerun it after an
+image was published. If publication fails after that point, inspect the pushed
+digest and issue the next version instead of overwriting the existing tag.
 
-1. repeats formatting, build, tests, and packaging;
-2. pushes `ghcr.io/rasecosystem/ras-hub:<version>` for `linux/amd64`;
-3. attaches SBOM and provenance attestations to the image;
-4. creates the GitHub release with the deployment archive and `SHA256SUMS`.
+## Verify publication
 
-Prerelease versions are marked as GitHub prereleases and never update `latest`.
-A stable version additionally updates `latest`.
-
-## Verify the publication
-
-Verify the workflow, assets, checksum, and anonymous image access from a host
-that is not logged in to GHCR:
+From a host not authenticated to GHCR:
 
 ```bash
 sha256sum --check SHA256SUMS
-docker pull ghcr.io/rasecosystem/ras-hub:0.1.0-beta.1
+docker pull ghcr.io/rasecosystem/ras-hub:0.1.0-beta.2
+docker buildx imagetools inspect \
+  ghcr.io/rasecosystem/ras-hub:0.1.0-beta.2
 ```
 
-Extract the deployment bundle and confirm that `.env.example` pins the same
-image version. Perform the first deployment in a disposable environment before
-promoting it to a server holding persistent data.
+Confirm that the registry digest matches the digest in the release notes and
+that `.env.example` in the archive uses the same versioned image tag. Deploy
+the archive to a disposable environment before using persistent production
+data.

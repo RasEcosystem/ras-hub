@@ -43,7 +43,8 @@ Compatibility-aware RAC resource operations proceed as follows:
 5. A RAC deserialization mismatch invalidates both the session-local version
    and the shared cache entry so a later attempt resolves compatibility again.
 6. Application publishes collection snapshots only when marked `Complete`.
-   Targeted `info` operations additionally require exactly one matching item.
+   Targeted `info` accepts one matching item or a definitive successful
+   not-found; ambiguous, malformed, and failed results are rejected.
 7. Conditional publication still checks the RasGate configuration revision,
    active state, and deletion state.
 
@@ -84,11 +85,10 @@ remains independent of resource schema versions.
 `RacInfobaseOutputDeserializerResolver`. Its normalized summary contains the
 remote identifier, name, and description.
 
-`clusters.info` executes `cluster info --cluster=<uuid>` and validates that RAC
-returned exactly one cluster with the requested identifier. Its result is
-published as a targeted upsert and therefore never removes other shadow
-clusters. Only `clusters.snapshot` is authoritative for collection deletion;
-removing an absent cluster also invalidates its shadow infobases.
+`clusters.info` executes `cluster info --cluster=<uuid>`. Exactly one matching
+cluster is published as a targeted upsert. A definitive successful not-found
+soft-deletes that target and its cached infobases; neither result changes
+sibling clusters. Only `clusters.snapshot` reconciles the full collection.
 
 `clusters.insert` executes `cluster insert` with the required host and port and
 the settings supplied by the API caller. A successful result must contain
@@ -124,14 +124,18 @@ RasGate configuration-revision guard used by remote publication.
 `infobases.snapshot` executes
 `infobase summary list --cluster=<cluster-uuid>`. A complete result reconciles
 only the infobases owned by that shadow cluster and may soft-delete absent
-siblings. `infobases.info` adds `--infobase=<infobase-uuid>`, requires exactly
-one matching result, and performs a targeted upsert without changing siblings.
-Both operations may carry request-scoped `--cluster-user` and `--cluster-pwd`
-credentials; those values are not persisted or logged.
+siblings. `infobases.info` adds `--infobase=<infobase-uuid>`. One matching
+result is upserted; a definitive successful not-found soft-deletes only that
+target. Sibling infobases remain unchanged. Both operations may carry
+request-scoped `--cluster-user` and `--cluster-pwd` credentials; those values
+are not persisted or logged.
 
-For the initial cluster and infobase collection profiles, an empty successful
-stdout is marked `Unknown`, not `Complete`. This prevents an ambiguous empty
-response from destructively reconciling a previously published snapshot.
+For the initial cluster and infobase collection profiles, a successful RAC
+execution with empty stdout is a `Complete` empty snapshot. The transport has
+already validated the execution outcome, exit code, timeout flag, and complete
+output capture, so reconciliation may remove the last cached resource. Failed,
+timed-out, truncated, and malformed results are still rejected before
+publication.
 
 ## Adding support for a changed resource format
 

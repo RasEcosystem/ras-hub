@@ -47,4 +47,12 @@ public interface IRasGateSyncPublisher
         Guid clusterId,
         DateTime observedAt,
         CancellationToken cancellationToken);
+
+    Task<bool> TryRemoveInfobaseAsync(
+        Guid rasGateId,
+        long expectedConfigurationRevision,
+        Guid clusterId,
+        Guid infobaseId,
+        DateTime observedAt,
+        CancellationToken cancellationToken);
 }

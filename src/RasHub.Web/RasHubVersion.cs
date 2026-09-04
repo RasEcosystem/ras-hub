@@ -28,6 +28,9 @@ internal static class RasHubVersion
     {
         var gitSuffixIndex = version.LastIndexOf(".g", StringComparison.Ordinal);
 
+        if (gitSuffixIndex < 0)
+            gitSuffixIndex = version.LastIndexOf("-g", StringComparison.Ordinal);
+
         if (gitSuffixIndex < 0 || gitSuffixIndex == version.Length - 2) return version;
 
         var gitRevision = version.AsSpan(gitSuffixIndex + 2);

@@ -1,12 +1,9 @@
-﻿@page "/Account/Manage/EnableAuthenticator"
+@page "/Account/Manage/EnableAuthenticator"
 @using System.ComponentModel.DataAnnotations
-@using System.Globalization
 @using System.Text
-@using System.Text.Encodings.Web
 @using RasHub.Web.Data
 
 @inject UserManager<ApplicationUser> UserManager
-@inject UrlEncoder UrlEncoder
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<EnableAuthenticator> Logger
 
@@ -18,88 +15,79 @@
 }
 else
 {
-    <MudText Typo="Typo.h6" GutterBottom="true">Configure authenticator app</MudText>
-
-    <StatusMessage Message="@message"/>
-
-    <MudText Typo="Typo.body1" GutterBottom="true">To use an authenticator app go through the following steps:</MudText>
-
-    <ol class="list">
-        <li>
-            <MudText Typo="Typo.body2">
-                Download a two-factor authenticator app like Microsoft Authenticator for
-                <MudLink Target="_blank" Href="https://go.microsoft.com/fwlink/?Linkid=825072">Android</MudLink>
-                and
-                <MudLink Target="_blank" Href="https://go.microsoft.com/fwlink/?Linkid=825073">iOS</MudLink>
-                or
-                Google Authenticator for
-                <MudLink Target="_blank"
-                         Href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&amp;hl=en">
-                    Android
-                </MudLink>
-                and
-                <MudLink Target="_blank" Href="https://itunes.apple.com/us/app/google-authenticator/id388497605?mt=8">
-                    iOS
-                </MudLink>
-                .
+    <MudStack Spacing="4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5">Configure authenticator app</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Add RasHub to any standards-compatible TOTP authenticator.
             </MudText>
-        </li>
-        <li>
-            <MudText Typo="Typo.body2">
-                Scan the QR Code or enter this key into your two factor authenticator app. Spaces and casing do not
-                matter:
-            </MudText>
+        </MudStack>
 
-            <MudAlert Variant="Variant.Text" Severity="Severity.Info"
-                      Icon="@Icons.Material.Filled.Key">@sharedKey</MudAlert>
+        <StatusMessage Message="@message"/>
 
-            <MudText Typo="Typo.body2">
-                Learn how to
-                <MudLink Target="_blank" Href="https://go.microsoft.com/fwlink/?Linkid=852423">enable QR code
-                    generation
-                </MudLink>
-                .
-            </MudText>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            In your authenticator app, add an account manually and enter the setup key below.
+            Spaces and letter casing do not matter.
+        </MudAlert>
 
-            <div data-url="@authenticatorUri"></div>
-        </li>
-        <li>
-            <MudText Typo="Typo.body2">
-                Once you have scanned the QR code or input the key above, your two factor authentication app will
-                provide you
-                with a unique code. Enter the code in the confirmation box below.
-            </MudText>
+        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.subtitle2">Manual setup key</MudText>
+                <MudText Typo="Typo.h6"><code>@sharedKey</code></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Issuer: RasHub</MudText>
+            </MudStack>
+        </MudPaper>
 
-            <EditForm Model="Input" FormName="send-code" OnValidSubmit="OnValidSubmitAsync" method="post">
-                <DataAnnotationsValidator/>
-                <MudGrid>
-                    <MudItem md="12">
-                        <MudStaticTextField @bind-Value="@Input.Code" For="@(() => Input.Code)"
-                                            Label="Verification Code" HelperText="Please enter the code."/>
-                    </MudItem>
-                    <MudItem md="12">
-                        <MudStaticButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
-                                         FormAction="FormAction.Submit">Verify
-                        </MudStaticButton>
-                    </MudItem>
-                </MudGrid>
-            </EditForm>
-        </li>
-    </ol>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            After verification, RasHub will show one-time recovery codes. Save them offline before leaving the page.
+        </MudAlert>
+
+        <EditForm Model="Input"
+                  FormName="send-code"
+                  OnValidSubmit="OnValidSubmitAsync"
+                  method="post">
+            <DataAnnotationsValidator/>
+
+            <MudStack Spacing="3">
+                <MudStaticTextField @bind-Value="Input.Code"
+                                    For="@(() => Input.Code)"
+                                    Label="Authenticator code"
+                                    Placeholder="123456"
+                                    HelperText="Enter a fresh six-digit code from the app."
+                                    Variant="Variant.Outlined"
+                                    FullWidth="true"
+                                    Adornment="Adornment.Start"
+                                    AdornmentIcon="@Icons.Material.Outlined.Pin"
+                                    UserAttributes="@AuthenticatorCodeAttributes"/>
+
+                <MudStaticButton Variant="Variant.Filled"
+                                 Color="Color.Primary"
+                                 FullWidth="true"
+                                 FormAction="FormAction.Submit">
+                    Verify and enable 2FA
+                </MudStaticButton>
+            </MudStack>
+        </EditForm>
+    </MudStack>
 }
 
 @code {
-    private const string AuthenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
-
     private string? message;
     private ApplicationUser? user;
     private string? sharedKey;
-    private string? authenticatorUri;
     private IEnumerable<string>? recoveryCodes;
 
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
     [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
+
+    private readonly Dictionary<string, object> AuthenticatorCodeAttributes =
+        new()
+        {
+            ["autocomplete"] = "one-time-code",
+            ["inputmode"] = "numeric",
+            ["aria-required"] = "true"
+        };
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,7 +99,7 @@ else
             return;
         }
 
-        await LoadSharedKeyAndQrCodeUriAsync(user);
+        await LoadSharedKeyAsync(user);
     }
 
     private async Task OnValidSubmitAsync()
@@ -122,11 +110,13 @@ else
             return;
         }
 
-        // Strip spaces and hyphens
-        var verificationCode = Input.Code.Replace(" ", string.Empty).Replace("-", string.Empty);
-
+        var verificationCode = Input.Code
+            .Replace(" ", string.Empty)
+            .Replace("-", string.Empty);
         var is2faTokenValid = await UserManager.VerifyTwoFactorTokenAsync(
-            user, UserManager.Options.Tokens.AuthenticatorTokenProvider, verificationCode);
+            user,
+            UserManager.Options.Tokens.AuthenticatorTokenProvider,
+            verificationCode);
 
         if (!is2faTokenValid)
         {
@@ -136,7 +126,9 @@ else
 
         await UserManager.SetTwoFactorEnabledAsync(user, true);
         var userId = await UserManager.GetUserIdAsync(user);
-        Logger.LogInformation("User with ID '{UserId}' has enabled 2FA with an authenticator app.", userId);
+        Logger.LogInformation(
+            "User with ID '{UserId}' enabled 2FA with an authenticator app.",
+            userId);
 
         message = "Your authenticator app has been verified.";
 
@@ -146,13 +138,15 @@ else
         }
         else
         {
-            RedirectManager.RedirectToWithStatus("Account/Manage/TwoFactorAuthentication", message, HttpContext);
+            RedirectManager.RedirectToWithStatus(
+                "Account/Manage/TwoFactorAuthentication",
+                message,
+                HttpContext);
         }
     }
 
-    private async ValueTask LoadSharedKeyAndQrCodeUriAsync(ApplicationUser user)
+    private async ValueTask LoadSharedKeyAsync(ApplicationUser user)
     {
-        // Load the authenticator key & QR code URI to display on the form
         var unformattedKey = await UserManager.GetAuthenticatorKeyAsync(user);
         if (string.IsNullOrEmpty(unformattedKey))
         {
@@ -161,12 +155,9 @@ else
         }
 
         sharedKey = FormatKey(unformattedKey!);
-
-        var email = await UserManager.GetEmailAsync(user);
-        authenticatorUri = GenerateQrCodeUri(email!, unformattedKey!);
     }
 
-    private string FormatKey(string unformattedKey)
+    private static string FormatKey(string unformattedKey)
     {
         var result = new StringBuilder();
         var currentPosition = 0;
@@ -184,22 +175,15 @@ else
         return result.ToString().ToLowerInvariant();
     }
 
-    private string GenerateQrCodeUri(string email, string unformattedKey)
-    {
-        return string.Format(
-            CultureInfo.InvariantCulture,
-            AuthenticatorUriFormat,
-            UrlEncoder.Encode("Microsoft.AspNetCore.Identity.UI"),
-            UrlEncoder.Encode(email),
-            unformattedKey);
-    }
-
     private sealed class InputModel
     {
         [Required]
-        [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [StringLength(
+            7,
+            ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.",
+            MinimumLength = 6)]
         [DataType(DataType.Text)]
-        [Display(Name = "Verification Code")]
+        [Display(Name = "Authenticator code")]
         public string Code { get; set; } = "";
     }
 

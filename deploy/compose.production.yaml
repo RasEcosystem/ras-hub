@@ -78,12 +78,12 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080
       ConnectionStrings__RasHub: Host=postgres;Port=5432;Database=${POSTGRES_DB:-rashub};Username=${POSTGRES_USER:-rashub};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       Database__ApplyMigrations: "false"
-      Authorization__BootstrapAdminEmail: ${RASHUB_BOOTSTRAP_ADMIN_EMAIL:?RASHUB_BOOTSTRAP_ADMIN_EMAIL is required}
+      Authorization__BootstrapAdminEmail: ${RASHUB_BOOTSTRAP_ADMIN_EMAIL:-rashub@rashub}
       Authorization__BootstrapAdminPasswordFile: /run/secrets/rashub-bootstrap-admin-password
       DataProtection__KeysPath: /home/app/.aspnet/DataProtection-Keys
       DataProtection__CertificatePath: /run/secrets/rashub-data-protection-certificate
       DataProtection__CertificatePasswordFile: /run/secrets/rashub-data-protection-certificate-password
-      ReverseProxy__KnownProxies__0: ${RASHUB_TRUSTED_PROXY:-127.0.0.1}
+      ReverseProxy__KnownProxies__0: ${RASHUB_DOCKER_GATEWAY:-172.31.250.1}
       Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
       OpenTelemetry__MetricsEndpoint: ${RASHUB_OTLP_METRICS_ENDPOINT:-http://seq:5341/ingest/otlp/v1/metrics}
     volumes:
@@ -115,6 +115,13 @@ volumes:
   data-protection-production:
   postgres-production:
   seq-production:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${RASHUB_DOCKER_SUBNET:-172.31.250.0/24}
+          gateway: ${RASHUB_DOCKER_GATEWAY:-172.31.250.1}
 
 secrets:
   rashub-bootstrap-admin-password:

@@ -69,13 +69,13 @@ public sealed class RacClusterSnapshotV1AdapterTests
     }
 
     [Fact]
-    public void Parse_empty_successful_output_does_not_claim_complete_snapshot()
+    public void Parse_empty_successful_output_returns_complete_empty_snapshot()
     {
         var snapshot = _adapter.Parse(
             new Version(8, 3, 27, 2214),
             SuccessfulExecution(string.Empty));
 
-        Assert.Equal(SnapshotCompleteness.Unknown, snapshot.Completeness);
+        Assert.Equal(SnapshotCompleteness.Complete, snapshot.Completeness);
         Assert.Empty(snapshot.Items);
     }
 

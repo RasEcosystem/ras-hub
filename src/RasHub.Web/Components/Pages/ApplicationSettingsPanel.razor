@@ -1,96 +1,78 @@
 @inject ISnackbar Snackbar
 
-<MudForm Model="_settings" ValidationDelay="0">
-    <MudStack Spacing="4">
-        <MudPaper Class="pa-6" Elevation="1">
-            <MudStack Spacing="4">
+<MudPaper Class="pa-6" Elevation="1">
+    <MudForm Model="_settings" ValidationDelay="0">
+        <MudStack Spacing="3">
+            <MudStack Spacing="1">
                 <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
                     <MudIcon Icon="@Icons.Material.Outlined.Palette"
                              Size="Size.Small"
                              Color="Color.Primary"/>
                     <MudText Typo="Typo.h5">Appearance</MudText>
                 </MudStack>
-                <MudSelect T="AppTheme"
-                           Label="Theme"
-                           Variant="Variant.Outlined"
-                           FullWidth
-                           @bind-Value="_settings.Theme">
-                    <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
-                    <MudSelectItem Value="AppTheme.System">System</MudSelectItem>
-                </MudSelect>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Choose the visual theme used throughout RasHub.
+                </MudText>
             </MudStack>
-        </MudPaper>
 
-        <MudPaper Class="pa-6" Elevation="1">
-            <MudStack Spacing="4">
-                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
-                    <MudIcon Icon="@Icons.Material.Outlined.Login"
-                             Size="Size.Small"
-                             Color="Color.Primary"/>
-                    <MudText Typo="Typo.h5">Authentication options</MudText>
-                </MudStack>
-
-                <MudGrid Spacing="2">
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch T="bool"
-                                   @bind-Value="_settings.AllowForgotPassword"
+            <MudGrid Class="align-end" Spacing="2">
+                <MudItem xs="12" sm="8" md="6">
+                    <MudSelect T="AppTheme"
+                               Label="Theme"
+                               Variant="Variant.Outlined"
+                               FullWidth
+                               @bind-Value="_settings.Theme">
+                        <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
+                        <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
+                        <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
+                        <MudSelectItem Value="AppTheme.System">System</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4" md="6">
+                    <MudStack Row Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled"
                                    Color="Color.Primary"
-                                   Label="Allow forgot password"/>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch T="bool"
-                                   @bind-Value="_settings.AllowResendEmailConfirmation"
-                                   Color="Color.Primary"
-                                   Label="Allow resend email confirmation"/>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch T="bool"
-                                   @bind-Value="_settings.AllowPasskeyLogin"
-                                   Color="Color.Primary"
-                                   Label="Allow login with a passkey"/>
-                    </MudItem>
-                    <MudItem xs="12" sm="6">
-                        <MudSwitch T="bool"
-                                   @bind-Value="_settings.AllowRegistration"
-                                   Color="Color.Primary"
-                                   Label="Allow registration"/>
-                    </MudItem>
-                </MudGrid>
-            </MudStack>
-        </MudPaper>
-
-        <MudStack Row Justify="Justify.FlexEnd">
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Outlined.Save"
-                       OnClick="@SaveAsync">
-                Save changes
-            </MudButton>
+                                   StartIcon="@Icons.Material.Outlined.Save"
+                                   Disabled="_saving"
+                                   OnClick="@SaveAsync">
+                            @(_saving ? "Saving…" : "Save changes")
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
         </MudStack>
-    </MudStack>
-</MudForm>
+    </MudForm>
+</MudPaper>
 
 @code {
     private ApplicationSettings _settings = new();
+    private bool _saving;
 
     protected override void OnInitialized()
     {
         _settings = new ApplicationSettings
         {
-            Theme = SettingsProvider.Settings.Theme,
-            AllowForgotPassword = SettingsProvider.Settings.AllowForgotPassword,
-            AllowResendEmailConfirmation = SettingsProvider.Settings.AllowResendEmailConfirmation,
-            AllowPasskeyLogin = SettingsProvider.Settings.AllowPasskeyLogin,
-            AllowRegistration = SettingsProvider.Settings.AllowRegistration
+            Theme = SettingsProvider.Settings.Theme
         };
     }
 
     private async Task SaveAsync()
     {
-        await SettingsProvider.UpdateAsync(_settings);
-        Snackbar.Add("Application settings were saved.", Severity.Success);
+        if (_saving)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            await SettingsProvider.UpdateAsync(_settings);
+            Snackbar.Add("Application settings saved.", Severity.Success);
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
 }

@@ -10,7 +10,7 @@ namespace RasHub.Web.IntegrationTests.Authentication;
 [Collection(WebApplicationCollection.Name)]
 public sealed class AdminRoleInitializerTests
 {
-    private const string AdminEmail = "bootstrap-admin@example.test";
+    private const string AdminEmail = "rashub@rashub";
     private const string AdminPassword = "bootstrap-password";
 
     [Fact]

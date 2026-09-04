@@ -335,6 +335,50 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         Assert.Null(storedGate.LastSeenAt);
     }
 
+    [Fact]
+    public async Task Remove_infobase_when_revision_changed_rolls_back_removal()
+    {
+        var rasGate = RasGateTestData.Create();
+        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var infobase = RasInfobaseTestData.Create(cluster.Id);
+
+        await using (var seedDb = _database.CreateContext())
+        {
+            seedDb.AddRange(rasGate, cluster, infobase);
+            await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var publicationDb = _database.CreateContext();
+        _ = await publicationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        await ChangeGateAsync(rasGate.Id, "reconfigured");
+        var publisher = CreatePublisher(publicationDb);
+
+        var published = await publisher.TryRemoveInfobaseAsync(
+            rasGate.Id,
+            1,
+            cluster.ExternalId,
+            infobase.ExternalId,
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+
+        await using var verificationDb = _database.CreateContext();
+        var storedInfobase = await verificationDb.RasInfobases.SingleAsync(
+            item => item.RasClusterId == cluster.Id &&
+                    item.ExternalId == infobase.ExternalId,
+            TestContext.Current.CancellationToken);
+        var storedGate = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(storedInfobase.IsDeleted);
+        Assert.Null(storedGate.LastSeenAt);
+    }
+
     private async Task SeedGateAsync(RasGate rasGate)
     {
         await using var db = _database.CreateContext();

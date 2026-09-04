@@ -15,6 +15,7 @@ public sealed class ApiDocumentationAuthenticationTests
 {
     private const string UserEmail = "documentation@example.test";
     private const string UserPassword = "Documentation-Password-42!";
+    private static readonly string DisplayVersion = GetDisplayVersion();
 
     [Theory]
     [InlineData("/swagger")]
@@ -50,16 +51,10 @@ public sealed class ApiDocumentationAuthenticationTests
         Assert.Contains("brand-orbit", html);
         Assert.Contains("RasHub", html);
         Assert.Contains("Development Environment", html);
-        var gitVersionSuffix = $".g{ThisAssembly.GitCommitId[..10]}";
-        var displayVersion = ThisAssembly.NuGetPackageVersion.EndsWith(
-            gitVersionSuffix,
-            StringComparison.Ordinal)
-            ? ThisAssembly.NuGetPackageVersion[..^gitVersionSuffix.Length]
-            : ThisAssembly.NuGetPackageVersion;
-        Assert.Contains($"v{displayVersion}", html);
-        Assert.DoesNotContain($"v{displayVersion}{gitVersionSuffix}", html);
+        Assert.Contains("login-divider", html);
+        Assert.DoesNotContain($"v{DisplayVersion}", html);
         Assert.Contains("type=\"password\"", html);
-        Assert.Contains("Log in with a passkey", html);
+        Assert.DoesNotContain("Log in with a passkey", html);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString());
     }
 
@@ -78,6 +73,24 @@ public sealed class ApiDocumentationAuthenticationTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Administration Panel", html);
         Assert.DoesNotContain("Development Environment", html);
+        Assert.Contains("login-divider", html);
+        Assert.DoesNotContain($"v{DisplayVersion}", html);
+    }
+
+    private static string GetDisplayVersion()
+    {
+        var packageVersion = ThisAssembly.NuGetPackageVersion;
+        var gitRevision = ThisAssembly.GitCommitId[..10];
+
+        foreach (var separator in new[] { ".g", "-g" })
+        {
+            var suffix = $"{separator}{gitRevision}";
+
+            if (packageVersion.EndsWith(suffix, StringComparison.Ordinal))
+                return packageVersion[..^suffix.Length];
+        }
+
+        return packageVersion;
     }
 
     [Fact]

@@ -150,23 +150,11 @@
     font-weight: 300;
 }
 
-.motto {
+.login-divider {
     width: 100%;
     margin: 30px 0 6px;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 18px;
-    color: var(--login-text-secondary);
-}
-
-.motto span {
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--login-lines));
-}
-
-.motto span:last-child {
-    background: linear-gradient(90deg, var(--login-lines), transparent);
+    background: linear-gradient(90deg, transparent, var(--login-lines) 18%, var(--login-lines) 82%, transparent);
 }
 
 .login-card {
@@ -235,7 +223,7 @@
         margin-bottom: 8px;
     }
 
-    .motto {
+    .login-divider {
         margin: 20px 0 5px;
     }
 
@@ -252,10 +240,6 @@
 
     .login-shell {
         width: min(100%, 440px);
-    }
-
-    .motto {
-        gap: 10px;
     }
 
     .login-card {

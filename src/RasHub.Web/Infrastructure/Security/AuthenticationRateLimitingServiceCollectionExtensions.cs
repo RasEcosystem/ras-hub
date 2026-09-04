@@ -12,11 +12,7 @@ public static class AuthenticationRateLimitingServiceCollectionExtensions
     [
         "/Account/Login",
         "/Account/LoginWith2fa",
-        "/Account/LoginWithRecoveryCode",
-        "/Account/Register",
-        "/Account/ForgotPassword",
-        "/Account/ResendEmailConfirmation",
-        "/Account/ResetPassword"
+        "/Account/LoginWithRecoveryCode"
     ];
 
     public static IServiceCollection AddAuthenticationRateLimiting(
@@ -60,9 +56,7 @@ public static class AuthenticationRateLimitingServiceCollectionExtensions
     private static bool IsProtectedRequest(HttpContext context)
     {
         return HttpMethods.IsPost(context.Request.Method) &&
-               ProtectedPaths.Contains(
-                   context.Request.Path.Value,
-                   StringComparer.OrdinalIgnoreCase);
+               GetCanonicalProtectedPath(context.Request.Path) is not null;
     }
 
     private static string GetPartitionKey(HttpContext context)
@@ -70,6 +64,21 @@ public static class AuthenticationRateLimitingServiceCollectionExtensions
         var remoteAddress = context.Connection.RemoteIpAddress?.ToString() ??
                             "unknown";
 
-        return $"{context.Request.Path.Value}:{remoteAddress}";
+        var canonicalPath = GetCanonicalProtectedPath(context.Request.Path) ??
+                            throw new InvalidOperationException(
+                                "A rate-limit key was requested for an unprotected path.");
+
+        return $"{canonicalPath}:{remoteAddress}";
+    }
+
+    private static string? GetCanonicalProtectedPath(PathString path)
+    {
+        var value = path.Value?.TrimEnd('/');
+
+        if (string.IsNullOrEmpty(value))
+            return null;
+
+        return ProtectedPaths.FirstOrDefault(protectedPath =>
+            string.Equals(protectedPath, value, StringComparison.OrdinalIgnoreCase));
     }
 }

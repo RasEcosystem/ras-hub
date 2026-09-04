@@ -1,0 +1,60 @@
+name: Verify
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore RasHub.sln
+
+      - name: Verify formatting
+        run: dotnet format RasHub.sln --no-restore --verify-no-changes
+
+      - name: Build
+        run: >-
+          dotnet build RasHub.sln
+          --configuration Release
+          --no-restore
+          --warnaserror
+          -p:PublicRelease=true
+          -m:1
+
+      - name: Test
+        run: >-
+          dotnet test RasHub.sln
+          --configuration Release
+          --no-build
+          --no-restore
+          -m:1
+
+      - name: Validate deployment bundle
+        run: ./scripts/package-release.sh

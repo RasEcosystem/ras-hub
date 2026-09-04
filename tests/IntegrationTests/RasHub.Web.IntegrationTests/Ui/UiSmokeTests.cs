@@ -1,6 +1,9 @@
 using System.Net;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Nava.Settings.Abstractions;
+using RasHub.Web.Data;
+using RasHub.Web.Infrastructure.Authorization;
 using RasHub.Web.IntegrationTests.Infrastructure;
 using RasHub.Web.Settings;
 
@@ -9,6 +12,9 @@ namespace RasHub.Web.IntegrationTests.Ui;
 [Collection(WebApplicationCollection.Name)]
 public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
 {
+    private const string AccountEmail = "account-settings@example.test";
+    private const string AccountPassword = "Account-Settings-Password-42!";
+
     private readonly RasHubWebApplicationFactory _factory;
 
     public UiSmokeTests(RasHubWebApplicationFactory factory)
@@ -46,12 +52,12 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Identity_forms_use_the_narrow_page_shell()
+    public async Task Identity_status_pages_use_the_narrow_page_shell()
     {
         using var client = _factory.CreateClient();
 
         using var response = await client.GetAsync(
-            "/Account/ForgotPassword",
+            "/Account/AccessDenied",
             TestContext.Current.CancellationToken);
         var html = await response.Content.ReadAsStringAsync(
             TestContext.Current.CancellationToken);
@@ -110,25 +116,9 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Disabled_authentication_options_are_hidden_from_login_page()
+    public async Task Login_page_exposes_only_password_authentication()
     {
-        using var factory = new RasHubWebApplicationFactory();
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            var settingsProvider = scope.ServiceProvider
-                .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
-
-            await settingsProvider.UpdateAsync(new ApplicationSettings
-            {
-                AllowForgotPassword = false,
-                AllowResendEmailConfirmation = false,
-                AllowPasskeyLogin = false,
-                AllowRegistration = false
-            });
-        }
-
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
         using var response = await client.GetAsync(
             "/Account/Login",
             TestContext.Current.CancellationToken);
@@ -140,6 +130,96 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         Assert.DoesNotContain("Resend email confirmation", html);
         Assert.DoesNotContain("Log in with a passkey", html);
         Assert.DoesNotContain("Create a new account", html);
-        Assert.DoesNotContain("mud-divider", html);
+    }
+
+    [Fact]
+    public async Task Account_settings_expose_only_password_and_two_factor_sections()
+    {
+        using var factory = new RasHubWebApplicationFactory(false);
+        await factory.SeedIdentityUserAsync(AccountEmail, AccountPassword);
+        using var client = factory.CreateIdentityClient();
+        var loginPath =
+            "/Account/Login?ReturnUrl=%2FAccount%2FManage%2FChangePassword";
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            loginPath);
+
+        using var form = new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("Input.Email", AccountEmail),
+            new KeyValuePair<string, string>("Input.Password", AccountPassword),
+            new KeyValuePair<string, string>("Input.RememberMe", "false"),
+            new KeyValuePair<string, string>("_handler", "login"),
+            new KeyValuePair<string, string>("__RequestVerificationToken", token)
+        ]);
+        using var login = await client.PostAsync(
+            loginPath,
+            form,
+            TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync(
+            "/Account/Manage/ChangePassword",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Account security", html);
+        Assert.Contains("Security settings", html);
+        Assert.Contains("Change password", html);
+        Assert.Contains("Two-factor authentication", html);
+        Assert.Equal(1, html.Split("Back to application").Length - 1);
+        Assert.DoesNotContain("Profile", html);
+        Assert.DoesNotContain("Passkeys", html);
+        Assert.DoesNotContain("Personal data", html);
+    }
+
+    [Fact]
+    public async Task Application_settings_show_appearance_above_user_administration_without_tabs()
+    {
+        using var factory = new RasHubWebApplicationFactory(false);
+        const string email = "settings-admin@example.test";
+        await factory.SeedIdentityUserAsync(email, AccountPassword);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            Assert.True((await userManager.AddToRoleAsync(user, AppRoles.Admin)).Succeeded);
+        }
+
+        using var client = factory.CreateIdentityClient();
+        const string loginPath = "/Account/Login?ReturnUrl=%2FSettings";
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            loginPath);
+        using var form = new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("Input.Email", email),
+            new KeyValuePair<string, string>("Input.Password", AccountPassword),
+            new KeyValuePair<string, string>("Input.RememberMe", "false"),
+            new KeyValuePair<string, string>("_handler", "login"),
+            new KeyValuePair<string, string>("__RequestVerificationToken", token)
+        ]);
+        using var login = await client.PostAsync(
+            loginPath,
+            form,
+            TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync(
+            "/Settings",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var appearancePosition = html.IndexOf("Appearance", StringComparison.Ordinal);
+        var usersPosition = html.IndexOf("Users", StringComparison.Ordinal);
+        Assert.True(appearancePosition >= 0);
+        Assert.True(usersPosition > appearancePosition);
+        Assert.Contains("Add user", html);
+        Assert.DoesNotContain("mud-tabs", html);
     }
 }

@@ -5,19 +5,25 @@
 
     <MudStack Spacing="1">
 
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Spacing="2">
+        <div class="account-security-heading">
+            <MudStack Row
+                      AlignItems="AlignItems.Center"
+                      Spacing="2">
 
-            <MudText Typo="Typo.h3">
-                Manage your account
-            </MudText>
+                <MudIcon Icon="@Icons.Material.Outlined.Security"
+                         Size="Size.Large"
+                         Color="Color.Primary"/>
 
-        </MudStack>
+                <MudText Typo="Typo.h3" HtmlTag="h1">
+                    Account security
+                </MudText>
+
+            </MudStack>
+        </div>
 
         <MudText Typo="Typo.subtitle1"
                  Color="Color.Secondary">
-            Update your profile, security settings and sign-in methods
+            Change your password and manage two-factor authentication
         </MudText>
 
     </MudStack>
@@ -37,12 +43,12 @@
                     <MudStack Spacing="1">
 
                         <MudText Typo="Typo.h6">
-                            Account settings
+                            Security settings
                         </MudText>
 
                         <MudText Typo="Typo.body2"
                                  Color="Color.Secondary">
-                            Select a section to manage.
+                            Select a security section.
                         </MudText>
 
                     </MudStack>

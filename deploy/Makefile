@@ -101,7 +101,7 @@ dev-down:
 
 prod-env:
 	@test -f "$(PROD_ENV_FILE)" || { \
-		echo "$(PROD_ENV_FILE) is required. Copy environments/.env.production.example and replace all secrets." >&2; \
+		echo "$(PROD_ENV_FILE) is required. Run ./setup.sh first." >&2; \
 		exit 2; \
 	}
 

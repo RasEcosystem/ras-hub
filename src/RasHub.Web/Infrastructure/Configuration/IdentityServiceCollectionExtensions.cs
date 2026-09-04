@@ -103,7 +103,6 @@ internal static class IdentityServiceCollectionExtensions
                     IdentityConstants.ApplicationScheme);
             };
         });
-        services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
         services.AddScoped<CurrentUserAccessor>();
         services.AddScoped<UserAdministrationService>();
         services.AddScoped<UserApiKeyService>();

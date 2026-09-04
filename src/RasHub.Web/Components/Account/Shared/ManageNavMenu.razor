@@ -1,66 +1,22 @@
-﻿@using Microsoft.AspNetCore.Identity
-@using RasHub.Web.Data
-@inject SignInManager<ApplicationUser> SignInManager
-
 <MudNavMenu Color="Color.Primary">
-
-    <MudNavLink Href="Account/Manage"
+    <MudNavLink Href="/"
                 Match="NavLinkMatch.All"
-                Icon="@Icons.Material.Outlined.Person"
-                IconColor="Color.Secondary">
-        Profile
+                Icon="@Icons.Material.Outlined.ArrowBack"
+                IconColor="Color.Default">
+        Back to application
     </MudNavLink>
 
-    <MudNavLink Href="Account/Manage/Email"
-                Icon="@Icons.Material.Outlined.Email"
-                IconColor="Color.Secondary">
-        Email
-    </MudNavLink>
+    <MudDivider Class="my-2"/>
 
     <MudNavLink Href="Account/Manage/ChangePassword"
                 Icon="@Icons.Material.Outlined.Lock"
-                IconColor="Color.Secondary">
-        Password
+                IconColor="Color.Default">
+        Change password
     </MudNavLink>
-
-    @if (hasExternalLogins)
-    {
-        <MudNavLink Href="Account/Manage/ExternalLogins"
-                    Icon="@Icons.Material.Outlined.Link"
-                    IconColor="Color.Secondary">
-            External logins
-        </MudNavLink>
-    }
 
     <MudNavLink Href="Account/Manage/TwoFactorAuthentication"
                 Icon="@Icons.Material.Outlined.Security"
-                IconColor="Color.Secondary">
+                IconColor="Color.Default">
         Two-factor authentication
     </MudNavLink>
-
-    <MudNavLink Href="Account/Manage/Passkeys"
-                Icon="@Icons.Material.Outlined.Key"
-                IconColor="Color.Secondary">
-        Passkeys
-    </MudNavLink>
-
-    <MudNavLink Href="Account/Manage/PersonalData"
-                Icon="@Icons.Material.Outlined.AdminPanelSettings"
-                IconColor="Color.Secondary">
-        Personal data
-    </MudNavLink>
-
 </MudNavMenu>
-
-@code {
-    private bool hasExternalLogins;
-
-    protected override async Task OnInitializedAsync()
-    {
-        hasExternalLogins =
-            (await SignInManager
-                .GetExternalAuthenticationSchemesAsync())
-            .Any();
-    }
-
-}
