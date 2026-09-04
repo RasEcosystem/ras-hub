@@ -101,6 +101,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     [InlineData("/settings")]
     [InlineData("/health-events")]
     [InlineData("/ras-gates")]
+    [InlineData("/ras-endpoints")]
     public async Task Api_key_does_not_authenticate_administration_pages(string path)
     {
         using var client = _factory.CreateAuthenticatedClient();
@@ -221,5 +222,59 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         Assert.True(usersPosition > appearancePosition);
         Assert.Contains("Add user", html);
         Assert.DoesNotContain("mud-tabs", html);
+    }
+
+    [Fact]
+    public async Task Administrator_can_open_RAS_endpoint_management_page()
+    {
+        using var factory = new RasHubWebApplicationFactory(false);
+        const string email = "ras-endpoints-admin@example.test";
+        await factory.SeedIdentityUserAsync(email, AccountPassword);
+        await factory.SeedRasEndpointAsync(
+            "Production RAS",
+            "ras.example.test",
+            1545);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.FindByEmailAsync(email);
+            Assert.NotNull(user);
+            Assert.True((await userManager.AddToRoleAsync(
+                user,
+                AppRoles.Admin)).Succeeded);
+        }
+
+        using var client = factory.CreateIdentityClient();
+        const string loginPath =
+            "/Account/Login?ReturnUrl=%2Fras-endpoints";
+        var token = await IdentityFormTestHelpers.GetAntiforgeryTokenAsync(
+            client,
+            loginPath);
+        using var form = new FormUrlEncodedContent(
+        [
+            new KeyValuePair<string, string>("Input.Email", email),
+            new KeyValuePair<string, string>("Input.Password", AccountPassword),
+            new KeyValuePair<string, string>("Input.RememberMe", "false"),
+            new KeyValuePair<string, string>("_handler", "login"),
+            new KeyValuePair<string, string>("__RequestVerificationToken", token)
+        ]);
+        using var login = await client.PostAsync(
+            loginPath,
+            form,
+            TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync(
+            "/ras-endpoints",
+            TestContext.Current.CancellationToken);
+        var html = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("RAS endpoints", html);
+        Assert.Contains("Production RAS", html);
+        Assert.Contains("ras.example.test:1545", html);
+        Assert.Contains("href=\"/ras-endpoints\"", html);
     }
 }

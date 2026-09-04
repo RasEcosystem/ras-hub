@@ -65,4 +65,46 @@ public sealed class ContractRequestSerializationTests
                 json,
                 SerializerOptions));
     }
+
+    [Fact]
+    public void UpdateRasEndpointRequest_json_round_trip_preserves_required_fields()
+    {
+        var request = new UpdateRasEndpointRequest(
+            "Production RAS",
+            "ras.example.test",
+            1545,
+            false,
+            7);
+
+        var json = JsonSerializer.Serialize(request, SerializerOptions);
+        var result = JsonSerializer.Deserialize<UpdateRasEndpointRequest>(
+            json,
+            SerializerOptions);
+
+        Assert.NotNull(result);
+        Assert.Equal(request, result);
+    }
+
+    [Theory]
+    [InlineData("isActive")]
+    [InlineData("expectedConfigurationRevision")]
+    public void UpdateRasEndpointRequest_json_without_required_state_is_rejected(
+        string propertyToOmit)
+    {
+        var properties = new Dictionary<string, object?>
+        {
+            ["name"] = "Production RAS",
+            ["host"] = "ras.example.test",
+            ["port"] = 1545,
+            ["isActive"] = true,
+            ["expectedConfigurationRevision"] = 7L
+        };
+        properties.Remove(propertyToOmit);
+        var json = JsonSerializer.Serialize(properties, SerializerOptions);
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<UpdateRasEndpointRequest>(
+                json,
+                SerializerOptions));
+    }
 }

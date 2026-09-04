@@ -12,4 +12,7 @@ public static class AppPolicies
 
     public const string ManageRasGates =
         "ManageRasGates";
+
+    public const string ManageRasEndpoints =
+        "ManageRasEndpoints";
 }

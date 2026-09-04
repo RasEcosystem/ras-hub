@@ -1,6 +1,7 @@
 using MudBlazor.Services;
 using Nava.Settings.Abstractions;
 using Nava.Settings.Extensions;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Services;
 using RasHub.Application.RasGates.Tasks.Clusters;
@@ -16,6 +17,7 @@ using RasHub.Web.Infrastructure.Authorization;
 using RasHub.Web.Infrastructure.Configuration;
 using RasHub.Web.Infrastructure.Database;
 using RasHub.Web.Infrastructure.Diagnostics;
+using RasHub.Web.Infrastructure.RasEndpoints;
 using RasHub.Web.Infrastructure.RasGates;
 using RasHub.Web.Infrastructure.Security;
 using RasHub.Web.Infrastructure.Settings;
@@ -85,11 +87,13 @@ public class Program
         builder.Services.AddSingleton<ThemeProvider>();
         builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
         builder.Services.AddScoped<RasGateAdministrationService>();
+        builder.Services.AddScoped<RasEndpointAdministrationService>();
         builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.AddRasHubApi();
 
         builder.Services.AddRasHubInfrastructure(builder.Configuration);
         builder.Services.AddScoped<RasGateRegistry>();
+        builder.Services.AddScoped<RasEndpointRegistry>();
 
         builder.Services.AddRasHubBackgroundTasks(options =>
         {

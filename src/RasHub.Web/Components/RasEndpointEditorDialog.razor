@@ -1,0 +1,120 @@
+@using RasHub.Application.RasEndpoints.Exceptions
+@using RasHub.Application.RasEndpoints.Models
+@using RasHub.Domain
+@using RasHub.Infrastructure.Database.Queries
+@using RasHub.Web.Infrastructure.RasEndpoints
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" ValidationDelay="0">
+            <MudStack Spacing="3">
+                <MudTextField T="string"
+                              @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Required
+                              RequiredError="Name is required"
+                              MaxLength="@RasEndpoint.NameMaxLength"
+                              Counter="@RasEndpoint.NameMaxLength"
+                              Immediate/>
+
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="8">
+                        <MudTextField T="string"
+                                      @bind-Value="_host"
+                                      Label="RAS host"
+                                      Placeholder="ras.example.net"
+                                      Variant="Variant.Outlined"
+                                      Required
+                                      RequiredError="RAS host is required"
+                                      MaxLength="@RasEndpoint.HostMaxLength"
+                                      Validation="@(new Func<string?, string?>(ValidateHost))"
+                                      Immediate/>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int"
+                                         @bind-Value="_port"
+                                         Label="RAS port"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="65535"
+                                         Required/>
+                    </MudItem>
+                </MudGrid>
+
+                <MudSwitch T="bool"
+                           @bind-Value="_isActive"
+                           Color="Color.Primary"
+                           Label="Active"/>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="px-4 pb-4"
+                  Style="width: 100%;">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Outlined.Save"
+                       OnClick="SaveAsync">
+                @(Endpoint is null ? "Add" : "Save changes")
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm _form = null!;
+    private string _name = string.Empty;
+    private string _host = "localhost";
+    private int _port = 1545;
+    private bool _isActive = true;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public RasEndpointAdministrationItem? Endpoint { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Endpoint is null)
+            return;
+
+        _name = Endpoint.Name;
+        _host = Endpoint.Host;
+        _port = Endpoint.Port;
+        _isActive = Endpoint.IsActive;
+    }
+
+    private string? ValidateHost(string? value)
+    {
+        try
+        {
+            _ = RasEndpointAddress.Create(value ?? string.Empty, _port);
+            return null;
+        }
+        catch (RasEndpointAddressValidationException)
+        {
+            return "Enter a valid DNS name or IP address";
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+            return;
+
+        MudDialog.Close(DialogResult.Ok(new RasEndpointEditorValues(
+            _name,
+            _host,
+            _port,
+            _isActive)));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

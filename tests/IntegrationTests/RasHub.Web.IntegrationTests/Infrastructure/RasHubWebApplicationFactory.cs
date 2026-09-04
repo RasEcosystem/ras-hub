@@ -150,6 +150,40 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                 TestContext.Current.CancellationToken);
     }
 
+    public async Task<RasEndpoint> SeedRasEndpointAsync(
+        string name = "Production RAS",
+        string host = "ras.example.test",
+        int port = 1545,
+        bool isActive = true)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+        var endpoint = new RasEndpoint
+        {
+            Name = name,
+            Host = host,
+            Port = port,
+            IsActive = isActive
+        };
+
+        db.RasEndpoints.Add(endpoint);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return endpoint;
+    }
+
+    public async Task<RasEndpoint?> FindRasEndpointAsync(Guid id)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
+
+        return await db.RasEndpoints
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                endpoint => endpoint.Id == id,
+                TestContext.Current.CancellationToken);
+    }
+
     public async Task<string?> FindStoredRasGateApiKeyAsync(Guid id)
     {
         using var scope = Services.CreateScope();
@@ -245,6 +279,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
         db.RasInfobases.IgnoreQueryFilters().ExecuteDelete();
         db.RasClusters.IgnoreQueryFilters().ExecuteDelete();
+        db.RasEndpoints.IgnoreQueryFilters().ExecuteDelete();
         db.RasGates.IgnoreQueryFilters().ExecuteDelete();
         RasGateBoundary.Reset();
     }
@@ -294,6 +329,8 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
                     serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
                     serviceProvider.GetRequiredService<
                         RasGateConfigurationRevisionInterceptor>(),
+                    serviceProvider.GetRequiredService<
+                        RasEndpointConfigurationRevisionInterceptor>(),
                     serviceProvider.GetRequiredService<
                         RasGateApiKeyProtectionInterceptor>());
             });

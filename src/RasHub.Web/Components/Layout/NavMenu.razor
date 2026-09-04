@@ -49,6 +49,24 @@
             </Authorized>
         </AuthorizeView>
 
+        <AuthorizeView Policy="@AppPolicies.ManageRasEndpoints">
+            <Authorized>
+                <MudTooltip Text="RAS endpoints"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.Link"
+                        Href="/ras-endpoints"
+                        Color="@GetRouteColor("ras-endpoints")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="RAS endpoints"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
         <MudTooltip Text="Tasks"
                     Placement="Placement.Right"
                     Arrow="true">

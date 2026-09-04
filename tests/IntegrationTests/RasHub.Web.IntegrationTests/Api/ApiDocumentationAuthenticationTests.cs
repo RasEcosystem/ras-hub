@@ -276,6 +276,64 @@ public sealed class ApiDocumentationAuthenticationTests
             "404",
             "409");
         AssertOperation(root,
+            "/api/v1/ras-endpoints",
+            "get",
+            "GetPagedRasEndpoints",
+            "RasEndpoints",
+            "200",
+            "400",
+            "401");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/all",
+            "get",
+            "GetAllRasEndpoints",
+            "RasEndpoints",
+            "200",
+            "401");
+        AssertResponseDataIsArray(
+            root,
+            "/api/v1/ras-endpoints/all",
+            "get",
+            "200");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints",
+            "post",
+            "RegisterRasEndpoint",
+            "RasEndpoints",
+            "201",
+            "400",
+            "401",
+            "403");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "get",
+            "GetRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "401",
+            "404");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "put",
+            "UpdateRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "delete",
+            "UnregisterRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
             "/api/v1/ras-gates/{rasGateId}/status/shadow",
             "get",
             "GetShadowRasGateStatus",
@@ -578,7 +636,7 @@ public sealed class ApiDocumentationAuthenticationTests
             .Select(tag => tag.GetProperty("name").GetString())
             .ToHashSet(StringComparer.Ordinal);
         Assert.True(documentedTags.SetEquals(
-            ["RasHub", "RasGates", "Clusters", "Infobases"]));
+            ["RasHub", "RasGates", "RasEndpoints", "Clusters", "Infobases"]));
 
         var schemas = root
             .GetProperty("components")
@@ -586,11 +644,14 @@ public sealed class ApiDocumentationAuthenticationTests
 
         Assert.True(schemas.TryGetProperty(nameof(ClusterModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseModel), out _));
+        Assert.True(schemas.TryGetProperty(nameof(RasEndpointModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(ClusterSearchResultModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseSearchResultModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(CreateClusterRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(UpdateClusterRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(RemoveClusterRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(CreateRasEndpointRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(UpdateRasEndpointRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseCredentialsRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(RasHubInfoResponse), out _));
         Assert.True(schemas.TryGetProperty(nameof(ShadowRefreshResponse), out _));
