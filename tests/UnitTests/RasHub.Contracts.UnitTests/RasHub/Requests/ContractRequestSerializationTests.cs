@@ -9,13 +9,14 @@ public sealed class ContractRequestSerializationTests
         new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public void UpdateRasGateRequest_json_round_trip_preserves_required_activity()
+    public void UpdateRasGateRequest_json_round_trip_preserves_required_fields()
     {
         var request = new UpdateRasGateRequest(
             "Primary gate",
             "https://rasgate.example.test",
             5050,
-            false);
+            false,
+            42);
 
         var json = JsonSerializer.Serialize(request, SerializerOptions);
         var result = JsonSerializer.Deserialize<UpdateRasGateRequest>(
@@ -24,6 +25,7 @@ public sealed class ContractRequestSerializationTests
 
         Assert.NotNull(result);
         Assert.False(result.IsActive);
+        Assert.Equal(42, result.ExpectedConfigurationRevision);
         Assert.Null(result.ApiKey);
     }
 
@@ -36,6 +38,25 @@ public sealed class ContractRequestSerializationTests
               "name": "Primary gate",
               "url": "https://rasgate.example.test",
               "port": 5050
+            }
+            """;
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<UpdateRasGateRequest>(
+                json,
+                SerializerOptions));
+    }
+
+    [Fact]
+    public void UpdateRasGateRequest_json_without_expected_revision_is_rejected()
+    {
+        const string json =
+            """
+            {
+              "name": "Primary gate",
+              "url": "https://rasgate.example.test",
+              "port": 5050,
+              "isActive": true
             }
             """;
 

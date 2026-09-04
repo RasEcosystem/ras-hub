@@ -19,6 +19,7 @@ public sealed class RasGateQueries(RasHubDbContext db)
             Url = rasGate.Url,
             Port = rasGate.Port,
             IsActive = rasGate.IsActive,
+            ConfigurationRevision = rasGate.ConfigurationRevision,
             CreatedAt = rasGate.CreatedAt,
             UpdatedAt = rasGate.UpdatedAt
         };
@@ -52,6 +53,7 @@ public sealed class RasGateQueries(RasHubDbContext db)
                 rasGate.Url,
                 rasGate.Port,
                 rasGate.IsActive,
+                rasGate.ConfigurationRevision,
                 rasGate.InstanceName,
                 rasGate.Version,
                 rasGate.StatusObservedAt,
@@ -258,6 +260,7 @@ public sealed record RasGateAdministrationItem(
     string Url,
     int Port,
     bool IsActive,
+    long ConfigurationRevision,
     string? InstanceName,
     string? Version,
     DateTime? StatusObservedAt,

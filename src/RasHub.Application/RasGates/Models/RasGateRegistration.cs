@@ -12,4 +12,5 @@ public sealed record RasGateRegistrationUpdate(
     string Url,
     int Port,
     bool IsActive,
+    long ExpectedConfigurationRevision,
     string? ApiKey);

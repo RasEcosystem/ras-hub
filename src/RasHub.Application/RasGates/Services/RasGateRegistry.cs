@@ -48,6 +48,9 @@ public sealed class RasGateRegistry(
         if (rasGate is null)
             return null;
 
+        if (rasGate.ConfigurationRevision != update.ExpectedConfigurationRevision)
+            throw new RasGateRevisionConflictException(rasGateId);
+
         var name = update.Name.Trim();
         var url = update.Url.Trim();
         var endpointChanged =

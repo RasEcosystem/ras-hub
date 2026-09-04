@@ -29,7 +29,7 @@ public sealed class RasGateEntityConfigurationTests : IDisposable
     }
 
     [Fact]
-    public async Task Save_remote_identity_changes_increments_configuration_revision_once()
+    public async Task Save_configuration_changes_increment_configuration_revision()
     {
         await using var db = _database.CreateContext();
         var rasGate = RasGateTestData.Create();
@@ -38,14 +38,14 @@ public sealed class RasGateEntityConfigurationTests : IDisposable
 
         rasGate.Name = "Renamed";
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(1, rasGate.ConfigurationRevision);
+        Assert.Equal(2, rasGate.ConfigurationRevision);
 
         rasGate.Url = "https://replacement.example.test";
         rasGate.Port = 8443;
         rasGate.ApiKey = "replacement-secret";
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(2, rasGate.ConfigurationRevision);
+        Assert.Equal(3, rasGate.ConfigurationRevision);
         Assert.Equal("replacement-secret", rasGate.ApiKey);
         var storedApiKey = await ReadStoredApiKeyAsync(db, rasGate.Id);
         Assert.NotEqual(rasGate.ApiKey, storedApiKey);

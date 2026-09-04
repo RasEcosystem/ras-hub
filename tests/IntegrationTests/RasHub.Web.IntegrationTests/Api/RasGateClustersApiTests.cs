@@ -470,6 +470,7 @@ public sealed partial class RasGateClustersApiTests : IClassFixture<RasHubWebApp
                 "https://replacement.example.test",
                 9443,
                 rasGate.IsActive,
+                rasGate.ConfigurationRevision,
                 "replacement-secret"),
             TestContext.Current.CancellationToken);
 
@@ -682,6 +683,7 @@ public sealed partial class RasGateClustersApiTests : IClassFixture<RasHubWebApp
                 "https://replacement.example.test",
                 9443,
                 true,
+                1,
                 "replacement-secret"),
             cancellationToken);
 

@@ -303,6 +303,7 @@ public sealed class RasGateQueriesTests : IDisposable
             "https://gate.example.test",
             443,
             true,
+            1,
             "Remote Gate",
             "1.2.3",
             rasGateObservedAt,

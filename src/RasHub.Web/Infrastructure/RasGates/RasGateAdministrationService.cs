@@ -80,6 +80,7 @@ public sealed class RasGateAdministrationService(
 
     public async Task<RasGateAdministrationResult> UpdateAsync(
         Guid id,
+        long expectedConfigurationRevision,
         RasGateEditorValues values,
         CancellationToken cancellationToken)
     {
@@ -99,6 +100,7 @@ public sealed class RasGateAdministrationService(
                     values.Url,
                     values.Port,
                     values.IsActive,
+                    expectedConfigurationRevision,
                     string.IsNullOrWhiteSpace(values.ApiKey)
                         ? null
                         : values.ApiKey),
@@ -108,6 +110,11 @@ public sealed class RasGateAdministrationService(
         {
             return RasGateAdministrationResult.Failure(
                 "A new API key is required for this endpoint.");
+        }
+        catch (RasGateRevisionConflictException)
+        {
+            return RasGateAdministrationResult.Failure(
+                "The RasGate changed concurrently. Reload the list and try again.");
         }
         catch (DbUpdateConcurrencyException)
         {

@@ -239,6 +239,7 @@ public sealed partial class RasGatesApiTests
                     "https://replacement.example.test",
                     9443,
                     rasGate.IsActive,
+                    rasGate.ConfigurationRevision,
                     "replacement-secret"),
                 TestContext.Current.CancellationToken);
             Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
