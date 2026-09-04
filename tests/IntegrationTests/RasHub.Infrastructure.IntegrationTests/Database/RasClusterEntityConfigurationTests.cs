@@ -14,12 +14,13 @@ public sealed class RasClusterEntityConfigurationTests : IDisposable
     [Fact]
     public async Task Cluster_round_trips_all_synchronized_fields()
     {
-        var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
 
         await using (var db = _database.CreateContext())
         {
-            db.RasGates.Add(rasGate);
+            db.AddRange(gate, endpoint);
             db.RasClusters.Add(cluster);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
@@ -29,7 +30,7 @@ public sealed class RasClusterEntityConfigurationTests : IDisposable
             item => item.Id == cluster.Id,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(rasGate.Id, stored.RasGateId);
+        Assert.Equal(endpoint.Id, stored.RasEndpointId);
         Assert.Equal(cluster.ExternalId, stored.ExternalId);
         Assert.Equal(cluster.Name, stored.Name);
         Assert.Equal(cluster.Host, stored.Host);
@@ -60,16 +61,17 @@ public sealed class RasClusterEntityConfigurationTests : IDisposable
     }
 
     [Fact]
-    public async Task Same_external_id_is_unique_within_a_RasGate()
+    public async Task Same_external_id_is_unique_within_a_RasEndpoint()
     {
-        var rasGate = RasGateTestData.Create();
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
         var externalId = Guid.NewGuid();
 
         await using var db = _database.CreateContext();
-        db.RasGates.Add(rasGate);
+        db.AddRange(gate, endpoint);
         db.RasClusters.AddRange(
-            RasClusterTestData.Create(rasGate.Id, externalId),
-            RasClusterTestData.Create(rasGate.Id, externalId));
+            RasClusterTestData.Create(endpoint.Id, externalId),
+            RasClusterTestData.Create(endpoint.Id, externalId));
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             db.SaveChangesAsync(TestContext.Current.CancellationToken));
@@ -80,11 +82,12 @@ public sealed class RasClusterEntityConfigurationTests : IDisposable
     [InlineData(65_536)]
     public async Task Database_rejects_ports_outside_the_valid_range(int port)
     {
-        var rasGate = RasGateTestData.Create();
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
 
         await using var db = _database.CreateContext();
-        db.RasGates.Add(rasGate);
-        db.RasClusters.Add(RasClusterTestData.Create(rasGate.Id, port: port));
+        db.AddRange(gate, endpoint);
+        db.RasClusters.Add(RasClusterTestData.Create(endpoint.Id, port: port));
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             db.SaveChangesAsync(TestContext.Current.CancellationToken));

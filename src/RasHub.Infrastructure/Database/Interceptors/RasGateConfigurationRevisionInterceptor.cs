@@ -39,6 +39,7 @@ public sealed class RasGateConfigurationRevisionInterceptor
                 continue;
 
             var remoteIdentityChanged = RemoteIdentityChanged(entry);
+            var nameChanged = Changed(entry.Property(item => item.Name));
             var activityChanged = Changed(entry.Property(item => item.IsActive));
             var deletionChanged = Changed(entry.Property(item => item.IsDeleted));
 
@@ -47,7 +48,7 @@ public sealed class RasGateConfigurationRevisionInterceptor
                 deletionChanged)
                 ClearRemoteObservations(entry.Entity);
 
-            if (!remoteIdentityChanged && !activityChanged && !deletionChanged)
+            if (!remoteIdentityChanged && !nameChanged && !activityChanged && !deletionChanged)
                 continue;
 
             var revision = entry.Property(item => item.ConfigurationRevision);

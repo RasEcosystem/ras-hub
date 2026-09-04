@@ -45,6 +45,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(request.Url, data.GetProperty("url").GetString());
         Assert.Equal(request.Port, data.GetProperty("port").GetInt32());
         Assert.True(data.GetProperty("isActive").GetBoolean());
+        Assert.Equal(1, data.GetProperty("configurationRevision").GetInt64());
         Assert.False(data.TryGetProperty("apiKey", out _));
         Assert.EndsWith($"{RasGatesPath}/{id}", response.Headers.Location?.AbsoluteUri);
         AssertTraceId(response);
@@ -126,6 +127,9 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(rasGate.Id, data.GetProperty("id").GetGuid());
         Assert.Equal(rasGate.Name, data.GetProperty("name").GetString());
         Assert.True(data.GetProperty("isActive").GetBoolean());
+        Assert.Equal(
+            rasGate.ConfigurationRevision,
+            data.GetProperty("configurationRevision").GetInt64());
         Assert.False(data.TryGetProperty("apiKey", out _));
     }
 
@@ -155,7 +159,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "Updated gate",
             rasGate.Url,
             rasGate.Port,
-            rasGate.IsActive);
+            rasGate.IsActive,
+            rasGate.ConfigurationRevision);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -172,6 +177,45 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(request.Name, stored.Name);
         Assert.Equal(request.Url, stored.Url);
         Assert.Equal(request.Port, stored.Port);
+        Assert.Equal(2, stored.ConfigurationRevision);
+    }
+
+    [Fact]
+    public async Task Update_with_stale_configuration_revision_returns_conflict()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        using var client = _factory.CreateAuthenticatedClient();
+        var originalRevision = rasGate.ConfigurationRevision;
+
+        using var firstResponse = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            new UpdateRasGateRequest(
+                "First update",
+                rasGate.Url,
+                rasGate.Port,
+                rasGate.IsActive,
+                originalRevision),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+
+        using var staleResponse = await client.PutAsJsonAsync(
+            $"{RasGatesPath}/{rasGate.Id}",
+            new UpdateRasGateRequest(
+                "Stale update",
+                rasGate.Url,
+                rasGate.Port,
+                rasGate.IsActive,
+                originalRevision),
+            TestContext.Current.CancellationToken);
+        var staleJson = await ReadJsonAsync(staleResponse);
+
+        Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+        Assert.Equal("ras_gate_concurrency_conflict", GetErrorCode(staleJson));
+
+        var stored = await _factory.FindRasGateAsync(rasGate.Id);
+        Assert.NotNull(stored);
+        Assert.Equal("First update", stored.Name);
+        Assert.Equal(originalRevision + 1, stored.ConfigurationRevision);
     }
 
     [Fact]
@@ -183,7 +227,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "Updated gate",
             "https://attacker.example.test",
             9443,
-            rasGate.IsActive);
+            rasGate.IsActive,
+            rasGate.ConfigurationRevision);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -212,6 +257,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "https://updated.example.test",
             9443,
             rasGate.IsActive,
+            rasGate.ConfigurationRevision,
             "new-secret");
 
         using var response = await client.PutAsJsonAsync(
@@ -234,7 +280,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             rasGate.Name,
             rasGate.Url,
             rasGate.Port,
-            false);
+            false,
+            rasGate.ConfigurationRevision);
 
         using var deactivateResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
@@ -245,12 +292,17 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(HttpStatusCode.OK, deactivateResponse.StatusCode);
         Assert.False(deactivateJson.GetProperty("data").GetProperty("isActive").GetBoolean());
         Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
+        var inactiveRevision = deactivateJson
+            .GetProperty("data")
+            .GetProperty("configurationRevision")
+            .GetInt64();
 
         var updateWhileInactive = new UpdateRasGateRequest(
             "Renamed gate",
             rasGate.Url,
             rasGate.Port,
-            false);
+            false,
+            inactiveRevision);
         using var preserveResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
             updateWhileInactive,
@@ -259,7 +311,12 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(HttpStatusCode.OK, preserveResponse.StatusCode);
         Assert.False((await _factory.FindRasGateAsync(rasGate.Id))!.IsActive);
 
-        var reactivate = updateWhileInactive with { IsActive = true };
+        var preserveJson = await ReadJsonAsync(preserveResponse);
+        var renamedRevision = preserveJson
+            .GetProperty("data")
+            .GetProperty("configurationRevision")
+            .GetInt64();
+        var reactivate = updateWhileInactive with { IsActive = true, ExpectedConfigurationRevision = renamedRevision };
         using var reactivateResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
             reactivate,
@@ -298,6 +355,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "https://updated.example.test",
             9443,
             rasGate.IsActive,
+            rasGate.ConfigurationRevision,
             string.Empty);
 
         using var response = await client.PutAsJsonAsync(
@@ -317,7 +375,8 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             "Updated gate",
             "https://updated.example.test",
             9443,
-            true);
+            true,
+            1);
 
         using var response = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{Guid.NewGuid()}",

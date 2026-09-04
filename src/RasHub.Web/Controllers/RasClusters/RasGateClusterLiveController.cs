@@ -8,6 +8,7 @@ using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Api.RasEndpoints;
 using RasHub.Web.Api.RasGates;
 using RasHub.Web.Authentication;
 using RasHub.Web.Infrastructure.RasGates;
@@ -16,20 +17,20 @@ namespace RasHub.Web.Controllers.RasClusters;
 
 [ApiController]
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
-[Route("api/v1/ras-gates/{rasGateId:guid}/clusters")]
+[Route("api/v1/ras-endpoints/{rasEndpointId:guid}/clusters")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("Clusters")]
 [ControllerDescription("Clusters",
-    "Manage 1C:Enterprise clusters, inspect their persisted shadow, and refresh it from live RasGate data.")]
+    "Manage 1C:Enterprise clusters owned by a RAS endpoint, inspect their persisted shadow, and refresh it through the assigned RasGate.")]
 public sealed class RasGateClusterLiveController(
-    ActiveRasGateLookup rasGateLookup,
+    ActiveRasEndpointLookup rasEndpointLookup,
     RasClusterQueries clusterQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
 {
     [HttpPost("live", Name = "GetLivePagedClusters")]
     [EndpointSummary("Get paged live clusters")]
     [EndpointDescription(
-        "Fetches the complete live cluster snapshot from RasGate, atomically refreshes the persisted shadow, and returns one page from the updated shadow. Pagination limits only the HTTP response; RasGate is queried for the complete snapshot.")]
+        "Fetches the complete live cluster snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns one page from the updated shadow. Pagination limits only the HTTP response.")]
     [ProducesResponseType<ApiResponse<PageResult<ClusterModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -40,22 +41,22 @@ public sealed class RasGateClusterLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<PageResult<ClusterModel>>> GetLivePaged(
-        Guid rasGateId,
+        Guid rasEndpointId,
         [FromQuery] PageRequest request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<PageResult<ClusterModel>>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<PageResult<ClusterModel>>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             cancellationToken);
 
         if (execution.WasRejected)
@@ -70,7 +71,7 @@ public sealed class RasGateClusterLiveController(
                     taskResult);
 
         var clusters = await clusterQueries.GetPagedAsync(
-            rasGateId,
+            rasEndpointId,
             request,
             cancellationToken);
 
@@ -80,7 +81,7 @@ public sealed class RasGateClusterLiveController(
     [HttpPost("live/all", Name = "GetLiveAllClusters")]
     [EndpointSummary("Get all live clusters")]
     [EndpointDescription(
-        "Fetches the complete live cluster snapshot from RasGate, atomically refreshes the persisted shadow, and returns the complete updated shadow without pagination.")]
+        "Fetches the complete live cluster snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns the complete updated shadow without pagination.")]
     [ProducesResponseType<ApiResponse<IReadOnlyList<ClusterModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -90,21 +91,21 @@ public sealed class RasGateClusterLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<IReadOnlyList<ClusterModel>>> GetLiveAll(
-        Guid rasGateId,
+        Guid rasEndpointId,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<IReadOnlyList<ClusterModel>>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<IReadOnlyList<ClusterModel>>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             cancellationToken);
 
         if (execution.WasRejected)
@@ -119,7 +120,7 @@ public sealed class RasGateClusterLiveController(
                     taskResult);
 
         var clusters = await clusterQueries.GetAllAsync(
-            rasGateId,
+            rasEndpointId,
             cancellationToken);
 
         return ApiResponse<IReadOnlyList<ClusterModel>>.Ok(clusters);
@@ -128,7 +129,7 @@ public sealed class RasGateClusterLiveController(
     [HttpPost("live/{clusterId:guid}", Name = "GetLiveCluster")]
     [EndpointSummary("Get live cluster")]
     [EndpointDescription(
-        "Fetches one live cluster from RasGate, refreshes that entry in the persisted shadow without changing siblings, and returns the updated shadow entry.")]
+        "Fetches one live cluster from the RAS endpoint through its assigned RasGate, refreshes that entry in the persisted shadow without changing siblings, and returns the updated shadow entry.")]
     [ProducesResponseType<ApiResponse<ClusterModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status404NotFound,
@@ -137,23 +138,23 @@ public sealed class RasGateClusterLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ClusterModel>> GetLiveOne(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<ClusterModel>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses.ForUnavailableEndpoint<ClusterModel>(
                 state,
-                rasGateId);
+                rasEndpointId);
 
         var execution = await taskRunner.RunAsync(
-            new SynchronizeClusterTask(rasGateId, clusterId),
+            new SynchronizeClusterTask(rasEndpointId, clusterId),
             RasGateTaskOptions.InteractiveClusterSynchronization(
-                rasGateId,
+                rasEndpointId,
                 clusterId),
             cancellationToken);
 
@@ -167,7 +168,7 @@ public sealed class RasGateClusterLiveController(
                 taskResult);
 
         var cluster = await clusterQueries.GetByExternalIdAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             cancellationToken);
 
@@ -179,7 +180,7 @@ public sealed class RasGateClusterLiveController(
     [HttpPost("shadow/refresh", Name = "RefreshClusterShadow")]
     [EndpointSummary("Refresh cluster shadow")]
     [EndpointDescription(
-        "Fetches the complete live cluster snapshot from RasGate, atomically refreshes the persisted shadow, and returns refresh metadata without returning the collection.")]
+        "Fetches the complete live cluster snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns refresh metadata without returning the collection.")]
     [ProducesResponseType<ApiResponse<ShadowRefreshResponse>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -190,21 +191,21 @@ public sealed class RasGateClusterLiveController(
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ShadowRefreshResponse>>
         RefreshShadow(
-            Guid rasGateId,
+            Guid rasEndpointId,
             CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<ShadowRefreshResponse>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<ShadowRefreshResponse>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             cancellationToken);
 
         if (execution.WasRejected)
@@ -226,14 +227,15 @@ public sealed class RasGateClusterLiveController(
 
     private Task<InteractiveTaskExecution<CollectionSynchronizationResult>>
         RefreshShadowAsync(
-            Guid rasGateId,
+            Guid rasEndpointId,
             CancellationToken cancellationToken)
     {
         return taskRunner.RunWithResultAsync<
             SynchronizeClustersTask,
             CollectionSynchronizationResult>(
-            new SynchronizeClustersTask(rasGateId),
-            RasGateTaskOptions.InteractiveClustersSynchronization(rasGateId),
+            new SynchronizeClustersTask(rasEndpointId),
+            RasGateTaskOptions.InteractiveClustersSynchronization(
+                rasEndpointId),
             cancellationToken);
     }
 }

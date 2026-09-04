@@ -75,13 +75,15 @@ public static class BackgroundTaskServiceCollectionExtensions
         services.AddSingleton<BackgroundTaskMetrics>();
         services.AddSingleton<BackgroundTaskRescheduler>();
         services.AddSingleton<BackgroundTaskConcurrencyGate>();
-        services.AddSingleton<BackgroundTaskWorker>();
 
         services.AddSingleton<BackgroundTaskEngine>();
         services.AddSingleton<IBackgroundTaskEngine>(serviceProvider =>
             serviceProvider.GetRequiredService<BackgroundTaskEngine>());
         services.AddSingleton<IBackgroundTaskEngineLifecycle>(serviceProvider =>
             serviceProvider.GetRequiredService<BackgroundTaskEngine>());
+
+        services.AddSingleton<BackgroundTaskAttemptRunner>();
+        services.AddSingleton<BackgroundTaskWorker>();
 
         services.AddSingleton<PeriodicBackgroundTaskScheduler>();
         services.AddSingleton<IBackgroundTaskScheduler>(serviceProvider =>

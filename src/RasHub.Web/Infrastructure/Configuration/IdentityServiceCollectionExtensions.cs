@@ -41,6 +41,9 @@ internal static class IdentityServiceCollectionExtensions
             options.AddPolicy(
                 AppPolicies.ManageRasGates,
                 policy => policy.RequireRole(AppRoles.Admin));
+            options.AddPolicy(
+                AppPolicies.ManageRasEndpoints,
+                policy => policy.RequireRole(AppRoles.Admin));
         });
 
         services.AddCascadingAuthenticationState();
@@ -104,6 +107,7 @@ internal static class IdentityServiceCollectionExtensions
             };
         });
         services.AddScoped<CurrentUserAccessor>();
+        services.AddScoped<AdministrationAuthorizationGuard>();
         services.AddScoped<UserAdministrationService>();
         services.AddScoped<UserApiKeyService>();
 

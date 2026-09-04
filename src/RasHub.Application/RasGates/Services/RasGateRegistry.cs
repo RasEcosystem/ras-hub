@@ -8,7 +8,6 @@ namespace RasHub.Application.RasGates.Services;
 
 public sealed class RasGateRegistry(
     IRepository<RasGate> repository,
-    IRasClusterSnapshotStore snapshotStore,
     IRasGateEndpointFactory endpointFactory,
     IUnitOfWork unitOfWork)
 {
@@ -48,6 +47,9 @@ public sealed class RasGateRegistry(
         if (rasGate is null)
             return null;
 
+        if (rasGate.ConfigurationRevision != update.ExpectedConfigurationRevision)
+            throw new RasGateRevisionConflictException(rasGateId);
+
         var name = update.Name.Trim();
         var url = update.Url.Trim();
         var endpointChanged =
@@ -58,14 +60,6 @@ public sealed class RasGateRegistry(
             throw new RasGateApiKeyRequiredException();
 
         _ = endpointFactory.CreateBaseAddress(url, update.Port);
-
-        var apiKeyChanged = update.ApiKey is not null &&
-                            !string.Equals(
-                                rasGate.ApiKey,
-                                update.ApiKey,
-                                StringComparison.Ordinal);
-        var remoteIdentityChanged = endpointChanged || apiKeyChanged;
-        var deactivated = !update.IsActive && rasGate.IsActive;
 
         rasGate.Name = name;
         rasGate.Url = url;
@@ -82,8 +76,6 @@ public sealed class RasGateRegistry(
                 rasGate.LastSeenAt = null;
         }
 
-        if (remoteIdentityChanged || deactivated) await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
-
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return rasGate;
     }
@@ -99,26 +91,30 @@ public sealed class RasGateRegistry(
         if (rasGate is null)
             return null;
 
-        await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
         repository.Remove(rasGate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return rasGate;
     }
 
-    public async Task RestoreAsync(
-        RasGate rasGate,
+    public async Task<RasGate?> RestoreAsync(
+        Guid rasGateId,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(rasGate);
+        var rasGate = await repository.GetByIdIncludingDeletedAsync(
+            rasGateId,
+            cancellationToken);
+
+        if (rasGate is null)
+            return null;
 
         if (!rasGate.IsDeleted)
-            throw new InvalidOperationException(
-                $"RasGate '{rasGate.Id}' is not deleted.");
+            throw new RasGateNotDeletedException(rasGateId);
 
-        await snapshotStore.InvalidateAsync(rasGate.Id, cancellationToken);
         rasGate.IsDeleted = false;
         rasGate.DeletedAt = null;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return rasGate;
     }
 }

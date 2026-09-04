@@ -291,7 +291,11 @@
 
         await ExecuteAsync(
             item.Id,
-            cancellationToken => AdministrationService.UpdateAsync(item.Id, values, cancellationToken),
+            cancellationToken => AdministrationService.UpdateAsync(
+                item.Id,
+                item.ConfigurationRevision,
+                values,
+                cancellationToken),
             $"{item.Name} was updated.",
             "Unable to update the RasGate.");
     }
@@ -307,7 +311,11 @@
 
         return ExecuteAsync(
             item.Id,
-            cancellationToken => AdministrationService.UpdateAsync(item.Id, values, cancellationToken),
+            cancellationToken => AdministrationService.UpdateAsync(
+                item.Id,
+                item.ConfigurationRevision,
+                values,
+                cancellationToken),
             isActive ? $"{item.Name} was activated." : $"{item.Name} was deactivated.",
             "Unable to change the RasGate activity.");
     }

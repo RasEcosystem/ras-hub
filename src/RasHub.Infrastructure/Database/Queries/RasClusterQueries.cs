@@ -44,13 +44,13 @@ public sealed class RasClusterQueries(RasHubDbContext db)
         ModelProjection.Compile();
 
     public async Task<PageResult<ClusterModel>> GetPagedAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         PageRequest request,
         CancellationToken cancellationToken)
     {
         var query = db.RasClusters
             .AsNoTracking()
-            .Where(cluster => cluster.RasGateId == rasGateId);
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(cluster => cluster.Name)
@@ -61,20 +61,17 @@ public sealed class RasClusterQueries(RasHubDbContext db)
 
         return new PageResult<ClusterModel>
         {
-            Items = items,
-            TotalCount = totalCount,
-            Page = request.Page,
-            PageSize = request.PageSize
+            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
         };
     }
 
     public async Task<IReadOnlyList<ClusterModel>> GetAllAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         CancellationToken cancellationToken)
     {
         return await db.RasClusters
             .AsNoTracking()
-            .Where(cluster => cluster.RasGateId == rasGateId)
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId)
             .OrderBy(cluster => cluster.Name)
             .ThenBy(cluster => cluster.ExternalId)
             .Select(ModelProjection)
@@ -112,13 +109,13 @@ public sealed class RasClusterQueries(RasHubDbContext db)
     }
 
     public Task<ClusterModel?> GetByExternalIdAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         CancellationToken cancellationToken)
     {
         return db.RasClusters
             .AsNoTracking()
-            .Where(cluster => cluster.RasGateId == rasGateId &&
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId &&
                               cluster.ExternalId == clusterId)
             .Select(ModelProjection)
             .SingleOrDefaultAsync(cancellationToken);
@@ -128,8 +125,9 @@ public sealed class RasClusterQueries(RasHubDbContext db)
         IQueryable<RasCluster> query,
         SearchClustersRequest search)
     {
-        if (search.RasGateId is { } rasGateId)
-            query = query.Where(cluster => cluster.RasGateId == rasGateId);
+        if (search.RasEndpointId is { } rasEndpointId)
+            query = query.Where(cluster =>
+                cluster.RasEndpointId == rasEndpointId);
 
         var term = search.Query.Trim().ToUpperInvariant();
         var fields = search.Fields is { Length: > 0 }
@@ -151,13 +149,13 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             search);
 
         return from cluster in clusters
-               join rasGate in db.RasGates.AsNoTracking()
-                   on cluster.RasGateId equals rasGate.Id
-               orderby cluster.Name, rasGate.Id, cluster.ExternalId
-               select new ClusterSearchRow(
-                   rasGate.Id,
-                   rasGate.Name,
-                   cluster);
+            join endpoint in db.RasEndpoints.AsNoTracking()
+                on cluster.RasEndpointId equals endpoint.Id
+            orderby cluster.Name, endpoint.Id, cluster.ExternalId
+            select new ClusterSearchRow(
+                endpoint.Id,
+                endpoint.Name,
+                cluster);
     }
 
     private static ClusterSearchResultModel ToSearchResult(
@@ -165,14 +163,14 @@ public sealed class RasClusterQueries(RasHubDbContext db)
     {
         return new ClusterSearchResultModel
         {
-            RasGateId = row.RasGateId,
-            RasGateName = row.RasGateName,
+            RasEndpointId = row.RasEndpointId,
+            RasEndpointName = row.RasEndpointName,
             Cluster = ModelMapper(row.Cluster)
         };
     }
 
     private sealed record ClusterSearchRow(
-        Guid RasGateId,
-        string RasGateName,
+        Guid RasEndpointId,
+        string RasEndpointName,
         RasCluster Cluster);
 }

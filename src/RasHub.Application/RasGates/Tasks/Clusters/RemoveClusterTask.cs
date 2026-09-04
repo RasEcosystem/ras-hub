@@ -3,13 +3,13 @@ using RasHub.BackgroundTasks.Abstractions;
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed class RemoveClusterTask(
-    Guid rasGateId,
+    Guid rasEndpointId,
     Guid clusterId,
     string? clusterUser,
     string? clusterPassword)
     : IBackgroundTask
 {
-    public Guid RasGateId { get; } = rasGateId;
+    public Guid RasEndpointId { get; } = rasEndpointId;
 
     public Guid ClusterId { get; } = clusterId;
 

@@ -58,9 +58,7 @@ public sealed partial class RasGatesApiTests
                 .GetRequiredService<UserManager<ApplicationUser>>();
             var result = await userManager.CreateAsync(new ApplicationUser
             {
-                UserName = email,
-                Email = email,
-                ApiKey = apiKey
+                UserName = email, Email = email, ApiKey = apiKey
             });
             Assert.True(result.Succeeded);
         }
@@ -98,9 +96,7 @@ public sealed partial class RasGatesApiTests
                 .GetRequiredService<UserManager<ApplicationUser>>();
             var result = await userManager.CreateAsync(new ApplicationUser
             {
-                UserName = email,
-                Email = email,
-                ApiKey = apiKey
+                UserName = email, Email = email, ApiKey = apiKey
             });
             Assert.True(result.Succeeded);
         }
@@ -111,7 +107,7 @@ public sealed partial class RasGatesApiTests
             apiKey);
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}/remove",
+            $"/api/v1/ras-endpoints/{Guid.NewGuid()}/clusters/{Guid.NewGuid()}/remove",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -136,9 +132,7 @@ public sealed partial class RasGatesApiTests
                 .GetRequiredService<UserManager<ApplicationUser>>();
             var result = await userManager.CreateAsync(new ApplicationUser
             {
-                UserName = email,
-                Email = email,
-                ApiKey = apiKey
+                UserName = email, Email = email, ApiKey = apiKey
             });
             Assert.True(result.Succeeded);
         }
@@ -147,8 +141,8 @@ public sealed partial class RasGatesApiTests
         client.DefaultRequestHeaders.Add(
             ApiKeyAuthenticationDefaults.HeaderName,
             apiKey);
-        var gateId = Guid.NewGuid();
-        var path = $"/api/v1/ras-gates/{gateId}/clusters";
+        var endpointId = Guid.NewGuid();
+        var path = $"/api/v1/ras-endpoints/{endpointId}/clusters";
         object body;
 
         if (method == "PATCH")

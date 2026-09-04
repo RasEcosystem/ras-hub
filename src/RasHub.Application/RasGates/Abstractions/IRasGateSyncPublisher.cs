@@ -10,49 +10,4 @@ public interface IRasGateSyncPublisher
         RasGateStatus status,
         DateTime observedAt,
         CancellationToken cancellationToken);
-
-    Task<bool> TryPublishClustersAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        IReadOnlyList<RasClusterSnapshot> snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
-
-    Task<bool> TryPublishClusterAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        RasClusterSnapshot snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
-
-    Task<bool> TryPublishInfobasesAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        IReadOnlyList<RasInfobaseSnapshot> snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
-
-    Task<bool> TryPublishInfobaseAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        RasInfobaseSnapshot snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
-
-    Task<bool> TryRemoveClusterAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
-
-    Task<bool> TryRemoveInfobaseAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        Guid infobaseId,
-        DateTime observedAt,
-        CancellationToken cancellationToken);
 }

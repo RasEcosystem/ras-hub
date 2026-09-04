@@ -1,15 +1,15 @@
-using RasHub.Application.Interfaces;
+using RasHub.Application.RasEndpoints.Exceptions;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed class SynchronizeClusterTaskHandler(
-    IRepository<RasGate> rasGateRepository,
-    IRasGateSyncPublisher publisher,
+    RasEndpointExecutionTargetResolver targetResolver,
+    IRasEndpointSyncPublisher publisher,
     IRasClusterGateway clusterGateway,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<SynchronizeClusterTask>
@@ -18,24 +18,17 @@ public sealed class SynchronizeClusterTaskHandler(
         SynchronizeClusterTask task,
         CancellationToken cancellationToken)
     {
-        var rasGate = await rasGateRepository.GetByIdAsync(
-            task.RasGateId,
+        var target = await targetResolver.ResolveAsync(
+            task.RasEndpointId,
             cancellationToken);
-
-        if (rasGate is null)
-            throw new RasGateNotFoundException(task.RasGateId);
-
-        if (!rasGate.IsActive)
-            throw new RasGateInactiveException(rasGate.Id);
-
-        var configurationRevision = rasGate.ConfigurationRevision;
+        var guard = target.CaptureGuard();
         var capabilities = await clusterGateway.GetCapabilitiesAsync(
-            rasGate,
+            target.Gate,
             cancellationToken);
 
         if (!capabilities.Supports("clusters", "info"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "info");
 
@@ -44,7 +37,7 @@ public sealed class SynchronizeClusterTaskHandler(
         try
         {
             snapshot = await clusterGateway.GetClusterAsync(
-                rasGate,
+                target,
                 task.ClusterId,
                 cancellationToken);
         }
@@ -53,14 +46,14 @@ public sealed class SynchronizeClusterTaskHandler(
                   exception.ExternalId == task.ClusterId)
         {
             var removed = await publisher.TryRemoveClusterAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 task.ClusterId,
                 timeProvider.GetUtcNow().UtcDateTime,
                 cancellationToken);
 
             if (!removed)
-                throw new RasGateConfigurationChangedException(rasGate.Id);
+                throw new RasEndpointConfigurationChangedException(
+                    task.RasEndpointId);
 
             throw;
         }
@@ -68,11 +61,11 @@ public sealed class SynchronizeClusterTaskHandler(
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!await publisher.TryPublishClusterAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 snapshot,
                 observedAt,
                 cancellationToken))
-            throw new RasGateConfigurationChangedException(rasGate.Id);
+            throw new RasEndpointConfigurationChangedException(
+                task.RasEndpointId);
     }
 }

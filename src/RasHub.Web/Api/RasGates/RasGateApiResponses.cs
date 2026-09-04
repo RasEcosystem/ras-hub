@@ -1,8 +1,10 @@
 using System.Net;
+using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Web.Api.RasEndpoints;
 
 namespace RasHub.Web.Api.RasGates;
 
@@ -103,6 +105,20 @@ internal static partial class RasGateApiResponses
     private static ApiResponse<T>? TryMapLocalStateFailure<T>(
         BackgroundTaskResult result)
     {
+        if (result.Exception is RasEndpointNotFoundException endpointNotFound)
+            return RasEndpointApiResponses.EndpointNotFound<T>(
+                endpointNotFound.RasEndpointId);
+
+        if (result.Exception is RasEndpointInactiveException endpointInactive)
+            return RasEndpointApiResponses.EndpointInactive<T>(
+                endpointInactive.RasEndpointId);
+
+        if (result.Exception is
+            RasEndpointGateUnavailableException gateUnavailable)
+            return RasEndpointApiResponses.GateUnavailable<T>(
+                gateUnavailable.RasEndpointId,
+                gateUnavailable.RasGateId);
+
         if (result.Exception is RasGateNotFoundException gateNotFound)
             return GateNotFound<T>(gateNotFound.RasGateId);
 

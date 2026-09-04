@@ -86,7 +86,8 @@ public sealed partial class RasGateGatewayTests
                 "cluster",
                 "update",
                 $"--cluster={clusterId:D}",
-                "--name=Updated cluster"
+                "--name=Updated cluster",
+                "ras.example.test:1545"
             ],
             requestDocument.RootElement
                 .GetProperty("arguments")

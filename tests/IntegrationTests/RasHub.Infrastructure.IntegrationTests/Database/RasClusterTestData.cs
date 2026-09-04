@@ -6,14 +6,14 @@ namespace RasHub.Infrastructure.IntegrationTests.Database;
 internal static class RasClusterTestData
 {
     public static RasCluster Create(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid? externalId = null,
         int port = 1541,
         string name = "Main cluster")
     {
         return new RasCluster
         {
-            RasGateId = rasGateId,
+            RasEndpointId = rasEndpointId,
             ExternalId = externalId ?? Guid.NewGuid(),
             Name = name,
             Host = "cluster.example.test",

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using RasHub.Contracts.Common;
 using RasHub.Web.Api.Filters;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Api.RasEndpoints;
 using RasHub.Web.Api.RasGates;
 
 namespace RasHub.Web.Api;
@@ -12,6 +13,7 @@ internal static class ApiServiceCollectionExtensions
     public static IServiceCollection AddRasHubApi(this IServiceCollection services)
     {
         services.AddScoped<ActiveRasGateLookup>();
+        services.AddScoped<ActiveRasEndpointLookup>();
         services.AddScoped<InteractiveTaskRunner>();
 
         services.ConfigureHttpJsonOptions(options =>

@@ -17,7 +17,7 @@ namespace RasHub.Infrastructure.Database.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -110,9 +110,9 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
-                    b.Property<Guid>("RasGateId")
+                    b.Property<Guid>("RasEndpointId")
                         .HasColumnType("uuid")
-                        .HasColumnName("ras_gate_id");
+                        .HasColumnName("ras_endpoint_id");
 
                     b.Property<string>("RestartSchedule")
                         .HasColumnType("text")
@@ -133,13 +133,88 @@ namespace RasHub.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_ras_clusters");
 
-                    b.HasIndex("RasGateId", "ExternalId")
+                    b.HasIndex("RasEndpointId", "ExternalId")
                         .IsUnique()
-                        .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
+                        .HasDatabaseName("ux_ras_clusters_ras_endpoint_id_external_id");
 
                     b.ToTable("ras_clusters", null, t =>
                         {
                             t.HasCheckConstraint("ck_ras_clusters_port", "port BETWEEN 1 AND 65535");
+                        });
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasEndpoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ConfigurationRevision")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("configuration_revision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("host");
+
+                    b.Property<bool>("IsActive")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer")
+                        .HasColumnName("port");
+
+                    b.Property<Guid>("RasGateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ras_gate_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ras_endpoints");
+
+                    b.HasIndex("RasGateId")
+                        .HasDatabaseName("ix_ras_endpoints_ras_gate_id");
+
+                    b.ToTable("ras_endpoints", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ras_endpoints_port", "port BETWEEN 1 AND 65535");
                         });
                 });
 
@@ -321,12 +396,22 @@ namespace RasHub.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("RasHub.Domain.RasCluster", b =>
                 {
+                    b.HasOne("RasHub.Domain.RasEndpoint", null)
+                        .WithMany()
+                        .HasForeignKey("RasEndpointId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_ras_clusters_ras_endpoints_ras_endpoint_id");
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasEndpoint", b =>
+                {
                     b.HasOne("RasHub.Domain.RasGate", null)
                         .WithMany()
                         .HasForeignKey("RasGateId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.ClientNoAction)
                         .IsRequired()
-                        .HasConstraintName("fk_ras_clusters_ras_gates_ras_gate_id");
+                        .HasConstraintName("fk_ras_endpoints_ras_gates_ras_gate_id");
                 });
 
             modelBuilder.Entity("RasHub.Domain.RasInfobase", b =>

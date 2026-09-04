@@ -11,6 +11,10 @@ namespace RasHub.Infrastructure.IntegrationTests.Database;
 internal sealed class SqliteRasHubDatabase : IDisposable
 {
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
+
+    private readonly RasEndpointConfigurationRevisionInterceptor
+        _endpointRevisionInterceptor = new();
+
     private readonly AuditSoftDeleteInterceptor _interceptor;
     private readonly RasGateApiKeyProtectionInterceptor _keyProtectionInterceptor;
 
@@ -47,6 +51,7 @@ internal sealed class SqliteRasHubDatabase : IDisposable
             .AddInterceptors(
                 _interceptor,
                 _revisionInterceptor,
+                _endpointRevisionInterceptor,
                 _keyProtectionInterceptor)
             .Options;
 

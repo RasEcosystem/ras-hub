@@ -6,33 +6,9 @@
 <MudDialogProvider/>
 <MudSnackbarProvider/>
 
-<MudLayout>
-
-    <MudAppBar Elevation="1">
-
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Spacing="2">
-
-            <MudIcon Icon="@Icons.Material.Filled.AccountCircle"
-                     Size="Size.Large"
-                     Color="Color.Primary"/>
-
-            <MudText Typo="Typo.h5">
-                Account
-            </MudText>
-
-        </MudStack>
-
-    </MudAppBar>
-
-    <MudMainContent Class="pt-16">
-        <AppPageShell Width="AppPageWidth.Standard">
-            @Body
-        </AppPageShell>
-    </MudMainContent>
-
-</MudLayout>
+<AppPageShell Width="AppPageWidth.Standard">
+    @Body
+</AppPageShell>
 
 <div id="blazor-error-ui"
      data-nosnippet>

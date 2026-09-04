@@ -8,9 +8,10 @@ documents. All code paths below are relative to the repository root.
 
 | Project or area | Owns | Start reading |
 |---|---|---|
-| `src/RasHub.Domain` | Hub-owned persisted entities and entity abstractions | `RasGate`, `RasCluster`, `RasInfobase` |
+| `src/RasHub.Domain` | Hub-owned persisted entities and entity abstractions | `RasGate`, `RasEndpoint`, `RasCluster`, `RasInfobase` |
+| `src/RasHub.Application/RasEndpoints` | Endpoint lifecycle, Gate assignment, address validation, target resolution, and execution guards | `Services`, `Models`, `Exceptions` |
 | `src/RasHub.Application/RasGates` | Resource ports, normalized remote models, task messages and handlers, safe failure types | `Abstractions`, `Models`, `Tasks` |
-| `src/RasHub.Infrastructure/Database` | `RasHubDbContext`, repositories, read projections, snapshot stores, guarded publisher, EF interceptors and migrations | `RasGateSyncPublisher`, `Queries`, `EntityTypeConfigurations` |
+| `src/RasHub.Infrastructure/Database` | `RasHubDbContext`, repositories, read projections, snapshot stores, guarded publishers, EF interceptors and migrations | `RasEndpointSyncPublisher`, `RasGateSyncPublisher`, `Queries`, `EntityTypeConfigurations` |
 | `src/RasHub.Infrastructure/RasGates` | Endpoint validation, transport/session, resource gateways, RAC adapters and parsers | [RAC compatibility](rac-compatibility.md), then `Client/RasGateSession.cs`, the matching gateway and `Rac/<Resource>` |
 | `src/RasHub.BackgroundTasks` | Generic in-process queues, workers, retries, scheduling and diagnostics | its [`README`](../src/RasHub.BackgroundTasks/README.md) and integration tests |
 | `src/RasHub.Web` | HTTP, Blazor, Identity, authorization, monitoring and composition | `Program.cs`, `Controllers`, `Api`, `Infrastructure` |
@@ -30,6 +31,8 @@ atomic transaction.
 | Blazor RasGate administration | `src/RasHub.Web/Infrastructure/RasGates/RasGateAdministrationService.cs` |
 | Shared RasGate configuration lifecycle | `src/RasHub.Application/RasGates/Services/RasGateRegistry.cs` |
 | RasGate status shadow and live observation | `src/RasHub.Web/Controllers/RasGates/RasGateStatusController.cs` |
+| RAS endpoint registration and Gate assignment | `src/RasHub.Web/Controllers/RasEndpoints` and `src/RasHub.Application/RasEndpoints/Services` |
+| Blazor RAS endpoint administration | `src/RasHub.Web/Components/Pages/RasEndpoints.razor` and `src/RasHub.Web/Components/RasEndpointEditorDialog.razor` |
 | Cluster shadow reads | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterShadowController.cs` |
 | Global cluster shadow search | `src/RasHub.Web/Controllers/RasClusters/RasClusterShadowSearchController.cs` |
 | Live cluster reads and shadow refresh | `src/RasHub.Web/Controllers/RasClusters/RasGateClusterLiveController.cs` |
@@ -40,38 +43,42 @@ atomic transaction.
 | Hosted Gate status monitoring | `src/RasHub.Web/Infrastructure/RasGates/RasGateMonitoringService.cs` |
 | DI and handler registration | `src/RasHub.Web/Program.cs` and `src/RasHub.Infrastructure/Extensions/ServiceCollectionExtensions.cs` |
 
-The API controller and Blazor administration service delegate RasGate writes
-to `RasGateRegistry`. Keep shared normalization, lifecycle, and shadow
-invalidation there; authorization and presentation remain adapter-specific.
+API controllers and Blazor administration services delegate lifecycle writes
+to `RasGateRegistry` and `RasEndpointRegistry`.
+Endpoint identity changes own resource-shadow invalidation; Gate changes own
+only Gate-derived status. Authorization and presentation remain adapter-specific.
+Every Endpoint has one required Gate assignment; one Gate may execute work for
+multiple Endpoints.
 
 ## Real execution flows
 
 ### Persisted API query
 
 ```text
-Controller -> [ActiveRasGateLookup for parent-scoped reads] -> Ras*Queries
+Controller -> [ActiveRasEndpointLookup for parent-scoped reads] -> Ras*Queries
            -> AsNoTracking EF projection -> Contracts response/model
            -> ApiResponse<T>
 ```
 
-Gate-scoped cluster and infobase shadow queries use `ActiveRasGateLookup`;
-top-level Gate registration, status-shadow, and global search queries go
-directly to their Infrastructure query modules. Global cluster and infobase
-searches read across the persisted shadow and optionally filter by their
-parent identities. These persisted queries do not use Application handlers
-and do not contact RasGate.
+Endpoint-scoped cluster and infobase shadow queries use
+`ActiveRasEndpointLookup`; top-level Gate/endpoint registration, Gate status,
+and global search queries go directly to their Infrastructure query modules.
+Global cluster and infobase searches read across the persisted shadow and may
+filter by RAS endpoint and cluster identity. These persisted queries do not use
+Application handlers and do not contact RasGate.
 
 ### Live read, shadow refresh, or remote mutation
 
 ```text
-Controller -> ActiveRasGateLookup + optional parent/resource lookup
+Controller -> ActiveRasEndpointLookup + optional parent/resource lookup
  -> InteractiveTaskRunner -> IBackgroundTaskEngine
- -> lane worker and per-Gate concurrency key -> fresh attempt DI scope
- -> Application task handler -> tracked RasGate + captured ConfigurationRevision
- -> status/resource gateway -> internal RasGate session -> RasGate
-                                                   -> RAC (status/resources)
- -> IRasGateSyncPublisher -> [snapshot store for cluster/infobase state]
- -> one SaveChangesAsync -> controller returns the endpoint-specific response
+ -> lane worker and per-endpoint concurrency key -> fresh attempt DI scope
+ -> Application task handler -> RasEndpointExecutionTargetResolver
+ -> endpoint + its assigned Gate; capture endpoint and Gate revisions
+ -> resource gateway -> internal RasGate session -> RasGate
+       -> RAC command with endpoint host:port appended as its final argument
+ -> IRasEndpointSyncPublisher -> [cluster/infobase snapshot store]
+ -> one SaveChangesAsync -> controller returns the endpoint-scoped response
 ```
 
 Capability preflight and the following resource call create separate session
@@ -92,24 +99,27 @@ shadow refreshes. A reachable Gate with `available: false` RAC is recorded as
 degraded; a failed RAC probe records RAC as unknown without discarding the
 successful Gate observation.
 
-### Shadow publication and Gate configuration
+### Shadow publication and endpoint/Gate configuration
 
-Handlers capture `ConfigurationRevision` before remote I/O. The publisher
-obtains the tracked Gate, guards revision plus active/deleted state, applies a
-complete collection or targeted change, updates observation metadata, and saves
-once. Complete collections can remove absent children; targeted upserts leave
-siblings unchanged. A definitive targeted remote not-found soft-deletes only
-the requested shadow resource; deleting a cluster also invalidates its cached
-infobases.
+Handlers capture both the RAS endpoint and selected RasGate configuration
+revisions before remote I/O. The resource publisher guards both revisions plus
+active/deleted state, applies a complete collection or targeted change, updates
+endpoint observation metadata, and saves once. Complete collections can
+remove absent children; targeted upserts leave siblings unchanged. A definitive
+targeted remote not-found soft-deletes only the requested shadow resource;
+deleting a cluster also invalidates its cached infobases.
 
-Status publication writes the RasGate and RAC observations in the same guarded
-save. Remote-identity, deactivation, deletion, and restoration changes clear
-derived state and advance the configuration revision, preventing an in-flight
-result from restoring stale state.
+Status publication remains Gate-scoped and writes RasGate/RAC observations in
+one guarded save. Endpoint host/port changes, deactivation, deletion, and
+restoration invalidate endpoint-owned cluster/infobase shadow. Gate changes do
+not discard that shadow, but their revision guard prevents in-flight work from
+publishing through obsolete Gate configuration. Reassigning an Endpoint to a
+different Gate advances the Endpoint revision for the same reason while
+preserving its shadow because the remote RAS identity is unchanged.
 
 Gate-write mechanics live under `Database/Interceptors` and
-`EntityTypeConfigurations`. Remote keys are parent-scoped—clusters by Gate and
-infobases by cluster—and are distinct from Hub IDs.
+`EntityTypeConfigurations`. Remote keys are parent-scoped—clusters by RAS
+endpoint and infobases by cluster—and are distinct from Hub IDs.
 
 ## Change routing
 

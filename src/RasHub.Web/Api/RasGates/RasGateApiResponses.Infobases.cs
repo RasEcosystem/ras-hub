@@ -1,8 +1,10 @@
 using System.Net;
+using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Web.Api.RasEndpoints;
 
 namespace RasHub.Web.Api.RasGates;
 
@@ -43,11 +45,10 @@ internal static partial class RasGateApiResponses
         if (result.Exception is RasGateInactiveException inactiveException)
             return GateInactive<T>(inactiveException.RasGateId);
 
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<T>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during the live infobase refresh.");
+        if (result.Exception is
+            RasEndpointConfigurationChangedException endpointChanged)
+            return RasEndpointApiResponses.ConfigurationChanged<T>(
+                endpointChanged.RasEndpointId);
 
         if (result.Exception is RacResourceNotFoundException
             {
@@ -93,11 +94,10 @@ internal static partial class RasGateApiResponses
         if (result.Exception is RasGateInactiveException inactiveException)
             return GateInactive<T>(inactiveException.RasGateId);
 
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<T>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during the infobase shadow refresh.");
+        if (result.Exception is
+            RasEndpointConfigurationChangedException endpointChanged)
+            return RasEndpointApiResponses.ConfigurationChanged<T>(
+                endpointChanged.RasEndpointId);
 
         if (TryMapRacFailure<T>(result) is { } racFailure)
             return racFailure;

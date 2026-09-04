@@ -4,6 +4,6 @@ using RasHub.BackgroundTasks.Abstractions;
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed record CreateClusterTask(
-    Guid RasGateId,
+    Guid RasEndpointId,
     RasClusterCreationOptions Options)
     : IBackgroundTask<Guid>;

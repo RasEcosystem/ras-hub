@@ -90,10 +90,7 @@ public sealed class CheckRasGateStatusTaskHandlerTests : IDisposable
 
     private static RasGateSyncPublisher CreatePublisher(RasHubDbContext db)
     {
-        return new RasGateSyncPublisher(
-            db,
-            new RasClusterSnapshotStore(db),
-            new RasInfobaseSnapshotStore(db));
+        return new RasGateSyncPublisher(db);
     }
 
     private sealed class StubStatusGateway(RasGateStatus status)

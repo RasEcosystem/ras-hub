@@ -1,14 +1,13 @@
-using RasHub.Application.Interfaces;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed class RemoveClusterTaskHandler(
-    IRepository<RasGate> rasGateRepository,
-    IRasGateSyncPublisher publisher,
+    RasEndpointExecutionTargetResolver targetResolver,
+    IRasEndpointSyncPublisher publisher,
     IRasClusterGateway clusterGateway,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<RemoveClusterTask>
@@ -17,29 +16,22 @@ public sealed class RemoveClusterTaskHandler(
         RemoveClusterTask task,
         CancellationToken cancellationToken)
     {
-        var rasGate = await rasGateRepository.GetByIdAsync(
-            task.RasGateId,
+        var target = await targetResolver.ResolveAsync(
+            task.RasEndpointId,
             cancellationToken);
-
-        if (rasGate is null)
-            throw new RasGateNotFoundException(task.RasGateId);
-
-        if (!rasGate.IsActive)
-            throw new RasGateInactiveException(rasGate.Id);
-
-        var configurationRevision = rasGate.ConfigurationRevision;
+        var guard = target.CaptureGuard();
         var capabilities = await clusterGateway.GetCapabilitiesAsync(
-            rasGate,
+            target.Gate,
             cancellationToken);
 
         if (!capabilities.Supports("clusters", "remove"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "remove");
 
         await clusterGateway.RemoveClusterAsync(
-            rasGate,
+            target,
             task.ClusterId,
             task.ClusterUser,
             task.ClusterPassword,
@@ -50,8 +42,7 @@ public sealed class RemoveClusterTaskHandler(
         try
         {
             published = await publisher.TryRemoveClusterAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 task.ClusterId,
                 observedAt,
                 cancellationToken);
@@ -59,7 +50,7 @@ public sealed class RemoveClusterTaskHandler(
         catch (Exception exception)
         {
             throw new RasGateMutationPublicationNotConfirmedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "remove",
                 task.ClusterId,
@@ -68,7 +59,7 @@ public sealed class RemoveClusterTaskHandler(
 
         if (!published)
             throw new RasGateMutationPublicationNotConfirmedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "remove",
                 task.ClusterId);

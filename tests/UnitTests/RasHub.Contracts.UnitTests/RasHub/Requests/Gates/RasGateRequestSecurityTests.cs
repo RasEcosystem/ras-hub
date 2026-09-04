@@ -24,6 +24,7 @@ public sealed class RasGateRequestSecurityTests
             "https://gate.example.test",
             8443,
             true,
+            1,
             "gate-secret");
 
         Assert.Equal(nameof(UpdateRasGateRequest), request.ToString());

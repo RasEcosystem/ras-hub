@@ -68,7 +68,7 @@ public sealed class RasGateAdministrationController(
     [Authorize(Policy = AppPolicies.ManageRasGates)]
     [EndpointSummary("Update gateway")]
     [EndpointDescription(
-        "Replaces the registered connection and activity state. Endpoint changes require a new API key; otherwise an omitted API key is preserved.")]
+        "Replaces the registered connection and activity state at the expected configuration revision. Endpoint changes require a new API key; otherwise an omitted API key is preserved.")]
     [ProducesResponseType<ApiResponse<RasGateModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,
@@ -89,6 +89,7 @@ public sealed class RasGateAdministrationController(
                     request.Url,
                     request.Port,
                     request.IsActive,
+                    request.ExpectedConfigurationRevision,
                     request.ApiKey),
                 cancellationToken);
         }
@@ -99,6 +100,10 @@ public sealed class RasGateAdministrationController(
         catch (RasGateEndpointValidationException)
         {
             return RasGateApiResponses.InvalidEndpoint();
+        }
+        catch (RasGateRevisionConflictException)
+        {
+            return RasGateApiResponses.ConcurrentUpdate();
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -151,6 +156,7 @@ public sealed class RasGateAdministrationController(
             Url = rasGate.Url,
             Port = rasGate.Port,
             IsActive = rasGate.IsActive,
+            ConfigurationRevision = rasGate.ConfigurationRevision,
             CreatedAt = rasGate.CreatedAt,
             UpdatedAt = rasGate.UpdatedAt
         };

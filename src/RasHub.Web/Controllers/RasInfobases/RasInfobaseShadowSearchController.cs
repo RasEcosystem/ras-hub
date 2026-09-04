@@ -16,14 +16,14 @@ namespace RasHub.Web.Controllers.RasInfobases;
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("Infobases")]
 [ControllerDescription("Infobases",
-    "Inspect the persisted infobase shadow and refresh it from live RasGate data.")]
+    "Inspect the persisted infobase shadow owned by RAS endpoints.")]
 public sealed class RasInfobaseShadowSearchController(
     RasInfobaseQueries queries) : ControllerBase
 {
     [HttpGet(Name = "SearchShadowPagedInfobases")]
     [EndpointSummary("Search paged infobase shadow")]
     [EndpointDescription(
-        "Searches the persisted infobase shadow across all RasGates and clusters by a case-insensitive literal substring and returns one page. Supported fields are Name and Description; Name is searched when fields are omitted, and multiple fields are combined with OR. Optional RasGate and cluster filters narrow the scope; a cluster filter requires its RasGate filter. Every result includes the IDs and names of its RasGate and cluster. RasGate is not contacted.")]
+        "Searches the persisted infobase shadow across all RAS endpoints and clusters by a case-insensitive literal substring and returns one page. Supported fields are Name and Description; Name is searched when fields are omitted, and multiple fields are combined with OR. Optional RAS endpoint and cluster filters narrow the scope; a cluster filter requires its RAS endpoint filter. Every result includes the IDs and names of its RAS endpoint and cluster. Neither the endpoint nor RasGate is contacted.")]
     [ProducesResponseType<ApiResponse<PageResult<InfobaseSearchResultModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(StatusCodes.Status400BadRequest)]
@@ -44,7 +44,7 @@ public sealed class RasInfobaseShadowSearchController(
     [HttpGet("all", Name = "SearchShadowAllInfobases")]
     [EndpointSummary("Search all infobase shadow entries")]
     [EndpointDescription(
-        "Searches the persisted infobase shadow across all RasGates and clusters by a case-insensitive literal substring and returns all matches without pagination. Supported fields are Name and Description; Name is searched when fields are omitted, and multiple fields are combined with OR. Optional RasGate and cluster filters narrow the scope; a cluster filter requires its RasGate filter. Every result includes the IDs and names of its RasGate and cluster. RasGate is not contacted.")]
+        "Searches the persisted infobase shadow across all RAS endpoints and clusters by a case-insensitive literal substring and returns all matches without pagination. Supported fields are Name and Description; Name is searched when fields are omitted, and multiple fields are combined with OR. Optional RAS endpoint and cluster filters narrow the scope; a cluster filter requires its RAS endpoint filter. Every result includes the IDs and names of its RAS endpoint and cluster. Neither the endpoint nor RasGate is contacted.")]
     [ProducesResponseType<ApiResponse<IReadOnlyList<InfobaseSearchResultModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(StatusCodes.Status400BadRequest)]

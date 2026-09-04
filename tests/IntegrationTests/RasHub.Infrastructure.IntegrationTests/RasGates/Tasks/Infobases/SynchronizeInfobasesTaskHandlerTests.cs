@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using RasHub.Application.RasEndpoints.Models;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -32,9 +34,10 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
     public async Task Execute_complete_snapshot_publishes_infobases_and_credentials()
     {
         var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var remote = CreateSnapshot(Guid.NewGuid(), "rim_next");
-        await SeedAsync(rasGate, cluster);
+        await SeedAsync(endpoint, rasGate, cluster);
         var gateway = new FakeRasInfobaseGateway
         {
             Infobases =
@@ -47,7 +50,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         {
             var handler = CreateCollectionHandler(db, gateway);
             var task = new SynchronizeInfobasesTask(
-                rasGate.Id,
+                endpoint.Id,
                 cluster.ExternalId,
                 "cluster-admin",
                 "cluster-secret");
@@ -66,11 +69,15 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         var storedGate = await verificationDb.RasGates.SingleAsync(
             item => item.Id == rasGate.Id,
             TestContext.Current.CancellationToken);
+        var storedEndpoint = await verificationDb.RasEndpoints.SingleAsync(
+            item => item.Id == endpoint.Id,
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(remote.ExternalId, stored.ExternalId);
         Assert.Equal(remote.Name, stored.Name);
         Assert.Equal(ObservedAt, stored.ObservedAt);
-        Assert.Equal(ObservedAt, storedGate.LastSeenAt);
+        Assert.Null(storedGate.LastSeenAt);
+        Assert.Equal(ObservedAt, storedEndpoint.LastSeenAt);
         Assert.Equal(cluster.ExternalId, gateway.RequestedClusterId);
         Assert.Equal("cluster-admin", gateway.ClusterUser);
         Assert.Equal("cluster-secret", gateway.ClusterPassword);
@@ -80,10 +87,11 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
     public async Task Execute_targeted_sync_upserts_infobase_without_deleting_sibling()
     {
         var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var sibling = RasInfobaseTestData.Create(cluster.Id, name: "Sibling");
         var remote = CreateSnapshot(Guid.NewGuid(), "Target");
-        await SeedAsync(rasGate, cluster, sibling);
+        await SeedAsync(endpoint, rasGate, cluster, sibling);
         var gateway = new FakeRasInfobaseGateway { Infobase = remote };
 
         await using (var db = _database.CreateContext())
@@ -92,7 +100,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
 
             await handler.ExecuteAsync(
                 new SynchronizeInfobaseTask(
-                    rasGate.Id,
+                    endpoint.Id,
                     cluster.ExternalId,
                     remote.ExternalId),
                 TestContext.Current.CancellationToken);
@@ -113,9 +121,10 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
     public async Task Execute_incomplete_snapshot_preserves_previous_infobases()
     {
         var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var existing = RasInfobaseTestData.Create(cluster.Id);
-        await SeedAsync(rasGate, cluster, existing);
+        await SeedAsync(endpoint, rasGate, cluster, existing);
         var gateway = new FakeRasInfobaseGateway { InfobaseSnapshotCompleteness = SnapshotCompleteness.Unknown };
 
         await using (var db = _database.CreateContext())
@@ -125,7 +134,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
             await Assert.ThrowsAsync<RasGateClientException>(() =>
                 handler.ExecuteAsync(
                     new SynchronizeInfobasesTask(
-                        rasGate.Id,
+                        endpoint.Id,
                         cluster.ExternalId),
                     TestContext.Current.CancellationToken));
         }
@@ -145,8 +154,9 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         bool targeted)
     {
         var rasGate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
         var clusterId = Guid.NewGuid();
-        await SeedAsync(rasGate);
+        await SeedAsync(endpoint, rasGate);
         await using var db = _database.CreateContext();
         var gateway = new FakeRasInfobaseGateway();
 
@@ -155,10 +165,10 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
                 targeted,
                 db,
                 gateway,
-                rasGate.Id,
+                endpoint.Id,
                 clusterId));
 
-        Assert.Equal(rasGate.Id, exception.RasGateId);
+        Assert.Equal(endpoint.Id, exception.RasEndpointId);
         Assert.Equal(clusterId, exception.ClusterId);
         Assert.IsAssignableFrom<NonRetryableBackgroundTaskException>(exception);
     }
@@ -168,7 +178,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         IRasInfobaseGateway gateway)
     {
         return new SynchronizeInfobasesTaskHandler(
-            new EfRepository<RasGate>(db),
+            CreateTargetResolver(db),
             new EfRepository<RasCluster>(db),
             CreatePublisher(db),
             gateway,
@@ -180,7 +190,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         IRasInfobaseGateway gateway)
     {
         return new SynchronizeInfobaseTaskHandler(
-            new EfRepository<RasGate>(db),
+            CreateTargetResolver(db),
             new EfRepository<RasCluster>(db),
             CreatePublisher(db),
             gateway,
@@ -191,24 +201,32 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         bool targeted,
         RasHubDbContext db,
         IRasInfobaseGateway gateway,
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId)
     {
         return targeted
             ? CreateTargetedHandler(db, gateway).ExecuteAsync(
                 new SynchronizeInfobaseTask(
-                    rasGateId,
+                    rasEndpointId,
                     clusterId,
                     Guid.NewGuid()),
                 TestContext.Current.CancellationToken)
             : CreateCollectionHandler(db, gateway).ExecuteAsync(
-                new SynchronizeInfobasesTask(rasGateId, clusterId),
+                new SynchronizeInfobasesTask(rasEndpointId, clusterId),
                 TestContext.Current.CancellationToken);
     }
 
-    private static RasGateSyncPublisher CreatePublisher(RasHubDbContext db)
+    private static RasEndpointExecutionTargetResolver CreateTargetResolver(
+        RasHubDbContext db)
     {
-        return new RasGateSyncPublisher(
+        return new RasEndpointExecutionTargetResolver(
+            new EfRepository<RasEndpoint>(db),
+            new EfRepository<RasGate>(db));
+    }
+
+    private static RasEndpointSyncPublisher CreatePublisher(RasHubDbContext db)
+    {
+        return new RasEndpointSyncPublisher(
             db,
             new RasClusterSnapshotStore(db),
             new RasInfobaseSnapshotStore(db));
@@ -227,9 +245,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
     {
         return new RasInfobaseSnapshot
         {
-            ExternalId = externalId,
-            Name = name,
-            Description = $"Description for {name}"
+            ExternalId = externalId, Name = name, Description = $"Description for {name}"
         };
     }
 
@@ -266,7 +282,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         }
 
         public Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             string? clusterUser,
             string? clusterPassword,
@@ -287,7 +303,7 @@ public sealed class SynchronizeInfobasesTaskHandlerTests : IDisposable
         }
 
         public Task<RasInfobaseSnapshot> GetInfobaseAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             Guid infobaseId,
             string? clusterUser,

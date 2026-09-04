@@ -24,12 +24,12 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
         ModelProjection.Compile();
 
     public async Task<PageResult<InfobaseModel>> GetPagedAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         PageRequest request,
         CancellationToken cancellationToken)
     {
-        var query = GetClusterInfobases(rasGateId, clusterId);
+        var query = GetClusterInfobases(rasEndpointId, clusterId);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(infobase => infobase.Name)
@@ -40,19 +40,16 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
 
         return new PageResult<InfobaseModel>
         {
-            Items = items,
-            TotalCount = totalCount,
-            Page = request.Page,
-            PageSize = request.PageSize
+            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
         };
     }
 
     public async Task<IReadOnlyList<InfobaseModel>> GetAllAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         CancellationToken cancellationToken)
     {
-        return await GetClusterInfobases(rasGateId, clusterId)
+        return await GetClusterInfobases(rasEndpointId, clusterId)
             .OrderBy(infobase => infobase.Name)
             .ThenBy(infobase => infobase.ExternalId)
             .Select(ModelProjection)
@@ -90,27 +87,27 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
     }
 
     public Task<InfobaseModel?> GetByExternalIdAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         Guid infobaseId,
         CancellationToken cancellationToken)
     {
-        return GetClusterInfobases(rasGateId, clusterId)
+        return GetClusterInfobases(rasEndpointId, clusterId)
             .Where(infobase => infobase.ExternalId == infobaseId)
             .Select(ModelProjection)
             .SingleOrDefaultAsync(cancellationToken);
     }
 
     private IQueryable<RasInfobase> GetClusterInfobases(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId)
     {
         return from infobase in db.RasInfobases.AsNoTracking()
-               join cluster in db.RasClusters.AsNoTracking()
-                   on infobase.RasClusterId equals cluster.Id
-               where cluster.RasGateId == rasGateId &&
-                     cluster.ExternalId == clusterId
-               select infobase;
+            join cluster in db.RasClusters.AsNoTracking()
+                on infobase.RasClusterId equals cluster.Id
+            where cluster.RasEndpointId == rasEndpointId &&
+                  cluster.ExternalId == clusterId
+            select infobase;
     }
 
     private IQueryable<InfobaseSearchRow> CreateSearchQuery(
@@ -125,28 +122,28 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
             InfobaseSearchField.Description);
 
         return from infobase in db.RasInfobases.AsNoTracking()
-               join cluster in db.RasClusters.AsNoTracking()
-                   on infobase.RasClusterId equals cluster.Id
-               join rasGate in db.RasGates.AsNoTracking()
-                   on cluster.RasGateId equals rasGate.Id
-               where (search.RasGateId == null ||
-                      rasGate.Id == search.RasGateId) &&
-                     (search.ClusterId == null ||
-                      cluster.ExternalId == search.ClusterId) &&
-                     ((searchName &&
-                       infobase.Name.ToUpper().Contains(term)) ||
-                      (searchDescription &&
-                       infobase.Description.ToUpper().Contains(term)))
-               orderby infobase.Name,
-                   rasGate.Id,
-                   cluster.ExternalId,
-                   infobase.ExternalId
-               select new InfobaseSearchRow(
-                   rasGate.Id,
-                   rasGate.Name,
-                   cluster.ExternalId,
-                   cluster.Name,
-                   infobase);
+            join cluster in db.RasClusters.AsNoTracking()
+                on infobase.RasClusterId equals cluster.Id
+            join endpoint in db.RasEndpoints.AsNoTracking()
+                on cluster.RasEndpointId equals endpoint.Id
+            where (search.RasEndpointId == null ||
+                   endpoint.Id == search.RasEndpointId) &&
+                  (search.ClusterId == null ||
+                   cluster.ExternalId == search.ClusterId) &&
+                  ((searchName &&
+                    infobase.Name.ToUpper().Contains(term)) ||
+                   (searchDescription &&
+                    infobase.Description.ToUpper().Contains(term)))
+            orderby infobase.Name,
+                endpoint.Id,
+                cluster.ExternalId,
+                infobase.ExternalId
+            select new InfobaseSearchRow(
+                endpoint.Id,
+                endpoint.Name,
+                cluster.ExternalId,
+                cluster.Name,
+                infobase);
     }
 
     private static InfobaseSearchResultModel ToSearchResult(
@@ -154,8 +151,8 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
     {
         return new InfobaseSearchResultModel
         {
-            RasGateId = row.RasGateId,
-            RasGateName = row.RasGateName,
+            RasEndpointId = row.RasEndpointId,
+            RasEndpointName = row.RasEndpointName,
             ClusterId = row.ClusterId,
             ClusterName = row.ClusterName,
             Infobase = ModelMapper(row.Infobase)
@@ -163,8 +160,8 @@ public sealed class RasInfobaseQueries(RasHubDbContext db)
     }
 
     private sealed record InfobaseSearchRow(
-        Guid RasGateId,
-        string RasGateName,
+        Guid RasEndpointId,
+        string RasEndpointName,
         Guid ClusterId,
         string ClusterName,
         RasInfobase Infobase);

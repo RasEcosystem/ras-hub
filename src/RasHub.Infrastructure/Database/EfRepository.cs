@@ -14,6 +14,15 @@ public sealed class EfRepository<T>(RasHubDbContext dbContext) : IRepository<T>
             .SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
     }
 
+    public async Task<T?> GetByIdIncludingDeletedAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Set<T>()
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(entity => entity.Id == id, cancellationToken);
+    }
+
     public async Task<List<T>> GetByIdsAsync(
         IEnumerable<Guid> ids,
         CancellationToken cancellationToken)

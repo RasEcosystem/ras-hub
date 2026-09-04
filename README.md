@@ -12,13 +12,14 @@ live in the [`RasHub.Contracts`](src/RasHub.Contracts) submodule.
 ## Current scope
 
 - Blazor administration UI and `/api/v1` HTTP API;
-- persisted RasGate, cluster, infobase, and status shadow state;
+- persisted RasGate, RAS endpoint, cluster, infobase, and status shadow state;
 - explicit live reads, shadow refresh, and cluster administration through RAC;
 - version-aware RAC adapters with `8.3.27.2214` as the current minimum;
 - in-process background work, supporting one RasHub replica.
 
-Shadow reads do not contact RasGate. Remote results are validated and published
-only while the target RasGate configuration revision remains current.
+Shadow reads do not contact RasGate. Resource operations address a managed RAS
+endpoint and execute through its assigned active RasGate. Remote results are
+published only while both endpoint and assigned Gate revisions remain current.
 
 ## Requirements
 
@@ -26,8 +27,8 @@ only while the target RasGate configuration revision remains current.
 - Git and Make;
 - Docker Engine with Compose v2.
 
-Remote management additionally requires RasGate with network access to a
-compatible RAC/RAS installation.
+Remote management additionally requires RasGate with network access to the
+configured RAS endpoints and a compatible RAC installation.
 
 ## Build and development
 

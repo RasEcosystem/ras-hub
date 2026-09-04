@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<AuditSoftDeleteInterceptor>();
         services.AddSingleton<RasGateConfigurationRevisionInterceptor>();
+        services.AddSingleton<RasEndpointConfigurationRevisionInterceptor>();
         services.AddSingleton<RasGateApiKeyProtector>();
         services.AddSingleton<RasGateApiKeyProtectionInterceptor>();
 
@@ -46,6 +47,8 @@ public static class ServiceCollectionExtensions
                 serviceProvider.GetRequiredService<AuditSoftDeleteInterceptor>(),
                 serviceProvider.GetRequiredService<
                     RasGateConfigurationRevisionInterceptor>(),
+                serviceProvider.GetRequiredService<
+                    RasEndpointConfigurationRevisionInterceptor>(),
                 serviceProvider.GetRequiredService<
                     RasGateApiKeyProtectionInterceptor>());
 
@@ -61,9 +64,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRasClusterSnapshotStore, RasClusterSnapshotStore>();
         services.AddScoped<IRasInfobaseSnapshotStore, RasInfobaseSnapshotStore>();
         services.AddScoped<IRasGateSyncPublisher, RasGateSyncPublisher>();
+        services.AddScoped<IRasEndpointSyncPublisher, RasEndpointSyncPublisher>();
         services.AddScoped<RasClusterQueries>();
         services.AddScoped<RasInfobaseQueries>();
         services.AddScoped<RasGateQueries>();
+        services.AddScoped<RasEndpointQueries>();
         services.AddScoped<RasGateApiKeyProtectionMigrator>();
 
         services.AddSingleton<IRasGateEndpointFactory, RasGateEndpointFactory>();

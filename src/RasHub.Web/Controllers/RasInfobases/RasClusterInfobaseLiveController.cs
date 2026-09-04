@@ -10,6 +10,7 @@ using RasHub.Contracts.RasHub.Requests.Infobases;
 using RasHub.Contracts.RasHub.Responses;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Api.RasEndpoints;
 using RasHub.Web.Api.RasGates;
 using RasHub.Web.Authentication;
 using RasHub.Web.Infrastructure.RasGates;
@@ -19,13 +20,13 @@ namespace RasHub.Web.Controllers.RasInfobases;
 [ApiController]
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
 [Route(
-    "api/v1/ras-gates/{rasGateId:guid}/clusters/{clusterId:guid}/infobases")]
+    "api/v1/ras-endpoints/{rasEndpointId:guid}/clusters/{clusterId:guid}/infobases")]
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("Infobases")]
 [ControllerDescription("Infobases",
-    "Inspect the persisted infobase shadow and refresh it from live RasGate data.")]
+    "Inspect the persisted infobase shadow owned by a RAS endpoint and refresh it through the assigned RasGate.")]
 public sealed class RasClusterInfobaseLiveController(
-    ActiveRasGateLookup rasGateLookup,
+    ActiveRasEndpointLookup rasEndpointLookup,
     RasClusterQueries clusterQueries,
     RasInfobaseQueries infobaseQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
@@ -33,7 +34,7 @@ public sealed class RasClusterInfobaseLiveController(
     [HttpPost("live", Name = "GetLivePagedInfobases")]
     [EndpointSummary("Get paged live infobases")]
     [EndpointDescription(
-        "Fetches the complete live infobase snapshot from RasGate, atomically refreshes the persisted shadow, and returns one page from the updated shadow. Pagination limits only the HTTP response; RasGate is queried for the complete snapshot.")]
+        "Fetches the complete live infobase snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns one page from the updated shadow. Pagination limits only the HTTP response.")]
     [ProducesResponseType<ApiResponse<PageResult<InfobaseModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -44,32 +45,32 @@ public sealed class RasClusterInfobaseLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<PageResult<InfobaseModel>>> GetLivePaged(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         [FromQuery] PageRequest pageRequest,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
         InfobaseCredentialsRequest? request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<PageResult<InfobaseModel>>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<PageResult<InfobaseModel>>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         if (await clusterQueries.GetByExternalIdAsync(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses
                 .ClusterNotFound<PageResult<InfobaseModel>>(clusterId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             request,
             cancellationToken);
@@ -86,7 +87,7 @@ public sealed class RasClusterInfobaseLiveController(
                     taskResult);
 
         var infobases = await infobaseQueries.GetPagedAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             pageRequest,
             cancellationToken);
@@ -97,7 +98,7 @@ public sealed class RasClusterInfobaseLiveController(
     [HttpPost("live/all", Name = "GetLiveAllInfobases")]
     [EndpointSummary("Get all live infobases")]
     [EndpointDescription(
-        "Fetches the complete live infobase snapshot from RasGate, atomically refreshes the persisted shadow, and returns the complete updated shadow without pagination.")]
+        "Fetches the complete live infobase snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns the complete updated shadow without pagination.")]
     [ProducesResponseType<ApiResponse<IReadOnlyList<InfobaseModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -108,31 +109,31 @@ public sealed class RasClusterInfobaseLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<IReadOnlyList<InfobaseModel>>> GetLiveAll(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
         InfobaseCredentialsRequest? request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<IReadOnlyList<InfobaseModel>>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<IReadOnlyList<InfobaseModel>>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         if (await clusterQueries.GetByExternalIdAsync(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses
                 .ClusterNotFound<IReadOnlyList<InfobaseModel>>(clusterId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             request,
             cancellationToken);
@@ -149,7 +150,7 @@ public sealed class RasClusterInfobaseLiveController(
                     taskResult);
 
         var infobases = await infobaseQueries.GetAllAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             cancellationToken);
 
@@ -159,7 +160,7 @@ public sealed class RasClusterInfobaseLiveController(
     [HttpPost("live/{infobaseId:guid}", Name = "GetLiveInfobase")]
     [EndpointSummary("Get live infobase")]
     [EndpointDescription(
-        "Fetches one live infobase from RasGate, refreshes that entry in the persisted shadow without changing siblings, and returns the updated shadow entry.")]
+        "Fetches one live infobase from the RAS endpoint through its assigned RasGate, refreshes that entry in the persisted shadow without changing siblings, and returns the updated shadow entry.")]
     [ProducesResponseType<ApiResponse<InfobaseModel>>(StatusCodes.Status200OK)]
     [ProducesApiErrors(
         StatusCodes.Status400BadRequest,
@@ -169,24 +170,24 @@ public sealed class RasClusterInfobaseLiveController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<InfobaseModel>> GetLiveOne(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         Guid infobaseId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
         InfobaseCredentialsRequest? request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<InfobaseModel>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses.ForUnavailableEndpoint<InfobaseModel>(
                 state,
-                rasGateId);
+                rasEndpointId);
 
         if (await clusterQueries.GetByExternalIdAsync(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses.ClusterNotFound<InfobaseModel>(
@@ -194,13 +195,13 @@ public sealed class RasClusterInfobaseLiveController(
 
         var execution = await taskRunner.RunAsync(
             new SynchronizeInfobaseTask(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 infobaseId,
                 request?.ClusterUser,
                 request?.ClusterPassword),
             RasGateTaskOptions.InteractiveInfobaseSynchronization(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 infobaseId),
             cancellationToken);
@@ -215,7 +216,7 @@ public sealed class RasClusterInfobaseLiveController(
                 taskResult);
 
         var infobase = await infobaseQueries.GetByExternalIdAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             infobaseId,
             cancellationToken);
@@ -228,7 +229,7 @@ public sealed class RasClusterInfobaseLiveController(
     [HttpPost("shadow/refresh", Name = "RefreshInfobaseShadow")]
     [EndpointSummary("Refresh infobase shadow")]
     [EndpointDescription(
-        "Fetches the complete live infobase snapshot from RasGate, atomically refreshes the persisted shadow, and returns refresh metadata without returning the collection.")]
+        "Fetches the complete live infobase snapshot from the RAS endpoint through its assigned RasGate, atomically refreshes the persisted shadow, and returns refresh metadata without returning the collection.")]
     [ProducesResponseType<ApiResponse<ShadowRefreshResponse>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -240,31 +241,31 @@ public sealed class RasClusterInfobaseLiveController(
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ShadowRefreshResponse>>
         RefreshShadow(
-            Guid rasGateId,
+            Guid rasEndpointId,
             Guid clusterId,
             [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
             InfobaseCredentialsRequest? request,
             CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses
-                .ForUnavailableGate<ShadowRefreshResponse>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses
+                .ForUnavailableEndpoint<ShadowRefreshResponse>(
                     state,
-                    rasGateId);
+                    rasEndpointId);
 
         if (await clusterQueries.GetByExternalIdAsync(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses
                 .ClusterNotFound<ShadowRefreshResponse>(clusterId);
 
         var execution = await RefreshShadowAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             request,
             cancellationToken);
@@ -288,7 +289,7 @@ public sealed class RasClusterInfobaseLiveController(
 
     private Task<InteractiveTaskExecution<CollectionSynchronizationResult>>
         RefreshShadowAsync(
-            Guid rasGateId,
+            Guid rasEndpointId,
             Guid clusterId,
             InfobaseCredentialsRequest? request,
             CancellationToken cancellationToken)
@@ -297,12 +298,12 @@ public sealed class RasClusterInfobaseLiveController(
             SynchronizeInfobasesTask,
             CollectionSynchronizationResult>(
             new SynchronizeInfobasesTask(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 request?.ClusterUser,
                 request?.ClusterPassword),
             RasGateTaskOptions.InteractiveInfobasesSynchronization(
-                rasGateId,
+                rasEndpointId,
                 clusterId),
             cancellationToken);
     }

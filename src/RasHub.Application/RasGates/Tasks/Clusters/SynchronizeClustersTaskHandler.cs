@@ -1,15 +1,15 @@
-using RasHub.Application.Interfaces;
+using RasHub.Application.RasEndpoints.Exceptions;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed class SynchronizeClustersTaskHandler(
-    IRepository<RasGate> rasGateRepository,
-    IRasGateSyncPublisher publisher,
+    RasEndpointExecutionTargetResolver targetResolver,
+    IRasEndpointSyncPublisher publisher,
     IRasClusterGateway clusterGateway,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<
@@ -20,29 +20,22 @@ public sealed class SynchronizeClustersTaskHandler(
         SynchronizeClustersTask task,
         CancellationToken cancellationToken)
     {
-        var rasGate = await rasGateRepository.GetByIdAsync(
-            task.RasGateId,
+        var target = await targetResolver.ResolveAsync(
+            task.RasEndpointId,
             cancellationToken);
-
-        if (rasGate is null)
-            throw new RasGateNotFoundException(task.RasGateId);
-
-        if (!rasGate.IsActive)
-            throw new RasGateInactiveException(rasGate.Id);
-
-        var configurationRevision = rasGate.ConfigurationRevision;
+        var guard = target.CaptureGuard();
         var capabilities = await clusterGateway.GetCapabilitiesAsync(
-            rasGate,
+            target.Gate,
             cancellationToken);
 
         if (!capabilities.Supports("clusters", "snapshot"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "snapshot");
 
         var snapshot = await clusterGateway.GetClustersAsync(
-            rasGate,
+            target,
             cancellationToken);
 
         if (snapshot.Completeness != SnapshotCompleteness.Complete)
@@ -52,12 +45,12 @@ public sealed class SynchronizeClustersTaskHandler(
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!await publisher.TryPublishClustersAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 snapshot.Items,
                 observedAt,
                 cancellationToken))
-            throw new RasGateConfigurationChangedException(rasGate.Id);
+            throw new RasEndpointConfigurationChangedException(
+                task.RasEndpointId);
 
         return new CollectionSynchronizationResult(
             snapshot.Items.Count,

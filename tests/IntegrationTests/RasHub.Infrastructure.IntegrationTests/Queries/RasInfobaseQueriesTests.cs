@@ -15,13 +15,14 @@ public sealed class RasInfobaseQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task Get_paged_scopes_infobases_to_gate_and_cluster()
+    public async Task Get_paged_scopes_infobases_to_endpoint_and_cluster()
     {
-        var firstGate = RasGateTestData.Create("First gate");
-        var secondGate = RasGateTestData.Create("Second gate");
-        var firstCluster = RasClusterTestData.Create(firstGate.Id);
-        var siblingCluster = RasClusterTestData.Create(firstGate.Id);
-        var otherCluster = RasClusterTestData.Create(secondGate.Id);
+        var gate = RasGateTestData.Create();
+        var firstEndpoint = RasEndpointTestData.Create(gate.Id, "First RAS");
+        var secondEndpoint = RasEndpointTestData.Create(gate.Id, "Second RAS");
+        var firstCluster = RasClusterTestData.Create(firstEndpoint.Id);
+        var siblingCluster = RasClusterTestData.Create(firstEndpoint.Id);
+        var otherCluster = RasClusterTestData.Create(secondEndpoint.Id);
         var first = RasInfobaseTestData.Create(
             firstCluster.Id,
             name: "A database");
@@ -33,8 +34,9 @@ public sealed class RasInfobaseQueriesTests : IDisposable
 
         await using var db = _database.CreateContext();
         db.AddRange(
-            firstGate,
-            secondGate,
+            gate,
+            firstEndpoint,
+            secondEndpoint,
             firstCluster,
             siblingCluster,
             otherCluster,
@@ -47,7 +49,7 @@ public sealed class RasInfobaseQueriesTests : IDisposable
         var queries = new RasInfobaseQueries(db);
 
         var result = await queries.GetPagedAsync(
-            firstGate.Id,
+            firstEndpoint.Id,
             firstCluster.ExternalId,
             new PageRequest(),
             TestContext.Current.CancellationToken);
@@ -61,12 +63,13 @@ public sealed class RasInfobaseQueriesTests : IDisposable
     [Fact]
     public async Task Get_by_external_id_ignores_infobase_with_deleted_parent_cluster()
     {
-        var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var infobase = RasInfobaseTestData.Create(cluster.Id);
 
         await using var db = _database.CreateContext();
-        db.AddRange(rasGate, cluster, infobase);
+        db.AddRange(gate, endpoint, cluster, infobase);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         cluster.IsDeleted = true;
         cluster.DeletedAt = DateTime.UtcNow;
@@ -75,7 +78,7 @@ public sealed class RasInfobaseQueriesTests : IDisposable
         var queries = new RasInfobaseQueries(db);
 
         var result = await queries.GetByExternalIdAsync(
-            rasGate.Id,
+            endpoint.Id,
             cluster.ExternalId,
             infobase.ExternalId,
             TestContext.Current.CancellationToken);

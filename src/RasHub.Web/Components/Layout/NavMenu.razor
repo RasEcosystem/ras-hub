@@ -15,7 +15,8 @@
     padding: 8px 0;">
 
     <MudStack AlignItems="AlignItems.Center"
-              Spacing="1">
+              Spacing="1"
+              Style="width: 100%;">
 
         <MudTooltip Text="Home"
                     Placement="Placement.Right"
@@ -49,6 +50,26 @@
             </Authorized>
         </AuthorizeView>
 
+        <AuthorizeView Policy="@AppPolicies.ManageRasEndpoints">
+            <Authorized>
+                <MudTooltip Text="RAS endpoints"
+                            Placement="Placement.Right"
+                            Arrow="true">
+
+                    <MudIconButton
+                        Icon="@Icons.Material.Filled.Link"
+                        Href="/ras-endpoints"
+                        Color="@GetRouteColor("ras-endpoints")"
+                        Size="Size.Medium"
+                        Variant="Variant.Text"
+                        aria-label="RAS endpoints"/>
+
+                </MudTooltip>
+            </Authorized>
+        </AuthorizeView>
+
+        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
+
         <MudTooltip Text="Tasks"
                     Placement="Placement.Right"
                     Arrow="true">
@@ -80,8 +101,6 @@
                 </MudTooltip>
             </Authorized>
         </AuthorizeView>
-
-        <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
     </MudStack>
 

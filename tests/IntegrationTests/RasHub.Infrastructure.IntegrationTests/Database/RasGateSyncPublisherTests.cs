@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
 using RasHub.Domain.Enums;
@@ -31,7 +32,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
 
         await using (var publicationDb = _database.CreateContext())
         {
-            var publisher = CreatePublisher(publicationDb);
+            var publisher = CreateGatePublisher(publicationDb);
 
             var published = await publisher.TryPublishStatusAsync(
                 rasGate.Id,
@@ -76,7 +77,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, change);
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateGatePublisher(publicationDb);
 
         var published = await publisher.TryPublishStatusAsync(
             rasGate.Id,
@@ -134,7 +135,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             Assert.Equal(3, lifecycleGate.ConfigurationRevision);
         }
 
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateGatePublisher(publicationDb);
         var published = await publisher.TryPublishStatusAsync(
             rasGate.Id,
             1,
@@ -163,14 +164,109 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     }
 
     [Fact]
-    public async Task Publish_snapshot_when_revision_changed_rolls_back_complete_mutation()
+    public async Task Publish_snapshot_preserves_gate_observation_owned_by_status_publisher()
     {
+        var endpointObservedAt = new DateTime(
+            2026,
+            8,
+            20,
+            12,
+            0,
+            0,
+            DateTimeKind.Utc);
+        var gateObservedAt = endpointObservedAt.AddMinutes(1);
         var rasGate = RasGateTestData.Create();
-        var existingCluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        rasGate.LastSeenAt = gateObservedAt;
 
         await using (var seedDb = _database.CreateContext())
         {
-            seedDb.AddRange(rasGate, existingCluster);
+            seedDb.AddRange(endpoint, rasGate);
+            await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var publicationDb = _database.CreateContext())
+        {
+            var publisher = CreateEndpointPublisher(publicationDb);
+            var published = await publisher.TryPublishClustersAsync(
+                CreateGuard(endpoint, rasGate),
+                [CreateSnapshot(Guid.NewGuid())],
+                endpointObservedAt,
+                TestContext.Current.CancellationToken);
+
+            Assert.True(published);
+        }
+
+        await using var verificationDb = _database.CreateContext();
+        var storedEndpoint = await verificationDb.RasEndpoints.SingleAsync(
+            item => item.Id == endpoint.Id,
+            TestContext.Current.CancellationToken);
+        var storedGate = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(endpointObservedAt, storedEndpoint.LastSeenAt);
+        Assert.Equal(gateObservedAt, storedGate.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Publish_snapshot_when_endpoint_revision_changed_rolls_back_complete_mutation()
+    {
+        var rasGate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var existingCluster = RasClusterTestData.Create(endpoint.Id);
+        var guard = CreateGuard(endpoint, rasGate);
+
+        await using (var seedDb = _database.CreateContext())
+        {
+            seedDb.AddRange(endpoint, rasGate, existingCluster);
+            await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var publicationDb = _database.CreateContext();
+        _ = await publicationDb.RasEndpoints.SingleAsync(
+            item => item.Id == endpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        await ChangeEndpointAsync(endpoint.Id);
+        var publisher = CreateEndpointPublisher(publicationDb);
+
+        var published = await publisher.TryPublishClustersAsync(
+            guard,
+            [CreateSnapshot(Guid.NewGuid())],
+            DateTime.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+
+        await using var verificationDb = _database.CreateContext();
+        var storedCluster = await verificationDb.RasClusters.SingleAsync(
+            item => item.RasEndpointId == endpoint.Id,
+            TestContext.Current.CancellationToken);
+        var storedEndpoint = await verificationDb.RasEndpoints.SingleAsync(
+            item => item.Id == endpoint.Id,
+            TestContext.Current.CancellationToken);
+        var storedGate = await verificationDb.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(existingCluster.ExternalId, storedCluster.ExternalId);
+        Assert.Equal("replacement-ras.example.test", storedEndpoint.Host);
+        Assert.Equal(2, storedEndpoint.ConfigurationRevision);
+        Assert.Null(storedEndpoint.LastSeenAt);
+        Assert.Null(storedGate.LastSeenAt);
+    }
+
+    [Fact]
+    public async Task Publish_snapshot_when_revision_changed_rolls_back_complete_mutation()
+    {
+        var rasGate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var existingCluster = RasClusterTestData.Create(endpoint.Id);
+
+        await using (var seedDb = _database.CreateContext())
+        {
+            seedDb.AddRange(endpoint, rasGate, existingCluster);
             await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -180,12 +276,11 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, "reconfigured");
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateEndpointPublisher(publicationDb);
         var replacementId = Guid.NewGuid();
 
         var published = await publisher.TryPublishClustersAsync(
-            rasGate.Id,
-            1,
+            CreateGuard(endpoint, rasGate),
             [CreateSnapshot(replacementId)],
             DateTime.UtcNow,
             TestContext.Current.CancellationToken);
@@ -195,7 +290,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         await using var verificationDb = _database.CreateContext();
         var clusters = await verificationDb.RasClusters
             .IgnoreQueryFilters()
-            .Where(item => item.RasGateId == rasGate.Id)
+            .Where(item => item.RasEndpointId == endpoint.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
         var storedGate = await verificationDb.RasGates.SingleAsync(
             item => item.Id == rasGate.Id,
@@ -211,11 +306,12 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     public async Task Publish_cluster_when_revision_changed_rolls_back_targeted_mutation()
     {
         var rasGate = RasGateTestData.Create();
-        var existingCluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var existingCluster = RasClusterTestData.Create(endpoint.Id);
 
         await using (var seedDb = _database.CreateContext())
         {
-            seedDb.AddRange(rasGate, existingCluster);
+            seedDb.AddRange(endpoint, rasGate, existingCluster);
             await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -225,11 +321,10 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, "reconfigured");
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateEndpointPublisher(publicationDb);
 
         var published = await publisher.TryPublishClusterAsync(
-            rasGate.Id,
-            1,
+            CreateGuard(endpoint, rasGate),
             CreateSnapshot(existingCluster.ExternalId),
             DateTime.UtcNow,
             TestContext.Current.CancellationToken);
@@ -238,7 +333,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
 
         await using var verificationDb = _database.CreateContext();
         var storedCluster = await verificationDb.RasClusters.SingleAsync(
-            item => item.RasGateId == rasGate.Id &&
+            item => item.RasEndpointId == endpoint.Id &&
                     item.ExternalId == existingCluster.ExternalId,
             TestContext.Current.CancellationToken);
         var storedGate = await verificationDb.RasGates.SingleAsync(
@@ -253,12 +348,13 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     public async Task Publish_infobases_when_revision_changed_rolls_back_snapshot()
     {
         var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var existing = RasInfobaseTestData.Create(cluster.Id);
 
         await using (var seedDb = _database.CreateContext())
         {
-            seedDb.AddRange(rasGate, cluster, existing);
+            seedDb.AddRange(endpoint, rasGate, cluster, existing);
             await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -268,11 +364,10 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, "reconfigured");
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateEndpointPublisher(publicationDb);
 
         var published = await publisher.TryPublishInfobasesAsync(
-            rasGate.Id,
-            1,
+            CreateGuard(endpoint, rasGate),
             cluster.ExternalId,
             [CreateInfobaseSnapshot(Guid.NewGuid())],
             DateTime.UtcNow,
@@ -297,11 +392,12 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     public async Task Remove_cluster_when_revision_changed_rolls_back_removal()
     {
         var rasGate = RasGateTestData.Create();
-        var existingCluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var existingCluster = RasClusterTestData.Create(endpoint.Id);
 
         await using (var seedDb = _database.CreateContext())
         {
-            seedDb.AddRange(rasGate, existingCluster);
+            seedDb.AddRange(endpoint, rasGate, existingCluster);
             await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -311,11 +407,10 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, "reconfigured");
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateEndpointPublisher(publicationDb);
 
         var published = await publisher.TryRemoveClusterAsync(
-            rasGate.Id,
-            1,
+            CreateGuard(endpoint, rasGate),
             existingCluster.ExternalId,
             DateTime.UtcNow,
             TestContext.Current.CancellationToken);
@@ -324,7 +419,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
 
         await using var verificationDb = _database.CreateContext();
         var storedCluster = await verificationDb.RasClusters.SingleAsync(
-            item => item.RasGateId == rasGate.Id &&
+            item => item.RasEndpointId == endpoint.Id &&
                     item.ExternalId == existingCluster.ExternalId,
             TestContext.Current.CancellationToken);
         var storedGate = await verificationDb.RasGates.SingleAsync(
@@ -339,12 +434,13 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     public async Task Remove_infobase_when_revision_changed_rolls_back_removal()
     {
         var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var infobase = RasInfobaseTestData.Create(cluster.Id);
 
         await using (var seedDb = _database.CreateContext())
         {
-            seedDb.AddRange(rasGate, cluster, infobase);
+            seedDb.AddRange(endpoint, rasGate, cluster, infobase);
             await seedDb.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -354,11 +450,10 @@ public sealed class RasGateSyncPublisherTests : IDisposable
             TestContext.Current.CancellationToken);
 
         await ChangeGateAsync(rasGate.Id, "reconfigured");
-        var publisher = CreatePublisher(publicationDb);
+        var publisher = CreateEndpointPublisher(publicationDb);
 
         var published = await publisher.TryRemoveInfobaseAsync(
-            rasGate.Id,
-            1,
+            CreateGuard(endpoint, rasGate),
             cluster.ExternalId,
             infobase.ExternalId,
             DateTime.UtcNow,
@@ -412,12 +507,39 @@ public sealed class RasGateSyncPublisherTests : IDisposable
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private static RasGateSyncPublisher CreatePublisher(RasHubDbContext db)
+    private async Task ChangeEndpointAsync(Guid rasEndpointId)
     {
-        return new RasGateSyncPublisher(
+        await using var db = _database.CreateContext();
+        var endpoint = await db.RasEndpoints.SingleAsync(
+            item => item.Id == rasEndpointId,
+            TestContext.Current.CancellationToken);
+        endpoint.Host = "replacement-ras.example.test";
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private static RasGateSyncPublisher CreateGatePublisher(RasHubDbContext db)
+    {
+        return new RasGateSyncPublisher(db);
+    }
+
+    private static RasEndpointSyncPublisher CreateEndpointPublisher(
+        RasHubDbContext db)
+    {
+        return new RasEndpointSyncPublisher(
             db,
             new RasClusterSnapshotStore(db),
             new RasInfobaseSnapshotStore(db));
+    }
+
+    private static RasEndpointExecutionGuard CreateGuard(
+        RasEndpoint endpoint,
+        RasGate rasGate)
+    {
+        return new RasEndpointExecutionGuard(
+            endpoint.Id,
+            endpoint.ConfigurationRevision,
+            rasGate.Id,
+            rasGate.ConfigurationRevision);
     }
 
     private static RasClusterSnapshot CreateSnapshot(Guid externalId)
@@ -444,9 +566,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     {
         return new RasInfobaseSnapshot
         {
-            ExternalId = externalId,
-            Name = "Replacement infobase",
-            Description = "Replacement description"
+            ExternalId = externalId, Name = "Replacement infobase", Description = "Replacement description"
         };
     }
 }
