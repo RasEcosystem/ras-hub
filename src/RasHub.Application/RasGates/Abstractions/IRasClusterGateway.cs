@@ -1,3 +1,4 @@
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
 
@@ -10,27 +11,27 @@ public interface IRasClusterGateway
         CancellationToken cancellationToken);
 
     Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         CancellationToken cancellationToken);
 
     Task<RasClusterSnapshot> GetClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         CancellationToken cancellationToken);
 
     Task<Guid> CreateClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         RasClusterCreationOptions options,
         CancellationToken cancellationToken);
 
     Task UpdateClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         RasClusterUpdateOptions options,
         CancellationToken cancellationToken);
 
     Task RemoveClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         string? clusterUser,
         string? clusterPassword,

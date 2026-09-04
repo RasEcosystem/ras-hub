@@ -27,9 +27,11 @@ public sealed class RasEndpointsApiTests
     [Fact]
     public async Task Create_returns_normalized_endpoint_and_location()
     {
+        var gate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
         var request = new CreateRasEndpointRequest(
             "Production RAS",
+            gate.Id,
             " RAS.EXAMPLE.TEST. ",
             1545);
 
@@ -43,6 +45,7 @@ public sealed class RasEndpointsApiTests
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.True(json.GetProperty("success").GetBoolean());
+        Assert.Equal(gate.Id, data.GetProperty("rasGateId").GetGuid());
         Assert.Equal(request.Name, data.GetProperty("name").GetString());
         Assert.Equal("ras.example.test", data.GetProperty("host").GetString());
         Assert.Equal(request.Port, data.GetProperty("port").GetInt32());
@@ -61,13 +64,17 @@ public sealed class RasEndpointsApiTests
     [Fact]
     public async Task Get_by_id_and_collections_return_persisted_endpoints()
     {
+        var gate = await _factory.SeedRasGateAsync();
         var first = await _factory.SeedRasEndpointAsync(
+            gate.Id,
             "First",
             "first.example.test");
         await _factory.SeedRasEndpointAsync(
+            gate.Id,
             "Second",
             "second.example.test");
         await _factory.SeedRasEndpointAsync(
+            gate.Id,
             "Third",
             "third.example.test");
         using var client = _factory.CreateAuthenticatedClient();
@@ -89,6 +96,9 @@ public sealed class RasEndpointsApiTests
         Assert.Equal(
             first.Id,
             getJson.GetProperty("data").GetProperty("id").GetGuid());
+        Assert.Equal(
+            gate.Id,
+            getJson.GetProperty("data").GetProperty("rasGateId").GetGuid());
         Assert.Equal(HttpStatusCode.OK, pageResponse.StatusCode);
         Assert.Equal(
             3,
@@ -104,10 +114,12 @@ public sealed class RasEndpointsApiTests
     [Fact]
     public async Task Update_replaces_configuration_and_advances_revision()
     {
-        var endpoint = await _factory.SeedRasEndpointAsync();
+        var gate = await _factory.SeedRasGateAsync();
+        var endpoint = await _factory.SeedRasEndpointAsync(gate.Id);
         using var client = _factory.CreateAuthenticatedClient();
         var request = new UpdateRasEndpointRequest(
             "Standby RAS",
+            gate.Id,
             "standby.example.test",
             2545,
             false,
@@ -122,6 +134,7 @@ public sealed class RasEndpointsApiTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(request.Name, data.GetProperty("name").GetString());
+        Assert.Equal(request.RasGateId, data.GetProperty("rasGateId").GetGuid());
         Assert.Equal(request.Host, data.GetProperty("host").GetString());
         Assert.Equal(request.Port, data.GetProperty("port").GetInt32());
         Assert.False(data.GetProperty("isActive").GetBoolean());
@@ -130,13 +143,44 @@ public sealed class RasEndpointsApiTests
         var stored = await _factory.FindRasEndpointAsync(endpoint.Id);
         Assert.NotNull(stored);
         Assert.Equal(request.Name, stored.Name);
+        Assert.Equal(request.RasGateId, stored.RasGateId);
         Assert.False(stored.IsActive);
+    }
+
+    [Fact]
+    public async Task Update_reassigns_endpoint_to_another_gate()
+    {
+        var originalGate = await _factory.SeedRasGateAsync("Original Gate");
+        var replacementGate = await _factory.SeedRasGateAsync("Replacement Gate");
+        var endpoint = await _factory.SeedRasEndpointAsync(originalGate.Id);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PutAsJsonAsync(
+            $"{RasEndpointsPath}/{endpoint.Id}",
+            new UpdateRasEndpointRequest(
+                endpoint.Name,
+                replacementGate.Id,
+                endpoint.Host,
+                endpoint.Port,
+                endpoint.IsActive,
+                endpoint.ConfigurationRevision),
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(
+            replacementGate.Id,
+            json.GetProperty("data").GetProperty("rasGateId").GetGuid());
+        Assert.Equal(
+            replacementGate.Id,
+            (await _factory.FindRasEndpointAsync(endpoint.Id))?.RasGateId);
     }
 
     [Fact]
     public async Task Update_with_stale_revision_returns_conflict()
     {
-        var endpoint = await _factory.SeedRasEndpointAsync();
+        var gate = await _factory.SeedRasGateAsync();
+        var endpoint = await _factory.SeedRasEndpointAsync(gate.Id);
         using var client = _factory.CreateAuthenticatedClient();
         var originalRevision = endpoint.ConfigurationRevision;
 
@@ -144,6 +188,7 @@ public sealed class RasEndpointsApiTests
             $"{RasEndpointsPath}/{endpoint.Id}",
             new UpdateRasEndpointRequest(
                 "First update",
+                gate.Id,
                 endpoint.Host,
                 endpoint.Port,
                 true,
@@ -153,6 +198,7 @@ public sealed class RasEndpointsApiTests
             $"{RasEndpointsPath}/{endpoint.Id}",
             new UpdateRasEndpointRequest(
                 "Stale update",
+                gate.Id,
                 endpoint.Host,
                 endpoint.Port,
                 true,
@@ -173,7 +219,8 @@ public sealed class RasEndpointsApiTests
     [Fact]
     public async Task Delete_soft_deletes_and_hides_endpoint()
     {
-        var endpoint = await _factory.SeedRasEndpointAsync();
+        var gate = await _factory.SeedRasGateAsync();
+        var endpoint = await _factory.SeedRasEndpointAsync(gate.Id);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var deleteResponse = await client.DeleteAsync(
@@ -201,11 +248,12 @@ public sealed class RasEndpointsApiTests
         string host,
         int port)
     {
+        var gate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
             RasEndpointsPath,
-            new CreateRasEndpointRequest(name, host, port),
+            new CreateRasEndpointRequest(name, gate.Id, host, port),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
 
@@ -214,8 +262,55 @@ public sealed class RasEndpointsApiTests
     }
 
     [Fact]
+    public async Task Create_with_unknown_gate_returns_not_found()
+    {
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            RasEndpointsPath,
+            new CreateRasEndpointRequest(
+                "Unknown Gate RAS",
+                Guid.NewGuid(),
+                "ras.example.test",
+                1545),
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("ras_gate_not_found", GetErrorCode(json));
+    }
+
+    [Fact]
+    public async Task Update_with_unknown_gate_returns_not_found_and_preserves_assignment()
+    {
+        var gate = await _factory.SeedRasGateAsync();
+        var endpoint = await _factory.SeedRasEndpointAsync(gate.Id);
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PutAsJsonAsync(
+            $"{RasEndpointsPath}/{endpoint.Id}",
+            new UpdateRasEndpointRequest(
+                endpoint.Name,
+                Guid.NewGuid(),
+                endpoint.Host,
+                endpoint.Port,
+                endpoint.IsActive,
+                endpoint.ConfigurationRevision),
+            TestContext.Current.CancellationToken);
+        var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("ras_gate_not_found", GetErrorCode(json));
+        var stored = await _factory.FindRasEndpointAsync(endpoint.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(gate.Id, stored.RasGateId);
+        Assert.Equal(endpoint.ConfigurationRevision, stored.ConfigurationRevision);
+    }
+
+    [Fact]
     public async Task Unknown_endpoint_returns_domain_specific_not_found()
     {
+        var gate = await _factory.SeedRasGateAsync();
         using var client = _factory.CreateAuthenticatedClient();
         var id = Guid.NewGuid();
 
@@ -226,6 +321,7 @@ public sealed class RasEndpointsApiTests
             $"{RasEndpointsPath}/{id}",
             new UpdateRasEndpointRequest(
                 "Unknown",
+                gate.Id,
                 "unknown.example.test",
                 1545,
                 true,
@@ -243,6 +339,7 @@ public sealed class RasEndpointsApiTests
     [Fact]
     public async Task Non_admin_api_key_cannot_mutate_endpoint()
     {
+        var gate = await _factory.SeedRasGateAsync();
         var apiKey = $"non-admin-{Guid.NewGuid():N}";
         var email = $"non-admin-{Guid.NewGuid():N}@example.test";
 
@@ -268,6 +365,7 @@ public sealed class RasEndpointsApiTests
             RasEndpointsPath,
             new CreateRasEndpointRequest(
                 "Forbidden RAS",
+                gate.Id,
                 "ras.example.test",
                 1545),
             TestContext.Current.CancellationToken);

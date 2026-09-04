@@ -16,14 +16,14 @@ namespace RasHub.Web.Controllers.RasClusters;
 [Authorize(AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme)]
 [Tags("Clusters")]
 [ControllerDescription("Clusters",
-    "Manage 1C:Enterprise clusters, inspect their persisted shadow, and refresh it from live RasGate data.")]
+    "Manage 1C:Enterprise clusters owned by RAS endpoints and inspect their persisted shadow.")]
 public sealed class RasClusterShadowSearchController(
     RasClusterQueries queries) : ControllerBase
 {
     [HttpGet(Name = "SearchShadowPagedClusters")]
     [EndpointSummary("Search paged cluster shadow")]
     [EndpointDescription(
-        "Searches the persisted cluster shadow across all RasGates by a case-insensitive literal substring and returns one page. Supported fields are Name and Host; Name is searched when fields are omitted, and multiple fields are combined with OR. An optional RasGate filter narrows the scope. Every result includes its RasGate ID and name. RasGate is not contacted.")]
+        "Searches the persisted cluster shadow across all RAS endpoints by a case-insensitive literal substring and returns one page. Supported fields are Name and Host; Name is searched when fields are omitted, and multiple fields are combined with OR. An optional RAS endpoint filter narrows the scope. Every result includes its RAS endpoint ID and name. Neither the endpoint nor RasGate is contacted.")]
     [ProducesResponseType<ApiResponse<PageResult<ClusterSearchResultModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(StatusCodes.Status400BadRequest)]
@@ -44,7 +44,7 @@ public sealed class RasClusterShadowSearchController(
     [HttpGet("all", Name = "SearchShadowAllClusters")]
     [EndpointSummary("Search all cluster shadow entries")]
     [EndpointDescription(
-        "Searches the persisted cluster shadow across all RasGates by a case-insensitive literal substring and returns all matches without pagination. Supported fields are Name and Host; Name is searched when fields are omitted, and multiple fields are combined with OR. An optional RasGate filter narrows the scope. Every result includes its RasGate ID and name. RasGate is not contacted.")]
+        "Searches the persisted cluster shadow across all RAS endpoints by a case-insensitive literal substring and returns all matches without pagination. Supported fields are Name and Host; Name is searched when fields are omitted, and multiple fields are combined with OR. An optional RAS endpoint filter narrows the scope. Every result includes its RAS endpoint ID and name. Neither the endpoint nor RasGate is contacted.")]
     [ProducesResponseType<ApiResponse<IReadOnlyList<ClusterSearchResultModel>>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(StatusCodes.Status400BadRequest)]

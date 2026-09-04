@@ -230,7 +230,9 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         using var factory = new RasHubWebApplicationFactory(false);
         const string email = "ras-endpoints-admin@example.test";
         await factory.SeedIdentityUserAsync(email, AccountPassword);
-        await factory.SeedRasEndpointAsync(
+        var gate = await factory.SeedRasGateAsync("Primary Gate");
+        _ = await factory.SeedRasEndpointAsync(
+            gate.Id,
             "Production RAS",
             "ras.example.test",
             1545);
@@ -275,6 +277,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         Assert.Contains("RAS endpoints", html);
         Assert.Contains("Production RAS", html);
         Assert.Contains("ras.example.test:1545", html);
+        Assert.Contains("Primary Gate", html);
         Assert.Contains("href=\"/ras-endpoints\"", html);
     }
 }

@@ -7,6 +7,13 @@
     <DialogContent>
         <MudForm @ref="_form" ValidationDelay="0">
             <MudStack Spacing="3">
+                @if (GateOptions.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense>
+                        Register a RasGate before adding a RAS endpoint.
+                    </MudAlert>
+                }
+
                 <MudTextField T="string"
                               @bind-Value="_name"
                               Label="Name"
@@ -16,6 +23,20 @@
                               MaxLength="@RasEndpoint.NameMaxLength"
                               Counter="@RasEndpoint.NameMaxLength"
                               Immediate/>
+
+                <MudSelect T="Guid"
+                           @bind-Value="_rasGateId"
+                           Label="RasGate"
+                           Variant="Variant.Outlined"
+                           Required
+                           RequiredError="Select a RasGate">
+                    @foreach (var gate in GateOptions)
+                    {
+                        <MudSelectItem T="Guid" Value="@gate.Id">
+                            @gate.Name · @FormatGateEndpoint(gate)@(!gate.IsActive ? " · inactive" : null)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
 
                 <MudGrid Spacing="2">
                     <MudItem xs="12" sm="8">
@@ -58,6 +79,7 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Outlined.Save"
+                       Disabled="@(GateOptions.Count == 0)"
                        OnClick="SaveAsync">
                 @(Endpoint is null ? "Add" : "Save changes")
             </MudButton>
@@ -68,6 +90,7 @@
 @code {
     private MudForm _form = null!;
     private string _name = string.Empty;
+    private Guid _rasGateId;
     private string _host = "localhost";
     private int _port = 1545;
     private bool _isActive = true;
@@ -76,12 +99,23 @@
 
     [Parameter] public RasEndpointAdministrationItem? Endpoint { get; set; }
 
+    [Parameter, EditorRequired]
+    public IReadOnlyList<RasEndpointGateOption> GateOptions { get; set; } = [];
+
     protected override void OnInitialized()
     {
         if (Endpoint is null)
+        {
+            _rasGateId = GateOptions.FirstOrDefault(gate => gate.IsActive)?.Id ??
+                         GateOptions.FirstOrDefault()?.Id ??
+                         Guid.Empty;
             return;
+        }
 
         _name = Endpoint.Name;
+        _rasGateId = GateOptions.Any(gate => gate.Id == Endpoint.RasGateId)
+            ? Endpoint.RasGateId
+            : Guid.Empty;
         _host = Endpoint.Host;
         _port = Endpoint.Port;
         _isActive = Endpoint.IsActive;
@@ -103,11 +137,12 @@
     private async Task SaveAsync()
     {
         await _form.ValidateAsync();
-        if (!_form.IsValid)
+        if (!_form.IsValid || _rasGateId == Guid.Empty)
             return;
 
         MudDialog.Close(DialogResult.Ok(new RasEndpointEditorValues(
             _name,
+            _rasGateId,
             _host,
             _port,
             _isActive)));
@@ -116,5 +151,16 @@
     private void Cancel()
     {
         MudDialog.Cancel();
+    }
+
+    private static string FormatGateEndpoint(RasEndpointGateOption gate)
+    {
+        if (!Uri.TryCreate(gate.Url, UriKind.Absolute, out var address))
+            return $"{gate.Url} · port {gate.Port}";
+
+        return new UriBuilder(address) { Port = gate.Port }
+            .Uri
+            .ToString()
+            .TrimEnd('/');
     }
 }

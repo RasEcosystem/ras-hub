@@ -13,13 +13,13 @@
 
 <AppPageShell Width="AppPageWidth.Wide"
               Title="RAS endpoints"
-              Subtitle="Administration servers managed through RasGate routes"
+              Subtitle="Administration servers assigned to RasGate execution nodes"
               Icon="@Icons.Material.Filled.Link">
     <HeaderActions>
         <MudButton Variant="Variant.Outlined"
                    Color="Color.Primary"
                    StartIcon="@Icons.Material.Outlined.Add"
-                   Disabled="@(_busyEndpointId is not null)"
+                   Disabled="@(_busyEndpointId is not null || _gateOptions.Count == 0)"
                    OnClick="AddAsync">
             Add
         </MudButton>
@@ -56,6 +56,7 @@
                     <MudTh>Status</MudTh>
                     <MudTh>RAS endpoint</MudTh>
                     <MudTh>Address</MudTh>
+                    <MudTh>RasGate</MudTh>
                     <MudTh>Changed</MudTh>
                     <MudTh Class="text-right">Actions</MudTh>
                 </HeaderContent>
@@ -77,6 +78,12 @@
                     </MudTd>
                     <MudTd DataLabel="Address">
                         <MudText Typo="Typo.body2">@FormatAddress(context)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="RasGate">
+                        <MudText Typo="Typo.body2">@context.RasGateName</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @FormatGateEndpoint(context)
+                        </MudText>
                     </MudTd>
                     <MudTd DataLabel="Changed">
                         <MudText Typo="Typo.body2">
@@ -139,11 +146,12 @@
                                  Size="Size.Large"/>
                         <MudText Typo="Typo.h6">No RAS endpoints configured</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            Add an administration server before configuring its RasGate routes.
+                            Register a RasGate, then add an administration server assigned to it.
                         </MudText>
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Outlined.Add"
+                                   Disabled="@(_gateOptions.Count == 0)"
                                    OnClick="AddAsync">
                             Add
                         </MudButton>
@@ -166,6 +174,7 @@
     private readonly CancellationTokenSource _disposeToken = new();
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private IReadOnlyList<RasEndpointAdministrationItem> _items = [];
+    private IReadOnlyList<RasEndpointGateOption> _gateOptions = [];
     private Guid? _busyEndpointId;
     private bool _loading;
     private bool _showDeleted;
@@ -204,6 +213,8 @@
         _loading = true;
         _items = await AdministrationService.GetItemsAsync(
             _showDeleted,
+            _disposeToken.Token);
+        _gateOptions = await AdministrationService.GetGateOptionsAsync(
             _disposeToken.Token);
     }
 
@@ -245,6 +256,7 @@
     {
         var values = new RasEndpointEditorValues(
             item.Name,
+            item.RasGateId,
             item.Host,
             item.Port,
             isActive);
@@ -303,7 +315,10 @@
     private async Task<RasEndpointEditorValues?> ShowEditorAsync(
         RasEndpointAdministrationItem? item)
     {
-        var parameters = new DialogParameters<RasEndpointEditorDialog>();
+        var parameters = new DialogParameters<RasEndpointEditorDialog>
+        {
+            { dialog => dialog.GateOptions, _gateOptions }
+        };
         if (item is not null)
             parameters.Add(dialog => dialog.Endpoint, item);
 
@@ -364,26 +379,36 @@
     {
         if (item.IsDeleted)
             return "Deleted";
+        if (!item.IsActive)
+            return "Inactive";
+        if (item.RasGateIsDeleted || !item.RasGateIsActive)
+            return "Gate unavailable";
 
-        return item.IsActive ? "Active" : "Inactive";
+        return "Active";
     }
 
     private static Color StatusColor(RasEndpointAdministrationItem item)
     {
         if (item.IsDeleted)
             return Color.Error;
+        if (!item.IsActive)
+            return Color.Default;
+        if (item.RasGateIsDeleted || !item.RasGateIsActive)
+            return Color.Warning;
 
-        return item.IsActive ? Color.Success : Color.Default;
+        return Color.Success;
     }
 
     private static string StatusIcon(RasEndpointAdministrationItem item)
     {
         if (item.IsDeleted)
             return Icons.Material.Outlined.DeleteOutline;
+        if (!item.IsActive)
+            return Icons.Material.Outlined.PauseCircle;
+        if (item.RasGateIsDeleted || !item.RasGateIsActive)
+            return Icons.Material.Outlined.WarningAmber;
 
-        return item.IsActive
-            ? Icons.Material.Outlined.CheckCircle
-            : Icons.Material.Outlined.PauseCircle;
+        return Icons.Material.Outlined.CheckCircle;
     }
 
     private static string FormatAddress(RasEndpointAdministrationItem item)
@@ -391,6 +416,18 @@
         return item.Host.Contains(':', StringComparison.Ordinal)
             ? $"[{item.Host}]:{item.Port}"
             : $"{item.Host}:{item.Port}";
+    }
+
+    private static string FormatGateEndpoint(
+        RasEndpointAdministrationItem item)
+    {
+        if (!Uri.TryCreate(item.RasGateUrl, UriKind.Absolute, out var address))
+            return $"{item.RasGateUrl} · port {item.RasGatePort}";
+
+        return new UriBuilder(address) { Port = item.RasGatePort }
+            .Uri
+            .ToString()
+            .TrimEnd('/');
     }
 
     private static string FormatTime(DateTime? value)

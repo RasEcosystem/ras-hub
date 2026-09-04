@@ -31,47 +31,51 @@ internal static class RasGateTaskOptions
     }
 
     public static BackgroundTaskOptions InteractiveClusterSynchronization(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId)
     {
         return Interactive(
             TimeSpan.FromSeconds(30),
-            $"ras-gate-cluster:{rasGateId}:{clusterId}",
-            rasGateId);
+            $"ras-endpoint-cluster:{rasEndpointId}:{clusterId}",
+            rasEndpointId,
+            endpointScoped: true);
     }
 
     public static BackgroundTaskOptions InteractiveClustersSynchronization(
-        Guid rasGateId)
+        Guid rasEndpointId)
     {
         return Interactive(
             TimeSpan.FromSeconds(30),
-            $"ras-gate-clusters:{rasGateId}",
-            rasGateId);
+            $"ras-endpoint-clusters:{rasEndpointId}",
+            rasEndpointId,
+            endpointScoped: true);
     }
 
     public static BackgroundTaskOptions InteractiveInfobasesSynchronization(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId)
     {
         return Interactive(
             TimeSpan.FromSeconds(30),
-            $"ras-gate-infobases:{rasGateId}:{clusterId}",
-            rasGateId);
+            $"ras-endpoint-infobases:{rasEndpointId}:{clusterId}",
+            rasEndpointId,
+            endpointScoped: true);
     }
 
     public static BackgroundTaskOptions InteractiveInfobaseSynchronization(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         Guid infobaseId)
     {
         return Interactive(
             TimeSpan.FromSeconds(30),
-            $"ras-gate-infobase:{rasGateId}:{clusterId}:{infobaseId}",
-            rasGateId);
+            $"ras-endpoint-infobase:{rasEndpointId}:{clusterId}:{infobaseId}",
+            rasEndpointId,
+            endpointScoped: true);
     }
 
     public static BackgroundTaskOptions InteractiveClusterRemoval(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId)
     {
         return new BackgroundTaskOptions
@@ -80,39 +84,40 @@ internal static class RasGateTaskOptions
             MaxAttempts = 1,
             Timeout = TimeSpan.FromSeconds(30),
             DeduplicationKey =
-                $"ras-gate-cluster-remove:{rasGateId}:{clusterId}",
-            ConcurrencyKey = $"ras-gate:{rasGateId}"
+                $"ras-endpoint-cluster-remove:{rasEndpointId}:{clusterId}",
+            ConcurrencyKey = $"ras-endpoint:{rasEndpointId}"
         };
     }
 
     public static BackgroundTaskOptions InteractiveClusterCreation(
-        Guid rasGateId)
+        Guid rasEndpointId)
     {
-        return InteractiveClusterMutation(rasGateId);
+        return InteractiveClusterMutation(rasEndpointId);
     }
 
     public static BackgroundTaskOptions InteractiveClusterUpdate(
-        Guid rasGateId)
+        Guid rasEndpointId)
     {
-        return InteractiveClusterMutation(rasGateId);
+        return InteractiveClusterMutation(rasEndpointId);
     }
 
     private static BackgroundTaskOptions InteractiveClusterMutation(
-        Guid rasGateId)
+        Guid rasEndpointId)
     {
         return new BackgroundTaskOptions
         {
             Queue = BackgroundTaskQueue.Interactive,
             MaxAttempts = 1,
             Timeout = TimeSpan.FromSeconds(30),
-            ConcurrencyKey = $"ras-gate:{rasGateId}"
+            ConcurrencyKey = $"ras-endpoint:{rasEndpointId}"
         };
     }
 
     private static BackgroundTaskOptions Interactive(
         TimeSpan timeout,
         string deduplicationKey,
-        Guid rasGateId)
+        Guid ownerId,
+        bool endpointScoped = false)
     {
         return new BackgroundTaskOptions
         {
@@ -121,7 +126,9 @@ internal static class RasGateTaskOptions
             RetryDelay = TimeSpan.FromMilliseconds(250),
             Timeout = timeout,
             DeduplicationKey = deduplicationKey,
-            ConcurrencyKey = $"ras-gate:{rasGateId}"
+            ConcurrencyKey = endpointScoped
+                ? $"ras-endpoint:{ownerId}"
+                : $"ras-gate:{ownerId}"
         };
     }
 }

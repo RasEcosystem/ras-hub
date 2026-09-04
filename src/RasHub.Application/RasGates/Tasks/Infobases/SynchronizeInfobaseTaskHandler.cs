@@ -1,4 +1,6 @@
 using RasHub.Application.Interfaces;
+using RasHub.Application.RasEndpoints.Exceptions;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -8,9 +10,9 @@ using RasHub.Domain;
 namespace RasHub.Application.RasGates.Tasks.Infobases;
 
 public sealed class SynchronizeInfobaseTaskHandler(
-    IRepository<RasGate> rasGateRepository,
+    RasEndpointExecutionTargetResolver targetResolver,
     IRepository<RasCluster> rasClusterRepository,
-    IRasGateSyncPublisher publisher,
+    IRasEndpointSyncPublisher publisher,
     IRasInfobaseGateway infobaseGateway,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<SynchronizeInfobaseTask>
@@ -19,26 +21,19 @@ public sealed class SynchronizeInfobaseTaskHandler(
         SynchronizeInfobaseTask task,
         CancellationToken cancellationToken)
     {
-        var rasGate = await rasGateRepository.GetByIdAsync(
-            task.RasGateId,
+        var target = await targetResolver.ResolveAsync(
+            task.RasEndpointId,
             cancellationToken);
-
-        if (rasGate is null)
-            throw new RasGateNotFoundException(task.RasGateId);
-
-        if (!rasGate.IsActive)
-            throw new RasGateInactiveException(rasGate.Id);
-
         await EnsureClusterExistsAsync(task, cancellationToken);
 
-        var configurationRevision = rasGate.ConfigurationRevision;
+        var guard = target.CaptureGuard();
         var capabilities = await infobaseGateway.GetCapabilitiesAsync(
-            rasGate,
+            target.Gate,
             cancellationToken);
 
         if (!capabilities.Supports("infobases", "info"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "infobases",
                 "info");
 
@@ -47,7 +42,7 @@ public sealed class SynchronizeInfobaseTaskHandler(
         try
         {
             snapshot = await infobaseGateway.GetInfobaseAsync(
-                rasGate,
+                target,
                 task.ClusterId,
                 task.InfobaseId,
                 task.ClusterUser,
@@ -59,15 +54,15 @@ public sealed class SynchronizeInfobaseTaskHandler(
                   exception.ExternalId == task.InfobaseId)
         {
             var removed = await publisher.TryRemoveInfobaseAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 task.ClusterId,
                 task.InfobaseId,
                 timeProvider.GetUtcNow().UtcDateTime,
                 cancellationToken);
 
             if (!removed)
-                throw new RasGateConfigurationChangedException(rasGate.Id);
+                throw new RasEndpointConfigurationChangedException(
+                    task.RasEndpointId);
 
             throw;
         }
@@ -75,13 +70,13 @@ public sealed class SynchronizeInfobaseTaskHandler(
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!await publisher.TryPublishInfobaseAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 task.ClusterId,
                 snapshot,
                 observedAt,
                 cancellationToken))
-            throw new RasGateConfigurationChangedException(rasGate.Id);
+            throw new RasEndpointConfigurationChangedException(
+                task.RasEndpointId);
     }
 
     private async Task EnsureClusterExistsAsync(
@@ -89,13 +84,13 @@ public sealed class SynchronizeInfobaseTaskHandler(
         CancellationToken cancellationToken)
     {
         var clusters = await rasClusterRepository.ListAsync(
-            cluster => cluster.RasGateId == task.RasGateId &&
+            cluster => cluster.RasEndpointId == task.RasEndpointId &&
                        cluster.ExternalId == task.ClusterId,
             cancellationToken);
 
         if (clusters.Count != 1)
             throw new RasClusterNotFoundException(
-                task.RasGateId,
+                task.RasEndpointId,
                 task.ClusterId);
     }
 }

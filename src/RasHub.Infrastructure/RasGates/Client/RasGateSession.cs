@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Infrastructure.RasGates.Rac;
@@ -19,6 +20,7 @@ internal sealed class RasGateSession
     private readonly string _apiKey;
     private readonly Uri _baseAddress;
     private readonly RacCapabilityResolver _capabilityResolver;
+    private readonly RacEndpointArgumentAdapter _endpointArgumentAdapter;
     private readonly long _configurationRevision;
     private readonly HttpClient _httpClient;
     private readonly RacVersionCache _racVersionCache;
@@ -34,7 +36,8 @@ internal sealed class RasGateSession
         long configurationRevision,
         RacVersionCache racVersionCache,
         RacVersionParser versionParser,
-        RacCapabilityResolver capabilityResolver)
+        RacCapabilityResolver capabilityResolver,
+        RacEndpointArgumentAdapter endpointArgumentAdapter)
     {
         _httpClient = httpClient;
         _baseAddress = baseAddress;
@@ -44,6 +47,7 @@ internal sealed class RasGateSession
         _racVersionCache = racVersionCache;
         _versionParser = versionParser;
         _capabilityResolver = capabilityResolver;
+        _endpointArgumentAdapter = endpointArgumentAdapter;
     }
 
     public async Task<RasGateStatus> GetStatusAsync(
@@ -181,19 +185,26 @@ internal sealed class RasGateSession
 
     public Task<RacExecutionResult> ExecuteRacQueryAsync(
         IReadOnlyList<string> arguments,
+        RasEndpointAddress address,
         CancellationToken cancellationToken)
     {
-        return ExecuteRacAsync(arguments, null, cancellationToken);
+        return ExecuteRacAsync(
+            arguments,
+            address,
+            null,
+            cancellationToken);
     }
 
     public Task<RacExecutionResult> ExecuteRacMutationAsync(
         IReadOnlyList<string> arguments,
+        RasEndpointAddress address,
         string resource,
         string operation,
         CancellationToken cancellationToken)
     {
         return ExecuteRacAsync(
             arguments,
+            address,
             new RacMutation(resource, operation),
             cancellationToken);
     }
@@ -206,6 +217,7 @@ internal sealed class RasGateSession
 
     private async Task<RacExecutionResult> ExecuteRacAsync(
         IReadOnlyList<string> arguments,
+        RasEndpointAddress address,
         RacMutation? mutation,
         CancellationToken cancellationToken)
     {
@@ -214,7 +226,12 @@ internal sealed class RasGateSession
             "rac/execute",
             true);
         request.Content = JsonContent.Create(
-            new ExecuteRacRequest { Arguments = arguments },
+            new ExecuteRacRequest
+            {
+                Arguments = _endpointArgumentAdapter.Apply(
+                    arguments,
+                    address)
+            },
             options: JsonOptions);
 
         var data = await SendAsync<ExecuteRacData>(

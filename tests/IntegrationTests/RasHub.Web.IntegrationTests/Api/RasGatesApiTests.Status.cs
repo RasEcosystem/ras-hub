@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Application.RasGates.Tasks.Clusters;
@@ -348,6 +349,7 @@ public sealed partial class RasGatesApiTests
     public async Task Background_handlers_reject_inactive_gate_before_creating_requests()
     {
         var rasGate = await _factory.SeedRasGateAsync(isActive: false);
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         using var scope = _factory.Services.CreateScope();
         var statusHandler = scope.ServiceProvider.GetRequiredService<
             IBackgroundTaskHandler<CheckRasGateStatusTask>>();
@@ -360,9 +362,9 @@ public sealed partial class RasGatesApiTests
             statusHandler.ExecuteAsync(
                 new CheckRasGateStatusTask(rasGate.Id),
                 TestContext.Current.CancellationToken));
-        await Assert.ThrowsAsync<RasGateInactiveException>(() =>
+        await Assert.ThrowsAsync<RasEndpointGateUnavailableException>(() =>
             clustersHandler.ExecuteAsync(
-                new SynchronizeClustersTask(rasGate.Id),
+                new SynchronizeClustersTask(rasEndpoint.Id),
                 TestContext.Current.CancellationToken));
 
         Assert.Equal(0, _factory.RasGateBoundary.StatusRequestCount);

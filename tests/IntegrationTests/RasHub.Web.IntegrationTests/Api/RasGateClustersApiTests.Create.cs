@@ -13,6 +13,7 @@ public sealed partial class RasGateClustersApiTests
     public async Task Create_publishes_and_returns_authoritative_cluster()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         var clusterId = Guid.NewGuid();
         var snapshot = CreateSnapshot(clusterId, "Новый кластер");
         _factory.RasGateBoundary.CreatedClusterId = clusterId;
@@ -20,7 +21,7 @@ public sealed partial class RasGateClustersApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest(
                 "localhost",
                 1587,
@@ -33,7 +34,7 @@ public sealed partial class RasGateClustersApiTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal(clusterId, json.GetProperty("data").GetProperty("id").GetGuid());
         Assert.Equal(
-            $"/api/v1/ras-gates/{rasGate.Id:D}/clusters/shadow/{clusterId:D}",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id:D}/clusters/shadow/{clusterId:D}",
             response.Headers.Location?.AbsolutePath);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
@@ -43,7 +44,7 @@ public sealed partial class RasGateClustersApiTests
         Assert.Equal(1587, options.Port);
         Assert.Equal("agent-admin", options.AgentUser);
         Assert.Equal("agent-secret", options.AgentPassword);
-        var stored = Assert.Single(await _factory.FindRasClustersAsync(rasGate.Id));
+        var stored = Assert.Single(await _factory.FindRasClustersAsync(rasEndpoint.Id));
         Assert.Equal(clusterId, stored.ExternalId);
         Assert.Equal(snapshot.Name, stored.Name);
     }
@@ -52,12 +53,13 @@ public sealed partial class RasGateClustersApiTests
     public async Task Create_when_RAC_fails_does_not_publish_or_retry()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         _factory.RasGateBoundary.ClusterCreateException =
             new RasGateClientException("Port conflict details.");
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1541),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -69,19 +71,20 @@ public sealed partial class RasGateClustersApiTests
         Assert.DoesNotContain("Port conflict", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(0, _factory.RasGateBoundary.ClusterInfoRequestCount);
-        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+        Assert.Empty(await _factory.FindRasClustersAsync(rasEndpoint.Id));
     }
 
     [Fact]
     public async Task Create_when_RAC_is_unavailable_returns_service_unavailable()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         _factory.RasGateBoundary.ClusterCreateException =
             new RacUnavailableException(rasGate.Id);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1541),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -89,13 +92,14 @@ public sealed partial class RasGateClustersApiTests
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal("rac_unavailable", GetErrorCode(json));
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
-        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+        Assert.Empty(await _factory.FindRasClustersAsync(rasEndpoint.Id));
     }
 
     [Fact]
     public async Task Create_when_outcome_is_unknown_requires_synchronization()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         _factory.RasGateBoundary.ClusterCreateException =
             new RasGateMutationOutcomeUnknownException(
                 rasGate.Id,
@@ -104,7 +108,7 @@ public sealed partial class RasGateClustersApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1541),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -116,7 +120,7 @@ public sealed partial class RasGateClustersApiTests
         Assert.Contains("Refresh", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(0, _factory.RasGateBoundary.ClusterInfoRequestCount);
-        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+        Assert.Empty(await _factory.FindRasClustersAsync(rasEndpoint.Id));
     }
 
     [Theory]
@@ -129,6 +133,7 @@ public sealed partial class RasGateClustersApiTests
         string failure)
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         var clusterId = Guid.NewGuid();
         _factory.RasGateBoundary.CreatedClusterId = clusterId;
         _factory.RasGateBoundary.ClusterException =
@@ -136,7 +141,7 @@ public sealed partial class RasGateClustersApiTests
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1587),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -146,13 +151,14 @@ public sealed partial class RasGateClustersApiTests
         Assert.Contains("Refresh", json.ToString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
-        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+        Assert.Empty(await _factory.FindRasClustersAsync(rasEndpoint.Id));
     }
 
     [Fact]
     public async Task Create_when_configuration_changes_after_remote_read_back_returns_not_confirmed_without_retry()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         var clusterId = Guid.NewGuid();
         _factory.RasGateBoundary.CreatedClusterId = clusterId;
         _factory.RasGateBoundary.Cluster = CreateSnapshot(
@@ -164,7 +170,7 @@ public sealed partial class RasGateClustersApiTests
         var cancellationToken = TestContext.Current.CancellationToken;
 
         var mutationRequest = client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1587),
             cancellationToken);
         await _factory.RasGateBoundary.WaitForClusterPublicationAsync(
@@ -190,17 +196,18 @@ public sealed partial class RasGateClustersApiTests
         AssertMutationNotConfirmed(json, "cluster_create_not_confirmed");
         Assert.Equal(1, _factory.RasGateBoundary.ClusterCreateRequestCount);
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
-        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id, true));
+        Assert.Empty(await _factory.FindRasClustersAsync(rasEndpoint.Id, true));
     }
 
     [Fact]
     public async Task Create_with_invalid_port_rejects_request_without_execution()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 0),
             TestContext.Current.CancellationToken);
 
@@ -212,10 +219,11 @@ public sealed partial class RasGateClustersApiTests
     public async Task Create_with_undefined_load_balancing_mode_rejects_request_without_execution()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new { host = "localhost", port = 1587, loadBalancingMode = 999 },
             TestContext.Current.CancellationToken);
 
@@ -227,11 +235,12 @@ public sealed partial class RasGateClustersApiTests
     public async Task Create_without_insert_capability_fails_without_execution()
     {
         var rasGate = await _factory.SeedRasGateAsync();
+        var rasEndpoint = await _factory.SeedRasEndpointForGateAsync(rasGate);
         _factory.RasGateBoundary.SupportsClusterInsert = false;
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters",
+            $"/api/v1/ras-endpoints/{rasEndpoint.Id}/clusters",
             new CreateClusterRequest("localhost", 1587),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);

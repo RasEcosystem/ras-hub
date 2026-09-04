@@ -94,6 +94,7 @@ public class Program
         builder.Services.AddRasHubInfrastructure(builder.Configuration);
         builder.Services.AddScoped<RasGateRegistry>();
         builder.Services.AddScoped<RasEndpointRegistry>();
+        builder.Services.AddScoped<RasEndpointExecutionTargetResolver>();
 
         builder.Services.AddRasHubBackgroundTasks(options =>
         {

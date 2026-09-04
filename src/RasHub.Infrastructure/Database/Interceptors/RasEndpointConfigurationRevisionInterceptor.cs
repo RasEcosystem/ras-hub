@@ -38,11 +38,28 @@ public sealed class RasEndpointConfigurationRevisionInterceptor
             if (entry.State != EntityState.Modified)
                 continue;
 
-            if (!Changed(entry.Property(endpoint => endpoint.Name)) &&
-                !Changed(entry.Property(endpoint => endpoint.Host)) &&
-                !Changed(entry.Property(endpoint => endpoint.Port)) &&
-                !Changed(entry.Property(endpoint => endpoint.IsActive)) &&
-                !Changed(entry.Property(endpoint => endpoint.IsDeleted)))
+            var remoteIdentityChanged =
+                Changed(entry.Property(endpoint => endpoint.Host)) ||
+                Changed(entry.Property(endpoint => endpoint.Port));
+            var executionGateChanged = Changed(
+                entry.Property(endpoint => endpoint.RasGateId));
+            var nameChanged = Changed(
+                entry.Property(endpoint => endpoint.Name));
+            var activityChanged = Changed(
+                entry.Property(endpoint => endpoint.IsActive));
+            var deletionChanged = Changed(
+                entry.Property(endpoint => endpoint.IsDeleted));
+
+            if (remoteIdentityChanged ||
+                (activityChanged && !entry.Entity.IsActive) ||
+                deletionChanged)
+                entry.Entity.LastSeenAt = null;
+
+            if (!remoteIdentityChanged &&
+                !executionGateChanged &&
+                !nameChanged &&
+                !activityChanged &&
+                !deletionChanged)
                 continue;
 
             var revision = entry.Property(endpoint =>

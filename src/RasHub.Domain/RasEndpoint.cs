@@ -9,6 +9,8 @@ public sealed class RasEndpoint : IEntity, IAuditable, ISoftDeletable
 
     public required string Name { get; set; }
 
+    public Guid RasGateId { get; set; }
+
     public required string Host { get; set; }
 
     public int Port { get; set; }
@@ -16,6 +18,8 @@ public sealed class RasEndpoint : IEntity, IAuditable, ISoftDeletable
     public long ConfigurationRevision { get; set; } = 1;
 
     public bool IsActive { get; set; } = true;
+
+    public DateTime? LastSeenAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

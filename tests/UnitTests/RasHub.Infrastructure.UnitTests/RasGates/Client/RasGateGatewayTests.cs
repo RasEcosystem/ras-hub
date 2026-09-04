@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
@@ -333,7 +334,8 @@ public sealed partial class RasGateGatewayTests
             new RasGateEndpointFactory(),
             versionCache ?? new RacVersionCache(TimeProvider.System),
             new RacVersionParser(),
-            new RacCapabilityResolver(descriptors));
+            new RacCapabilityResolver(descriptors),
+            new RacEndpointArgumentAdapter());
         var statusGateway = new RasGateStatusGateway(
             sessionFactory,
             statusLogger ?? NullLogger<RasGateStatusGateway>.Instance);
@@ -355,10 +357,24 @@ public sealed partial class RasGateGatewayTests
                 infobaseAdapters));
 
         return new RasGateGatewayTestFacade(
-            rasGate,
+            CreateExecutionTarget(rasGate),
             statusGateway,
             clusterGateway,
             infobaseGateway);
+    }
+
+    private static RasEndpointExecutionTarget CreateExecutionTarget(
+        RasGate rasGate)
+    {
+        var endpoint = new RasEndpoint
+        {
+            Name = "Test RAS endpoint",
+            RasGateId = rasGate.Id,
+            Host = "ras.example.test",
+            Port = 1545
+        };
+
+        return new RasEndpointExecutionTarget(endpoint, rasGate);
     }
 
     private static RasGate CreateRasGate(
@@ -491,7 +507,7 @@ public sealed partial class RasGateGatewayTests
     }
 
     private sealed class RasGateGatewayTestFacade(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         RasGateStatusGateway statusGateway,
         RasClusterGateway clusterGateway,
         RasInfobaseGateway infobaseGateway)
@@ -499,21 +515,21 @@ public sealed partial class RasGateGatewayTests
         public Task<RasGateStatus> GetStatusAsync(
             CancellationToken cancellationToken)
         {
-            return statusGateway.GetStatusAsync(rasGate, cancellationToken);
+            return statusGateway.GetStatusAsync(target.Gate, cancellationToken);
         }
 
         public Task<RasGateCapabilities> GetCapabilitiesAsync(
             CancellationToken cancellationToken)
         {
             return clusterGateway.GetCapabilitiesAsync(
-                rasGate,
+                target.Gate,
                 cancellationToken);
         }
 
         public Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
             CancellationToken cancellationToken)
         {
-            return clusterGateway.GetClustersAsync(rasGate, cancellationToken);
+            return clusterGateway.GetClustersAsync(target, cancellationToken);
         }
 
         public Task<RasClusterSnapshot> GetClusterAsync(
@@ -521,7 +537,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return clusterGateway.GetClusterAsync(
-                rasGate,
+                target,
                 clusterId,
                 cancellationToken);
         }
@@ -533,7 +549,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return infobaseGateway.GetInfobasesAsync(
-                rasGate,
+                target,
                 clusterId,
                 clusterUser,
                 clusterPassword,
@@ -548,7 +564,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return infobaseGateway.GetInfobaseAsync(
-                rasGate,
+                target,
                 clusterId,
                 infobaseId,
                 clusterUser,
@@ -561,7 +577,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return clusterGateway.CreateClusterAsync(
-                rasGate,
+                target,
                 options,
                 cancellationToken);
         }
@@ -572,7 +588,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return clusterGateway.UpdateClusterAsync(
-                rasGate,
+                target,
                 clusterId,
                 options,
                 cancellationToken);
@@ -585,7 +601,7 @@ public sealed partial class RasGateGatewayTests
             CancellationToken cancellationToken)
         {
             return clusterGateway.RemoveClusterAsync(
-                rasGate,
+                target,
                 clusterId,
                 clusterUser,
                 clusterPassword,

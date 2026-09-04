@@ -8,7 +8,6 @@ namespace RasHub.Application.RasGates.Services;
 
 public sealed class RasGateRegistry(
     IRepository<RasGate> repository,
-    IRasClusterSnapshotStore snapshotStore,
     IRasGateEndpointFactory endpointFactory,
     IUnitOfWork unitOfWork)
 {
@@ -62,14 +61,6 @@ public sealed class RasGateRegistry(
 
         _ = endpointFactory.CreateBaseAddress(url, update.Port);
 
-        var apiKeyChanged = update.ApiKey is not null &&
-                            !string.Equals(
-                                rasGate.ApiKey,
-                                update.ApiKey,
-                                StringComparison.Ordinal);
-        var remoteIdentityChanged = endpointChanged || apiKeyChanged;
-        var deactivated = !update.IsActive && rasGate.IsActive;
-
         rasGate.Name = name;
         rasGate.Url = url;
         rasGate.Port = update.Port;
@@ -84,8 +75,6 @@ public sealed class RasGateRegistry(
             if (update.IsActive)
                 rasGate.LastSeenAt = null;
         }
-
-        if (remoteIdentityChanged || deactivated) await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return rasGate;
@@ -102,7 +91,6 @@ public sealed class RasGateRegistry(
         if (rasGate is null)
             return null;
 
-        await snapshotStore.InvalidateAsync(rasGateId, cancellationToken);
         repository.Remove(rasGate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -119,7 +107,6 @@ public sealed class RasGateRegistry(
             throw new InvalidOperationException(
                 $"RasGate '{rasGate.Id}' is not deleted.");
 
-        await snapshotStore.InvalidateAsync(rasGate.Id, cancellationToken);
         rasGate.IsDeleted = false;
         rasGate.DeletedAt = null;
         await unitOfWork.SaveChangesAsync(cancellationToken);

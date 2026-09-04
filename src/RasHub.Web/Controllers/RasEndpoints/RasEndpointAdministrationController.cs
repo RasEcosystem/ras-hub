@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasEndpoints.Services;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
@@ -29,10 +30,12 @@ public sealed class RasEndpointAdministrationController(
     [Authorize(Policy = AppPolicies.ManageRasEndpoints)]
     [EndpointSummary("Register RAS endpoint")]
     [EndpointDescription(
-        "Registers a RAS administration endpoint in the Hub and returns its public details.")]
+        "Registers a RAS administration endpoint assigned to one RasGate and returns its public details.")]
     [ProducesResponseType<ApiResponse<RasEndpointModel>>(
         StatusCodes.Status201Created)]
-    [ProducesApiErrors(StatusCodes.Status400BadRequest)]
+    [ProducesApiErrors(
+        StatusCodes.Status400BadRequest,
+        StatusCodes.Status404NotFound)]
     public async Task<ApiResponse<RasEndpointModel>> Register(
         [FromBody] CreateRasEndpointRequest request,
         CancellationToken cancellationToken)
@@ -43,6 +46,7 @@ public sealed class RasEndpointAdministrationController(
             rasEndpoint = await rasEndpointRegistry.RegisterAsync(
                 new RasEndpointRegistration(
                     request.Name,
+                    request.RasGateId,
                     request.Host,
                     request.Port,
                     request.IsActive),
@@ -51,6 +55,10 @@ public sealed class RasEndpointAdministrationController(
         catch (RasEndpointAddressValidationException)
         {
             return RasEndpointApiResponses.InvalidAddress();
+        }
+        catch (RasGateNotFoundException exception)
+        {
+            return RasEndpointApiResponses.GateNotFound(exception.RasGateId);
         }
 
         var model = ToModel(rasEndpoint);
@@ -68,7 +76,7 @@ public sealed class RasEndpointAdministrationController(
     [Authorize(Policy = AppPolicies.ManageRasEndpoints)]
     [EndpointSummary("Update RAS endpoint")]
     [EndpointDescription(
-        "Replaces the RAS endpoint address and activity state at the expected configuration revision.")]
+        "Replaces the RAS endpoint Gate assignment, address, and activity state at the expected configuration revision.")]
     [ProducesResponseType<ApiResponse<RasEndpointModel>>(
         StatusCodes.Status200OK)]
     [ProducesApiErrors(
@@ -87,6 +95,7 @@ public sealed class RasEndpointAdministrationController(
                 rasEndpointId,
                 new RasEndpointRegistrationUpdate(
                     request.Name,
+                    request.RasGateId,
                     request.Host,
                     request.Port,
                     request.IsActive,
@@ -96,6 +105,10 @@ public sealed class RasEndpointAdministrationController(
         catch (RasEndpointAddressValidationException)
         {
             return RasEndpointApiResponses.InvalidAddress();
+        }
+        catch (RasGateNotFoundException exception)
+        {
+            return RasEndpointApiResponses.GateNotFound(exception.RasGateId);
         }
         catch (RasEndpointRevisionConflictException)
         {
@@ -151,10 +164,12 @@ public sealed class RasEndpointAdministrationController(
         return new RasEndpointModel
         {
             Id = rasEndpoint.Id,
+            RasGateId = rasEndpoint.RasGateId,
             Name = rasEndpoint.Name,
             Host = rasEndpoint.Host,
             Port = rasEndpoint.Port,
             IsActive = rasEndpoint.IsActive,
+            LastSeenAt = rasEndpoint.LastSeenAt,
             ConfigurationRevision = rasEndpoint.ConfigurationRevision,
             CreatedAt = rasEndpoint.CreatedAt,
             UpdatedAt = rasEndpoint.UpdatedAt

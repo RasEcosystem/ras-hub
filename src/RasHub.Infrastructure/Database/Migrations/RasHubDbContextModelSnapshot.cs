@@ -110,9 +110,9 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
-                    b.Property<Guid>("RasGateId")
+                    b.Property<Guid>("RasEndpointId")
                         .HasColumnType("uuid")
-                        .HasColumnName("ras_gate_id");
+                        .HasColumnName("ras_endpoint_id");
 
                     b.Property<string>("RestartSchedule")
                         .HasColumnType("text")
@@ -133,9 +133,9 @@ namespace RasHub.Infrastructure.Database.Migrations
                     b.HasKey("Id")
                         .HasName("pk_ras_clusters");
 
-                    b.HasIndex("RasGateId", "ExternalId")
+                    b.HasIndex("RasEndpointId", "ExternalId")
                         .IsUnique()
-                        .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
+                        .HasDatabaseName("ux_ras_clusters_ras_endpoint_id_external_id");
 
                     b.ToTable("ras_clusters", null, t =>
                         {
@@ -184,6 +184,10 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -194,12 +198,19 @@ namespace RasHub.Infrastructure.Database.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
+                    b.Property<Guid>("RasGateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ras_gate_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
                         .HasName("pk_ras_endpoints");
+
+                    b.HasIndex("RasGateId")
+                        .HasDatabaseName("ix_ras_endpoints_ras_gate_id");
 
                     b.ToTable("ras_endpoints", null, t =>
                         {
@@ -385,12 +396,22 @@ namespace RasHub.Infrastructure.Database.Migrations
 
             modelBuilder.Entity("RasHub.Domain.RasCluster", b =>
                 {
+                    b.HasOne("RasHub.Domain.RasEndpoint", null)
+                        .WithMany()
+                        .HasForeignKey("RasEndpointId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .IsRequired()
+                        .HasConstraintName("fk_ras_clusters_ras_endpoints_ras_endpoint_id");
+                });
+
+            modelBuilder.Entity("RasHub.Domain.RasEndpoint", b =>
+                {
                     b.HasOne("RasHub.Domain.RasGate", null)
                         .WithMany()
                         .HasForeignKey("RasGateId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.ClientNoAction)
                         .IsRequired()
-                        .HasConstraintName("fk_ras_clusters_ras_gates_ras_gate_id");
+                        .HasConstraintName("fk_ras_endpoints_ras_gates_ras_gate_id");
                 });
 
             modelBuilder.Entity("RasHub.Domain.RasInfobase", b =>

@@ -17,6 +17,14 @@ catalog. Resource gateways own command/adapter selection and output
 interpretation; adding a resource does not add dependencies to
 `RasGateSessionFactory`.
 
+Resource operations are addressed to a Hub-owned `RasEndpoint`. Before remote
+I/O, `RasEndpointExecutionTargetResolver` loads the Endpoint's assigned active
+RasGate. The RAC command adapter then appends the normalized RAS address
+(`host:port`, or `[IPv6]:port`) as the final positional argument. RasGate
+remains unaware of Hub endpoint registrations and receives the same generic
+argument-array contract as before. Each Endpoint has exactly one Gate
+assignment, while the same Gate may serve multiple Endpoints.
+
 The status gateway uses one session to request `GET /rasgate/status` and then
 `GET /rac/status`. A valid `available: false` RAC response is a successful
 degraded observation. A RAC transport or protocol failure after a successful
@@ -37,16 +45,19 @@ Compatibility-aware RAC resource operations proceed as follows:
 3. Read operations resolve their output deserializer independently with the
    same latest-compatible rule. A changed output format therefore does not
    require a duplicate operation adapter while its command remains compatible.
-4. The selected operation adapter builds the RAC command and validates the full
-   execution result. Result-producing adapters also map it to a normalized
-   Application model.
+4. The selected operation adapter builds the resource command. The endpoint
+   adapter appends the resolved RAS address, and the operation adapter validates
+   the full execution result. Result-producing adapters also map it to a
+   normalized Application model.
 5. A RAC deserialization mismatch invalidates both the session-local version
    and the shared cache entry so a later attempt resolves compatibility again.
 6. Application publishes collection snapshots only when marked `Complete`.
    Targeted `info` accepts one matching item or a definitive successful
    not-found; ambiguous, malformed, and failed results are rejected.
-7. Conditional publication still checks the RasGate configuration revision,
-   active state, and deletion state.
+7. Conditional resource publication checks both the RAS endpoint and selected
+   RasGate configuration revisions, active states, and deletion states. A Gate
+   reassignment advances the Endpoint revision. Gate status publication remains
+   guarded only by Gate state.
 
 The registered production profiles cover clusters and cluster-scoped
 infobases:
@@ -85,13 +96,17 @@ remains independent of resource schema versions.
 `RacInfobaseOutputDeserializerResolver`. Its normalized summary contains the
 remote identifier, name, and description.
 
-`clusters.info` executes `cluster info --cluster=<uuid>`. Exactly one matching
-cluster is published as a targeted upsert. A definitive successful not-found
-soft-deletes that target and its cached infobases; neither result changes
-sibling clusters. Only `clusters.snapshot` reconciles the full collection.
+`clusters.info` executes `cluster info --cluster=<uuid> <ras-host:port>`.
+Exactly one matching cluster is published as a targeted upsert. A definitive
+successful not-found soft-deletes that target and its cached infobases; neither
+result changes sibling clusters. Only `clusters.snapshot` reconciles the full
+collection.
 
 `clusters.insert` executes `cluster insert` with the required host and port and
-the settings supplied by the API caller. A successful result must contain
+the settings supplied by the API caller, followed by the RAS endpoint as the
+final positional argument. The insert `--host` and `--port` identify the new
+1C:Enterprise working server; they are not the RAS connection address. A
+successful result must contain
 exactly one `cluster : <uuid>` record. RasHub then reads that cluster through
 `clusters.info` and publishes only the validated authoritative snapshot.
 `clusters.update` follows the same read-after-write publication rule. Neither
@@ -103,9 +118,9 @@ timeout, malformed or incomplete success response, inconsistent execution
 outcome, or unparseable insert identifier is treated as an unknown outcome.
 It is never retried automatically. A confirmed mutation whose authoritative
 read-back or guarded local publication fails is reported as not confirmed;
-clients must refresh the shadow, verify the target RasGate, and avoid
-automatic retry. Explicit pre-start rejection and a consistent RAC `failed`
-outcome remain ordinary failures.
+clients must refresh the shadow, verify the RAS endpoint and its selected
+RasGate, and avoid automatic retry. Explicit pre-start rejection and a
+consistent RAC `failed` outcome remain ordinary failures.
 
 Optional `--agent-user` and `--agent-pwd` values are accepted for insert and
 update. They remain request-scoped and are not persisted or included in logs,
@@ -119,15 +134,17 @@ persisted or included in logs, errors, or responses. The adapter validates only
 the process outcome and never publishes RAC output. Automatic retries are
 disabled because removal is a remote mutation. After RAC confirms success, the
 matching shadow cluster and its infobases are soft-deleted under the same
-RasGate configuration-revision guard used by remote publication.
+endpoint-and-Gate revision guard used by remote publication.
 
 `infobases.snapshot` executes
-`infobase summary list --cluster=<cluster-uuid>`. A complete result reconciles
-only the infobases owned by that shadow cluster and may soft-delete absent
-siblings. `infobases.info` adds `--infobase=<infobase-uuid>`. One matching
-result is upserted; a definitive successful not-found soft-deletes only that
-target. Sibling infobases remain unchanged. Both operations may carry
-request-scoped `--cluster-user` and `--cluster-pwd` credentials; those values
+`infobase summary list --cluster=<cluster-uuid> <ras-host:port>`. A complete
+result reconciles only the infobases owned by that shadow cluster and may
+soft-delete absent siblings. `infobases.info` adds
+`--infobase=<infobase-uuid>` before the final RAS endpoint argument. One
+matching result is upserted; a definitive successful not-found soft-deletes
+only that target. Sibling infobases remain unchanged. Both operations may
+carry request-scoped `--cluster-user` and `--cluster-pwd` credentials; those
+values
 are not persisted or logged.
 
 For the initial cluster and infobase collection profiles, a successful RAC

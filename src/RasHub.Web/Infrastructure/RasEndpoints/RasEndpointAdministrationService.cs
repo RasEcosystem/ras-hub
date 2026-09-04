@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasEndpoints.Services;
+using RasHub.Application.RasGates.Exceptions;
 using RasHub.Domain;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Queries;
@@ -13,7 +14,15 @@ namespace RasHub.Web.Infrastructure.RasEndpoints;
 
 public sealed record RasEndpointEditorValues(
     string Name,
+    Guid RasGateId,
     string Host,
+    int Port,
+    bool IsActive);
+
+public sealed record RasEndpointGateOption(
+    Guid Id,
+    string Name,
+    string Url,
     int Port,
     bool IsActive);
 
@@ -35,6 +44,7 @@ public sealed record RasEndpointAdministrationResult(
 public sealed class RasEndpointAdministrationService(
     RasHubDbContext dbContext,
     RasEndpointQueries queries,
+    RasGateQueries gateQueries,
     RasEndpointRegistry rasEndpointRegistry,
     AuthenticationStateProvider authenticationStateProvider,
     IAuthorizationService authorizationService,
@@ -51,6 +61,27 @@ public sealed class RasEndpointAdministrationService(
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<RasEndpointGateOption>>
+        GetGateOptionsAsync(CancellationToken cancellationToken)
+    {
+        await EnsureAuthorizedAsync();
+        var gates = await gateQueries.GetAdministrationItemsAsync(
+            false,
+            cancellationToken);
+
+        return gates
+            .OrderByDescending(gate => gate.IsActive)
+            .ThenBy(gate => gate.Name)
+            .ThenBy(gate => gate.Id)
+            .Select(gate => new RasEndpointGateOption(
+                gate.Id,
+                gate.Name,
+                gate.Url,
+                gate.Port,
+                gate.IsActive))
+            .ToArray();
+    }
+
     public async Task<RasEndpointAdministrationResult> CreateAsync(
         RasEndpointEditorValues values,
         CancellationToken cancellationToken)
@@ -61,13 +92,23 @@ public sealed class RasEndpointAdministrationService(
         if (validation is not null)
             return RasEndpointAdministrationResult.Failure(validation);
 
-        var rasEndpoint = await rasEndpointRegistry.RegisterAsync(
-            new RasEndpointRegistration(
-                values.Name,
-                values.Host,
-                values.Port,
-                values.IsActive),
-            cancellationToken);
+        RasEndpoint rasEndpoint;
+        try
+        {
+            rasEndpoint = await rasEndpointRegistry.RegisterAsync(
+                new RasEndpointRegistration(
+                    values.Name,
+                    values.RasGateId,
+                    values.Host,
+                    values.Port,
+                    values.IsActive),
+                cancellationToken);
+        }
+        catch (RasGateNotFoundException)
+        {
+            return RasEndpointAdministrationResult.Failure(
+                "The selected RasGate no longer exists.");
+        }
 
         logger.LogInformation(
             "Administrator registered RAS endpoint {RasEndpointId}",
@@ -94,6 +135,7 @@ public sealed class RasEndpointAdministrationService(
                 id,
                 new RasEndpointRegistrationUpdate(
                     values.Name,
+                    values.RasGateId,
                     values.Host,
                     values.Port,
                     values.IsActive,
@@ -105,8 +147,14 @@ public sealed class RasEndpointAdministrationService(
             return RasEndpointAdministrationResult.Failure(
                 "The RAS endpoint changed concurrently. Reload the list and try again.");
         }
+        catch (RasGateNotFoundException)
+        {
+            return RasEndpointAdministrationResult.Failure(
+                "The selected RasGate no longer exists.");
+        }
         catch (DbUpdateConcurrencyException)
         {
+            dbContext.ChangeTracker.Clear();
             return RasEndpointAdministrationResult.Failure(
                 "The RAS endpoint changed concurrently. Reload the list and try again.");
         }
@@ -136,6 +184,7 @@ public sealed class RasEndpointAdministrationService(
         }
         catch (DbUpdateConcurrencyException)
         {
+            dbContext.ChangeTracker.Clear();
             return RasEndpointAdministrationResult.Failure(
                 "The RAS endpoint changed concurrently. Reload the list and try again.");
         }
@@ -177,6 +226,7 @@ public sealed class RasEndpointAdministrationService(
         }
         catch (DbUpdateConcurrencyException)
         {
+            dbContext.ChangeTracker.Clear();
             return RasEndpointAdministrationResult.Failure(
                 "The RAS endpoint changed concurrently. Reload the list and try again.");
         }
@@ -193,6 +243,8 @@ public sealed class RasEndpointAdministrationService(
             return "Name is required.";
         if (values.Name.Trim().Length > RasEndpoint.NameMaxLength)
             return $"Name cannot exceed {RasEndpoint.NameMaxLength} characters.";
+        if (values.RasGateId == Guid.Empty)
+            return "Select a RasGate.";
 
         try
         {

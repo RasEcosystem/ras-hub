@@ -64,6 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRasClusterSnapshotStore, RasClusterSnapshotStore>();
         services.AddScoped<IRasInfobaseSnapshotStore, RasInfobaseSnapshotStore>();
         services.AddScoped<IRasGateSyncPublisher, RasGateSyncPublisher>();
+        services.AddScoped<IRasEndpointSyncPublisher, RasEndpointSyncPublisher>();
         services.AddScoped<RasClusterQueries>();
         services.AddScoped<RasInfobaseQueries>();
         services.AddScoped<RasGateQueries>();
@@ -74,6 +75,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RasGateHttpClientTransport>();
         services.AddSingleton<RacVersionCache>();
         services.AddSingleton<RacVersionParser>();
+        services.AddSingleton<RacEndpointArgumentAdapter>();
         services.AddSingleton<RacKeyValueOutputDeserializer>();
         services.AddSingleton<RacClusterOutputV1Deserializer>();
         services.AddSingleton<IRacClusterOutputDeserializer>(serviceProvider =>
@@ -137,7 +139,8 @@ public static class ServiceCollectionExtensions
             serviceProvider.GetRequiredService<IRasGateEndpointFactory>(),
             serviceProvider.GetRequiredService<RacVersionCache>(),
             serviceProvider.GetRequiredService<RacVersionParser>(),
-            serviceProvider.GetRequiredService<RacCapabilityResolver>()));
+            serviceProvider.GetRequiredService<RacCapabilityResolver>(),
+            serviceProvider.GetRequiredService<RacEndpointArgumentAdapter>()));
         services.AddSingleton<IRasGateStatusGateway, RasGateStatusGateway>();
         services.AddSingleton<IRasClusterGateway, RasClusterGateway>();
         services.AddSingleton<IRasInfobaseGateway, RasInfobaseGateway>();

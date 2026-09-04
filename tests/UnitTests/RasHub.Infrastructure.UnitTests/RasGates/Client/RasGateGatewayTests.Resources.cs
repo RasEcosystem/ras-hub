@@ -60,7 +60,7 @@ public sealed partial class RasGateGatewayTests
         Assert.NotNull(requestJson);
         using var requestDocument = JsonDocument.Parse(requestJson);
         Assert.Equal(
-            ["cluster", "list"],
+            ["cluster", "list", "ras.example.test:1545"],
             requestDocument.RootElement
                 .GetProperty("arguments")
                 .EnumerateArray()
@@ -117,7 +117,12 @@ public sealed partial class RasGateGatewayTests
         Assert.NotNull(requestJson);
         using var requestDocument = JsonDocument.Parse(requestJson);
         Assert.Equal(
-            ["cluster", "info", $"--cluster={clusterId:D}"],
+            [
+                "cluster",
+                "info",
+                $"--cluster={clusterId:D}",
+                "ras.example.test:1545"
+            ],
             requestDocument.RootElement
                 .GetProperty("arguments")
                 .EnumerateArray()
@@ -171,7 +176,8 @@ public sealed partial class RasGateGatewayTests
                 "list",
                 $"--cluster={clusterId:D}",
                 "--cluster-user=cluster-admin",
-                "--cluster-pwd=cluster-secret"
+                "--cluster-pwd=cluster-secret",
+                "ras.example.test:1545"
             ],
             requestDocument.RootElement
                 .GetProperty("arguments")
@@ -226,7 +232,8 @@ public sealed partial class RasGateGatewayTests
                 "summary",
                 "info",
                 $"--cluster={clusterId:D}",
-                $"--infobase={infobaseId:D}"
+                $"--infobase={infobaseId:D}",
+                "ras.example.test:1545"
             ],
             requestDocument.RootElement
                 .GetProperty("arguments")
@@ -283,7 +290,8 @@ public sealed partial class RasGateGatewayTests
                 "remove",
                 $"--cluster={clusterId:D}",
                 "--cluster-user=cluster-admin",
-                "--cluster-pwd=cluster-secret"
+                "--cluster-pwd=cluster-secret",
+                "ras.example.test:1545"
             ],
             requestDocument.RootElement
                 .GetProperty("arguments")
@@ -331,7 +339,8 @@ public sealed partial class RasGateGatewayTests
                 "insert",
                 "--host=localhost",
                 "--port=1587",
-                "--name=Новый кластер"
+                "--name=Новый кластер",
+                "ras.example.test:1545"
             ],
             requestDocument.RootElement
                 .GetProperty("arguments")

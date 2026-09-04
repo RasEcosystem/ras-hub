@@ -16,9 +16,10 @@ public sealed class RasEndpointQueriesTests : IDisposable
     [Fact]
     public async Task Get_by_id_projects_public_fields_without_tracking()
     {
-        var endpoint = RasEndpointTestData.Create();
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
         await using var db = _database.CreateContext();
-        db.RasEndpoints.Add(endpoint);
+        db.AddRange(gate, endpoint);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.ChangeTracker.Clear();
 
@@ -28,6 +29,7 @@ public sealed class RasEndpointQueriesTests : IDisposable
 
         Assert.NotNull(result);
         Assert.Equal(endpoint.Id, result.Id);
+        Assert.Equal(gate.Id, result.RasGateId);
         Assert.Equal(endpoint.Name, result.Name);
         Assert.Equal(endpoint.Host, result.Host);
         Assert.Equal(endpoint.Port, result.Port);
@@ -39,9 +41,17 @@ public sealed class RasEndpointQueriesTests : IDisposable
     [Fact]
     public async Task Queries_exclude_soft_deleted_endpoints()
     {
-        var active = RasEndpointTestData.Create("Active", "active.example.test");
-        var deleted = RasEndpointTestData.Create("Deleted", "deleted.example.test");
+        var gate = RasGateTestData.Create();
+        var active = RasEndpointTestData.Create(
+            gate.Id,
+            "Active",
+            "active.example.test");
+        var deleted = RasEndpointTestData.Create(
+            gate.Id,
+            "Deleted",
+            "deleted.example.test");
         await using var db = _database.CreateContext();
+        db.RasGates.Add(gate);
         db.RasEndpoints.AddRange(active, deleted);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.RasEndpoints.Remove(deleted);

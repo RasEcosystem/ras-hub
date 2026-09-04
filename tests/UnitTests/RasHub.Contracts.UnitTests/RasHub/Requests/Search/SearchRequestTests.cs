@@ -16,22 +16,22 @@ public sealed class SearchRequestTests
     }
 
     [Fact]
-    public void Validate_empty_gate_filter_rejects_request()
+    public void Validate_empty_endpoint_filter_rejects_request()
     {
-        var results = Validate(new SearchClustersRequest { Query = "cluster", RasGateId = Guid.Empty });
+        var results = Validate(new SearchClustersRequest { Query = "cluster", RasEndpointId = Guid.Empty });
 
         Assert.Contains(
-            nameof(SearchClustersRequest.RasGateId),
+            nameof(SearchClustersRequest.RasEndpointId),
             Assert.Single(results).MemberNames);
     }
 
     [Fact]
-    public void Validate_cluster_filter_without_gate_filter_rejects_request()
+    public void Validate_cluster_filter_without_endpoint_filter_rejects_request()
     {
         var results = Validate(new SearchInfobasesRequest { Query = "infobase", ClusterId = Guid.NewGuid() });
 
         Assert.Contains(
-            nameof(SearchInfobasesRequest.RasGateId),
+            nameof(SearchInfobasesRequest.RasEndpointId),
             Assert.Single(results).MemberNames);
     }
 

@@ -9,7 +9,7 @@ public interface IRasClusterSnapshotStore
     ///     absent from that collection together with their cached infobases.
     /// </summary>
     Task ApplyAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         IReadOnlyList<RasClusterSnapshot> snapshot,
         DateTime observedAt,
         CancellationToken cancellationToken);
@@ -18,7 +18,7 @@ public interface IRasClusterSnapshotStore
     ///     Adds or updates one observed cluster without changing other records.
     /// </summary>
     Task UpsertAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         RasClusterSnapshot snapshot,
         DateTime observedAt,
         CancellationToken cancellationToken);
@@ -27,15 +27,15 @@ public interface IRasClusterSnapshotStore
     ///     Removes one cached cluster and all of its cached infobases.
     /// </summary>
     Task RemoveAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         CancellationToken cancellationToken);
 
     /// <summary>
-    ///     Invalidates every cached cluster for a RasGate and all descendant
+    ///     Invalidates every cached cluster for a RAS endpoint and all descendant
     ///     infobases.
     /// </summary>
     Task InvalidateAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         CancellationToken cancellationToken);
 }

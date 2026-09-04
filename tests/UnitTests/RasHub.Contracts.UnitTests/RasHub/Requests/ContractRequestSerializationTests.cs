@@ -71,6 +71,7 @@ public sealed class ContractRequestSerializationTests
     {
         var request = new UpdateRasEndpointRequest(
             "Production RAS",
+            Guid.NewGuid(),
             "ras.example.test",
             1545,
             false,
@@ -86,6 +87,7 @@ public sealed class ContractRequestSerializationTests
     }
 
     [Theory]
+    [InlineData("rasGateId")]
     [InlineData("isActive")]
     [InlineData("expectedConfigurationRevision")]
     public void UpdateRasEndpointRequest_json_without_required_state_is_rejected(
@@ -94,6 +96,7 @@ public sealed class ContractRequestSerializationTests
         var properties = new Dictionary<string, object?>
         {
             ["name"] = "Production RAS",
+            ["rasGateId"] = Guid.NewGuid(),
             ["host"] = "ras.example.test",
             ["port"] = 1545,
             ["isActive"] = true,
@@ -107,4 +110,5 @@ public sealed class ContractRequestSerializationTests
                 json,
                 SerializerOptions));
     }
+
 }

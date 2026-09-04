@@ -5,10 +5,7 @@ using RasHub.Domain;
 
 namespace RasHub.Infrastructure.Database;
 
-public sealed class RasGateSyncPublisher(
-    RasHubDbContext db,
-    IRasClusterSnapshotStore clusterSnapshotStore,
-    IRasInfobaseSnapshotStore infobaseSnapshotStore)
+public sealed class RasGateSyncPublisher(RasHubDbContext db)
     : IRasGateSyncPublisher
 {
     public async Task<bool> TryPublishStatusAsync(
@@ -35,169 +32,6 @@ public sealed class RasGateSyncPublisher(
         return await TrySaveAsync(cancellationToken);
     }
 
-    public async Task<bool> TryPublishClustersAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        IReadOnlyList<RasClusterSnapshot> snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await clusterSnapshotStore.ApplyAsync(
-            rasGateId,
-            snapshot,
-            observedAt,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryPublishClusterAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        RasClusterSnapshot snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await clusterSnapshotStore.UpsertAsync(
-            rasGateId,
-            snapshot,
-            observedAt,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryPublishInfobasesAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        IReadOnlyList<RasInfobaseSnapshot> snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        var rasClusterId = await GetActiveClusterIdAsync(
-            rasGateId,
-            clusterId,
-            cancellationToken);
-
-        if (rasClusterId is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await infobaseSnapshotStore.ApplyAsync(
-            rasClusterId.Value,
-            snapshot,
-            observedAt,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryPublishInfobaseAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        RasInfobaseSnapshot snapshot,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        var rasClusterId = await GetActiveClusterIdAsync(
-            rasGateId,
-            clusterId,
-            cancellationToken);
-
-        if (rasClusterId is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await infobaseSnapshotStore.UpsertAsync(
-            rasClusterId.Value,
-            snapshot,
-            observedAt,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryRemoveClusterAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await clusterSnapshotStore.RemoveAsync(
-            rasGateId,
-            clusterId,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
-    public async Task<bool> TryRemoveInfobaseAsync(
-        Guid rasGateId,
-        long expectedConfigurationRevision,
-        Guid clusterId,
-        Guid infobaseId,
-        DateTime observedAt,
-        CancellationToken cancellationToken)
-    {
-        var rasGate = await GetTrackedGateAsync(rasGateId, cancellationToken);
-
-        if (rasGate is null)
-            return false;
-
-        var rasClusterId = await GetActiveClusterIdAsync(
-            rasGateId,
-            clusterId,
-            cancellationToken);
-
-        if (rasClusterId is null)
-            return false;
-
-        PreparePublicationGuard(rasGate, expectedConfigurationRevision);
-        await infobaseSnapshotStore.RemoveAsync(
-            rasClusterId.Value,
-            infobaseId,
-            cancellationToken);
-        rasGate.LastSeenAt = observedAt;
-
-        return await TrySaveAsync(cancellationToken);
-    }
-
     private async Task<RasGate?> GetTrackedGateAsync(
         Guid rasGateId,
         CancellationToken cancellationToken)
@@ -208,26 +42,6 @@ public sealed class RasGateSyncPublisher(
                    .SingleOrDefaultAsync(
                        item => item.Id == rasGateId,
                        cancellationToken);
-    }
-
-    private async Task<Guid?> GetActiveClusterIdAsync(
-        Guid rasGateId,
-        Guid clusterId,
-        CancellationToken cancellationToken)
-    {
-        var localCluster = db.RasClusters.Local.SingleOrDefault(item =>
-            item.RasGateId == rasGateId &&
-            item.ExternalId == clusterId &&
-            !item.IsDeleted);
-
-        if (localCluster is not null)
-            return localCluster.Id;
-
-        return await db.RasClusters
-            .Where(item => item.RasGateId == rasGateId &&
-                           item.ExternalId == clusterId)
-            .Select(item => (Guid?)item.Id)
-            .SingleOrDefaultAsync(cancellationToken);
     }
 
     private void PreparePublicationGuard(

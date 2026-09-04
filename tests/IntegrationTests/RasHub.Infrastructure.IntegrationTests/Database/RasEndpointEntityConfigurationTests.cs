@@ -17,7 +17,9 @@ public sealed class RasEndpointEntityConfigurationTests : IDisposable
     public async Task Database_rejects_ports_outside_the_valid_range(int port)
     {
         await using var db = _database.CreateContext();
-        db.RasEndpoints.Add(RasEndpointTestData.Create(port: port));
+        var gate = RasGateTestData.Create();
+        db.RasGates.Add(gate);
+        db.RasEndpoints.Add(RasEndpointTestData.Create(gate.Id, port: port));
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             db.SaveChangesAsync(TestContext.Current.CancellationToken));
@@ -27,8 +29,10 @@ public sealed class RasEndpointEntityConfigurationTests : IDisposable
     public async Task Save_configuration_changes_increment_configuration_revision()
     {
         await using var db = _database.CreateContext();
-        var endpoint = RasEndpointTestData.Create();
-        db.RasEndpoints.Add(endpoint);
+        var firstGate = RasGateTestData.Create(name: "First Gate");
+        var secondGate = RasGateTestData.Create(name: "Second Gate");
+        var endpoint = RasEndpointTestData.Create(firstGate.Id);
+        db.AddRange(firstGate, secondGate, endpoint);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         endpoint.Name = "Renamed RAS";
@@ -42,14 +46,20 @@ public sealed class RasEndpointEntityConfigurationTests : IDisposable
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(3, endpoint.ConfigurationRevision);
+
+        endpoint.RasGateId = secondGate.Id;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, endpoint.ConfigurationRevision);
     }
 
     [Fact]
     public async Task Delete_and_restore_are_soft_and_increment_revision()
     {
         await using var db = _database.CreateContext();
-        var endpoint = RasEndpointTestData.Create();
-        db.RasEndpoints.Add(endpoint);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        db.AddRange(gate, endpoint);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         db.RasEndpoints.Remove(endpoint);
@@ -68,5 +78,15 @@ public sealed class RasEndpointEntityConfigurationTests : IDisposable
         Assert.False(endpoint.IsDeleted);
         Assert.Null(endpoint.DeletedAt);
         Assert.Equal(3, endpoint.ConfigurationRevision);
+    }
+
+    [Fact]
+    public async Task Database_rejects_endpoint_with_unknown_gate()
+    {
+        await using var db = _database.CreateContext();
+        db.RasEndpoints.Add(RasEndpointTestData.Create(Guid.NewGuid()));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            db.SaveChangesAsync(TestContext.Current.CancellationToken));
     }
 }

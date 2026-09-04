@@ -16,7 +16,7 @@ public sealed class RasGateRegistryTests : IDisposable
     }
 
     [Fact]
-    public async Task Unregister_and_restore_invalidate_derived_state_and_advance_revision()
+    public async Task Unregister_and_restore_preserve_endpoint_shadow_and_advance_revision()
     {
         var observedAt = new DateTime(
             2026,
@@ -34,15 +34,15 @@ public sealed class RasGateRegistryTests : IDisposable
         rasGate.RacVersion = "8.3.27.2214";
         rasGate.RacStatusObservedAt = observedAt;
         rasGate.LastSeenAt = observedAt;
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var endpoint = RasEndpointTestData.Create(rasGate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var infobase = RasInfobaseTestData.Create(cluster.Id);
 
         await using var db = _database.CreateContext();
-        db.AddRange(rasGate, cluster, infobase);
+        db.AddRange(endpoint, rasGate, cluster, infobase);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var registry = new RasGateRegistry(
             new EfRepository<RasGate>(db),
-            new RasClusterSnapshotStore(db),
             new RasGateEndpointFactory(),
             db);
 
@@ -54,12 +54,10 @@ public sealed class RasGateRegistryTests : IDisposable
         Assert.True(removed.IsDeleted);
         Assert.Equal(2, removed.ConfigurationRevision);
         AssertRemoteStateIsInvalidated(removed);
-        Assert.True((await db.RasClusters
-            .IgnoreQueryFilters()
-            .SingleAsync(TestContext.Current.CancellationToken)).IsDeleted);
-        Assert.True((await db.RasInfobases
-            .IgnoreQueryFilters()
-            .SingleAsync(TestContext.Current.CancellationToken)).IsDeleted);
+        Assert.False((await db.RasClusters.SingleAsync(
+            TestContext.Current.CancellationToken)).IsDeleted);
+        Assert.False((await db.RasInfobases.SingleAsync(
+            TestContext.Current.CancellationToken)).IsDeleted);
 
         await registry.RestoreAsync(
             removed,
@@ -69,9 +67,9 @@ public sealed class RasGateRegistryTests : IDisposable
         Assert.Null(removed.DeletedAt);
         Assert.Equal(3, removed.ConfigurationRevision);
         AssertRemoteStateIsInvalidated(removed);
-        Assert.Empty(await db.RasClusters.ToListAsync(
+        Assert.Single(await db.RasClusters.ToListAsync(
             TestContext.Current.CancellationToken));
-        Assert.Empty(await db.RasInfobases.ToListAsync(
+        Assert.Single(await db.RasInfobases.ToListAsync(
             TestContext.Current.CancellationToken));
     }
 

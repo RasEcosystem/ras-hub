@@ -24,6 +24,10 @@ public sealed class RasEndpointEntityTypeConfiguration
             .HasMaxLength(RasEndpoint.NameMaxLength)
             .IsRequired();
 
+        builder.Property(endpoint => endpoint.RasGateId)
+            .HasColumnName("ras_gate_id")
+            .IsRequired();
+
         builder.Property(endpoint => endpoint.Host)
             .HasColumnName("host")
             .HasMaxLength(RasEndpoint.HostMaxLength)
@@ -45,7 +49,19 @@ public sealed class RasEndpointEntityTypeConfiguration
             .IsConcurrencyToken()
             .IsRequired();
 
+        builder.Property(endpoint => endpoint.LastSeenAt)
+            .HasColumnName("last_seen_at");
+
         builder.Property(endpoint => endpoint.IsDeleted)
             .IsConcurrencyToken();
+
+        builder.HasIndex(endpoint => endpoint.RasGateId)
+            .HasDatabaseName("ix_ras_endpoints_ras_gate_id");
+
+        builder.HasOne<RasGate>()
+            .WithMany()
+            .HasForeignKey(endpoint => endpoint.RasGateId)
+            .OnDelete(DeleteBehavior.ClientNoAction)
+            .HasConstraintName("fk_ras_endpoints_ras_gates_ras_gate_id");
     }
 }

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -151,6 +152,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     public async Task<RasEndpoint> SeedRasEndpointAsync(
+        Guid rasGateId,
         string name = "Production RAS",
         string host = "ras.example.test",
         int port = 1545,
@@ -161,6 +163,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         var endpoint = new RasEndpoint
         {
             Name = name,
+            RasGateId = rasGateId,
             Host = host,
             Port = port,
             IsActive = isActive
@@ -168,6 +171,22 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
         db.RasEndpoints.Add(endpoint);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return endpoint;
+    }
+
+    public async Task<RasEndpoint> SeedRasEndpointForGateAsync(
+        RasGate rasGate,
+        string name = "Production RAS",
+        string host = "ras.example.test",
+        int port = 1545,
+        bool isActive = true)
+    {
+        var endpoint = await SeedRasEndpointAsync(
+            rasGate.Id,
+            name,
+            host,
+            port,
+            isActive);
         return endpoint;
     }
 
@@ -195,7 +214,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     public async Task<IReadOnlyList<RasCluster>> FindRasClustersAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         bool includeDeleted = false)
     {
         using var scope = Services.CreateScope();
@@ -206,13 +225,13 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
         return await query
             .AsNoTracking()
-            .Where(cluster => cluster.RasGateId == rasGateId)
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId)
             .OrderBy(cluster => cluster.ExternalId)
             .ToListAsync(TestContext.Current.CancellationToken);
     }
 
     public async Task<RasCluster> SeedRasClusterAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid? externalId = null,
         string name = "Main cluster",
         string host = "cluster.example.test")
@@ -221,7 +240,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         var db = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
         var cluster = new RasCluster
         {
-            RasGateId = rasGateId,
+            RasEndpointId = rasEndpointId,
             ExternalId = externalId ?? Guid.NewGuid(),
             Name = name,
             Host = host,
@@ -464,6 +483,12 @@ public sealed class FakeRasGateBoundary
 
     public string? LastApiKey { get; private set; }
 
+    public Guid? LastRasEndpointId { get; private set; }
+
+    public Guid? LastRasGateId { get; private set; }
+
+    public string? LastRasEndpointAddress { get; private set; }
+
     public IReadOnlyList<RasClusterSnapshot> Clusters { get; set; } = [];
 
     public RasClusterSnapshot? Cluster { get; set; }
@@ -589,6 +614,9 @@ public sealed class FakeRasGateBoundary
         Volatile.Write(ref _infobaseInfoRequestCount, 0);
         Volatile.Write(ref _statusRequestCount, 0);
         LastApiKey = null;
+        LastRasEndpointId = null;
+        LastRasGateId = null;
+        LastRasEndpointAddress = null;
         Clusters = [];
         Cluster = null;
         Infobases = [];
@@ -655,6 +683,14 @@ public sealed class FakeRasGateBoundary
         }
     }
 
+    private void CaptureTarget(RasEndpointExecutionTarget target)
+    {
+        LastApiKey = target.Gate.ApiKey;
+        LastRasEndpointId = target.Endpoint.Id;
+        LastRasGateId = target.Gate.Id;
+        LastRasEndpointAddress = target.Address.ToString();
+    }
+
     private sealed class FakeRasGateStatusGateway(
         FakeRasGateBoundary owner)
         : IRasGateStatusGateway
@@ -698,10 +734,10 @@ public sealed class FakeRasGateBoundary
         }
 
         public Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._clusterRequestCount);
 
@@ -719,11 +755,11 @@ public sealed class FakeRasGateBoundary
         }
 
         public async Task<RasClusterSnapshot> GetClusterAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._clusterInfoRequestCount);
 
@@ -741,11 +777,11 @@ public sealed class FakeRasGateBoundary
         }
 
         public Task<Guid> CreateClusterAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             RasClusterCreationOptions options,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._clusterCreateRequestCount);
 
@@ -757,12 +793,12 @@ public sealed class FakeRasGateBoundary
         }
 
         public Task UpdateClusterAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             RasClusterUpdateOptions options,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._clusterUpdateRequestCount);
 
@@ -775,13 +811,13 @@ public sealed class FakeRasGateBoundary
         }
 
         public async Task RemoveClusterAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             string? clusterUser,
             string? clusterPassword,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._clusterRemoveRequestCount);
 
@@ -814,13 +850,13 @@ public sealed class FakeRasGateBoundary
         }
 
         public Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             string? clusterUser,
             string? clusterPassword,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._infobaseRequestCount);
 
@@ -842,14 +878,14 @@ public sealed class FakeRasGateBoundary
         }
 
         public Task<RasInfobaseSnapshot> GetInfobaseAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             Guid infobaseId,
             string? clusterUser,
             string? clusterPassword,
             CancellationToken cancellationToken)
         {
-            owner.LastApiKey = rasGate.ApiKey;
+            owner.CaptureTarget(target);
             cancellationToken.ThrowIfCancellationRequested();
             Interlocked.Increment(ref owner._infobaseInfoRequestCount);
 

@@ -9,14 +9,14 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
     : IRasClusterSnapshotStore
 {
     public async Task ApplyAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         IReadOnlyList<RasClusterSnapshot> snapshot,
         DateTime observedAt,
         CancellationToken cancellationToken)
     {
         var storedClusters = await db.RasClusters
             .IgnoreQueryFilters()
-            .Where(cluster => cluster.RasGateId == rasGateId)
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId)
             .ToListAsync(cancellationToken);
         var storedByExternalId = storedClusters.ToDictionary(cluster => cluster.ExternalId);
         var observedExternalIds = new HashSet<Guid>();
@@ -31,7 +31,7 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
             {
                 cluster = new RasCluster
                 {
-                    RasGateId = rasGateId,
+                    RasEndpointId = rasEndpointId,
                     ExternalId = item.ExternalId,
                     Name = item.Name,
                     Host = item.Host
@@ -55,11 +55,11 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
     }
 
     public async Task InvalidateAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         CancellationToken cancellationToken)
     {
         var clusters = await db.RasClusters
-            .Where(cluster => cluster.RasGateId == rasGateId)
+            .Where(cluster => cluster.RasEndpointId == rasEndpointId)
             .ToListAsync(cancellationToken);
 
         await InvalidateInfobasesAsync(
@@ -69,7 +69,7 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
     }
 
     public async Task UpsertAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         RasClusterSnapshot snapshot,
         DateTime observedAt,
         CancellationToken cancellationToken)
@@ -77,7 +77,7 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
         var cluster = await db.RasClusters
             .IgnoreQueryFilters()
             .SingleOrDefaultAsync(
-                item => item.RasGateId == rasGateId &&
+                item => item.RasEndpointId == rasEndpointId &&
                         item.ExternalId == snapshot.ExternalId,
                 cancellationToken);
 
@@ -85,7 +85,7 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
         {
             cluster = new RasCluster
             {
-                RasGateId = rasGateId,
+                RasEndpointId = rasEndpointId,
                 ExternalId = snapshot.ExternalId,
                 Name = snapshot.Name,
                 Host = snapshot.Host
@@ -97,13 +97,13 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
     }
 
     public async Task RemoveAsync(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         CancellationToken cancellationToken)
     {
         var cluster = await db.RasClusters
             .SingleOrDefaultAsync(
-                item => item.RasGateId == rasGateId &&
+                item => item.RasEndpointId == rasEndpointId &&
                         item.ExternalId == clusterId,
                 cancellationToken);
 

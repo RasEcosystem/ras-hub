@@ -5,7 +5,7 @@ namespace RasHub.Domain;
 
 public sealed class RasCluster : IEntity, IAuditable, ISoftDeletable
 {
-    public Guid RasGateId { get; set; }
+    public Guid RasEndpointId { get; set; }
 
     public Guid ExternalId { get; set; }
 
