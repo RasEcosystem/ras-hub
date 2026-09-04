@@ -1,0 +1,72 @@
+@using RasHub.Web.Infrastructure.Authorization
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" ValidationDelay="0">
+            <MudStack Spacing="3">
+                <MudAlert Severity="Severity.Error"
+                          Variant="Variant.Outlined"
+                          Dense>
+                    This permanently deletes the user and revokes their API access.
+                </MudAlert>
+
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Type <strong>@User.DisplayName</strong> to confirm deletion.
+                </MudText>
+
+                <MudTextField T="string"
+                              @bind-Value="_confirmation"
+                              Label="User email"
+                              Variant="Variant.Outlined"
+                              Validation="@(new Func<string?, string?>(ValidateConfirmation))"
+                              Immediate/>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="px-4 pb-4"
+                  Style="width: 100%;">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Outlined.DeleteForever"
+                       OnClick="ConfirmAsync">
+                Delete user
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm _form = null!;
+    private string _confirmation = string.Empty;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter][EditorRequired] public UserAdministrationItem User { get; set; } = null!;
+
+    private string? ValidateConfirmation(string? value)
+    {
+        return string.Equals(
+            value?.Trim(),
+            User.DisplayName,
+            StringComparison.OrdinalIgnoreCase)
+            ? null
+            : "Enter the user email exactly as shown";
+    }
+
+    private async Task ConfirmAsync()
+    {
+        await _form.ValidateAsync();
+        if (_form.IsValid)
+            MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+}

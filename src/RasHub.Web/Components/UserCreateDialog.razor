@@ -1,0 +1,186 @@
+@using System.ComponentModel.DataAnnotations
+@using RasHub.Web.Infrastructure.Authorization
+@inject UserAdministrationService UserAdministrationService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JsRuntime
+@inject ILogger<UserCreateDialog> Logger
+
+<MudDialog>
+    <DialogContent>
+        @if (_initialPassword is null)
+        {
+            <MudForm @ref="_form" ValidationDelay="0">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Create a user who signs in with a password. RasHub will
+                        generate an initial password and display it once.
+                    </MudText>
+
+                    @if (_error is not null)
+                    {
+                        <MudAlert Severity="Severity.Error"
+                                  Variant="Variant.Outlined"
+                                  Dense>
+                            @_error
+                        </MudAlert>
+                    }
+
+                    <MudTextField T="string"
+                                  @bind-Value="_email"
+                                  Label="Email"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email"
+                                  Required
+                                  RequiredError="Email is required"
+                                  Validation="@(new Func<string?, string?>(ValidateEmail))"
+                                  MaxLength="256"
+                                  Counter="256"
+                                  Immediate/>
+                </MudStack>
+            </MudForm>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudAlert Severity="Severity.Success"
+                          Variant="Variant.Outlined"
+                          Dense>
+                    User @_createdEmail was created.
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Warning"
+                          Variant="Variant.Outlined"
+                          Dense>
+                    Save this password now. RasHub cannot display it again.
+                </MudAlert>
+
+                <MudTextField T="string"
+                              Value="@_initialPassword"
+                              Label="Initial password"
+                              Variant="Variant.Outlined"
+                              ReadOnly
+                              InputType="InputType.Text"/>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Outlined.ContentCopy"
+                           OnClick="CopyPasswordAsync">
+                    Copy password
+                </MudButton>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row
+                  Justify="Justify.FlexEnd"
+                  Spacing="2"
+                  Class="px-4 pb-4"
+                  Style="width: 100%;">
+            @if (_initialPassword is null)
+            {
+                <MudButton Disabled="_creating" OnClick="Cancel">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Outlined.PersonAdd"
+                           Disabled="_creating"
+                           OnClick="CreateAsync">
+                    @(_creating ? "Creating…" : "Create user")
+                </MudButton>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="Done">
+                    Done
+                </MudButton>
+            }
+        </MudStack>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly EmailAddressAttribute EmailValidator = new();
+
+    private MudForm _form = null!;
+    private string _email = string.Empty;
+    private string? _createdEmail;
+    private string? _initialPassword;
+    private string? _error;
+    private bool _creating;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private static string? ValidateEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Email is required";
+
+        return EmailValidator.IsValid(value.Trim())
+            ? null
+            : "Enter a valid email address";
+    }
+
+    private async Task CreateAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid || _creating)
+            return;
+
+        try
+        {
+            _creating = true;
+            _error = null;
+            var result = await UserAdministrationService.CreateUserAsync(_email);
+
+            if (!result.Succeeded || result.InitialPassword is null)
+            {
+                _error = string.Join(
+                    " ",
+                    result.IdentityResult.Errors.Select(error => error.Description));
+                return;
+            }
+
+            _createdEmail = _email.Trim();
+            _initialPassword = result.InitialPassword;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to create a user.");
+            _error = "Unable to create the user.";
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private async Task CopyPasswordAsync()
+    {
+        if (_initialPassword is null)
+            return;
+
+        try
+        {
+            await JsRuntime.InvokeVoidAsync(
+                "navigator.clipboard.writeText",
+                _initialPassword);
+            Snackbar.Add("Initial password copied.", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Unable to copy the initial password.", Severity.Error);
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Done()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+}

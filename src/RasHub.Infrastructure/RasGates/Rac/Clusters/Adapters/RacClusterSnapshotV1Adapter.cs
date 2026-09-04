@@ -54,9 +54,7 @@ public sealed class RacClusterSnapshotV1Adapter(
         {
             SchemaVersion = deserializer.SchemaVersion,
             SourceVersion = racVersion.ToString(),
-            Completeness = items.Count == 0
-                ? SnapshotCompleteness.Unknown
-                : SnapshotCompleteness.Complete,
+            Completeness = SnapshotCompleteness.Complete,
             Items = items
         };
     }

@@ -267,3 +267,6 @@ Packages.props
 .env
 .env.*
 !.env.*.example
+
+# Local AI agent guidance
+docs/agents/

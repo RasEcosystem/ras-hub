@@ -1,0 +1,3 @@
+.account-security-heading ::deep h1:focus {
+    outline: none;
+}

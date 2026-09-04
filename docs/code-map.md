@@ -1,9 +1,8 @@
 # RasHub code map
 
 This file is a navigation aid: start here to trace a change across the current
-codebase. Binding development rules live in [`AGENTS.md`](../AGENTS.md); RAC
-compatibility and queue mechanics have their own detailed documents. All code
-paths below are relative to the repository root.
+codebase. RAC compatibility and queue mechanics have their own detailed
+documents. All code paths below are relative to the repository root.
 
 ## Projects
 
@@ -13,7 +12,7 @@ paths below are relative to the repository root.
 | `src/RasHub.Application/RasGates` | Resource ports, normalized remote models, task messages and handlers, safe failure types | `Abstractions`, `Models`, `Tasks` |
 | `src/RasHub.Infrastructure/Database` | `RasHubDbContext`, repositories, read projections, snapshot stores, guarded publisher, EF interceptors and migrations | `RasGateSyncPublisher`, `Queries`, `EntityTypeConfigurations` |
 | `src/RasHub.Infrastructure/RasGates` | Endpoint validation, transport/session, resource gateways, RAC adapters and parsers | [RAC compatibility](rac-compatibility.md), then `Client/RasGateSession.cs`, the matching gateway and `Rac/<Resource>` |
-| `src/RasHub.BackgroundTasks` | Generic in-process queues, workers, retries, scheduling and diagnostics | its [`README`](../src/RasHub.BackgroundTasks/README.md) and [`AGENTS.md`](../src/RasHub.BackgroundTasks/AGENTS.md) |
+| `src/RasHub.BackgroundTasks` | Generic in-process queues, workers, retries, scheduling and diagnostics | its [`README`](../src/RasHub.BackgroundTasks/README.md) and integration tests |
 | `src/RasHub.Web` | HTTP, Blazor, Identity, authorization, monitoring and composition | `Program.cs`, `Controllers`, `Api`, `Infrastructure` |
 | `src/RasHub.Contracts` | Versioned public wire contracts shared with clients | separate Git submodule |
 
@@ -99,7 +98,9 @@ Handlers capture `ConfigurationRevision` before remote I/O. The publisher
 obtains the tracked Gate, guards revision plus active/deleted state, applies a
 complete collection or targeted change, updates observation metadata, and saves
 once. Complete collections can remove absent children; targeted upserts leave
-siblings unchanged.
+siblings unchanged. A definitive targeted remote not-found soft-deletes only
+the requested shadow resource; deleting a cluster also invalidates its cached
+infobases.
 
 Status publication writes the RasGate and RAC observations in the same guarded
 save. Remote-identity, deactivation, deletion, and restoration changes clear
@@ -122,7 +123,7 @@ infobases by cluster—and are distinct from Hub IDs.
 | RAC command or outcome change | Operation adapter -> typed interface plus descriptor registration -> capability and gateway tests |
 | Persistence invariant | Entity/configuration/interceptor/store/publisher/migration plus Infrastructure integration tests |
 | Retry/dedup/concurrency policy | `src/RasHub.Web/Infrastructure/RasGates/RasGateTaskOptions.cs` plus handler/API tests |
-| Generic engine mechanics | `RasHub.BackgroundTasks` plus its integration suite and nested agent guide |
+| Generic engine mechanics | `RasHub.BackgroundTasks` plus its README and integration suite |
 | Authentication or authorization | Web authentication/authorization, pipeline registration and Web integration tests |
 
 ## Detailed references

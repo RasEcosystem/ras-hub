@@ -8,13 +8,8 @@
               Title="Settings"
               Subtitle="Configure application settings and user access"
               Icon="@Icons.Material.Filled.Settings">
-    <MudTabs Elevation="0" Rounded="true">
-        <MudTabPanel Text="General" Icon="@Icons.Material.Outlined.Tune">
-            <ApplicationSettingsPanel/>
-        </MudTabPanel>
-
-        <MudTabPanel Text="Users" Icon="@Icons.Material.Outlined.Group">
-            <UserAdministrationPanel/>
-        </MudTabPanel>
-    </MudTabs>
+    <MudStack Spacing="4">
+        <ApplicationSettingsPanel/>
+        <UserAdministrationPanel/>
+    </MudStack>
 </AppPageShell>

@@ -8,26 +8,32 @@
 
 <AppPageTitle Title="Reset authenticator key"/>
 
-<MudText Typo="Typo.h6" GutterBottom="true">Reset authenticator key</MudText>
+<MudStack Spacing="4">
+    <MudStack Spacing="1">
+        <MudText Typo="Typo.h5">Reset authenticator</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Replace the secret shared with your authenticator app.
+        </MudText>
+    </MudStack>
 
-<StatusMessage/>
+    <StatusMessage/>
 
-<MudAlert Severity="Severity.Warning" Variant="Variant.Text">
-    If you reset your authenticator key your authenticator app will not work until you reconfigure it.
-</MudAlert>
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+        The current authenticator will stop working. Two-factor authentication remains disabled until the new setup
+        is verified.
+    </MudAlert>
 
-<MudText Typo="Typo.body2" Class="my-4">
-    This process disables 2FA until you verify your authenticator app.
-    If you do not complete your authenticator app configuration you may lose access to your account.
-</MudText>
+    <form @formname="reset-authenticator" @onsubmit="OnSubmitAsync" method="post">
+        <AntiforgeryToken/>
 
-<form @formname="reset-authenticator" @onsubmit="OnSubmitAsync" method="post">
-    <AntiforgeryToken/>
-
-    <MudStaticButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" FormAction="FormAction.Submit">
-        Reset authenticator key
-    </MudStaticButton>
-</form>
+        <MudStaticButton Variant="Variant.Outlined"
+                         Color="Color.Error"
+                         StartIcon="@Icons.Material.Outlined.RestartAlt"
+                         FormAction="FormAction.Submit">
+            Reset authenticator
+        </MudStaticButton>
+    </form>
+</MudStack>
 
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;

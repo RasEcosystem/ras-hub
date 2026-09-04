@@ -25,6 +25,14 @@ public interface IRasInfobaseSnapshotStore
         CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Removes one cached infobase without changing sibling records.
+    /// </summary>
+    Task RemoveAsync(
+        Guid rasClusterId,
+        Guid infobaseId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Invalidates every cached infobase owned by one cluster.
     /// </summary>
     Task InvalidateAsync(

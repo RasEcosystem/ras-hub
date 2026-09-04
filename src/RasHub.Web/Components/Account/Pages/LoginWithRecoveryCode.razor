@@ -10,28 +10,48 @@
 
 <AppPageTitle Title="Recovery code verification"/>
 
-<h1>Recovery code verification</h1>
-<MudDivider/>
-<StatusMessage Message="@message"/>
-<p>
-    You have requested to log in with a recovery code. This login will not be remembered until you provide
-    an authenticator app code at log in or disable 2FA and log in again.
-</p>
-<div class="row">
-    <div class="col-md-4">
-        <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+<MudStack Spacing="4">
+    <MudStack Spacing="1" AlignItems="AlignItems.Center">
+        <MudAvatar Color="Color.Primary" Size="Size.Large">
+            <MudIcon Icon="@Icons.Material.Outlined.VpnKey" Size="Size.Large"/>
+        </MudAvatar>
+
+        <MudText Typo="Typo.h3" Align="Align.Center">Recovery code</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+            Use one of the recovery codes saved when two-factor authentication was enabled.
+        </MudText>
+    </MudStack>
+
+    <StatusMessage Message="@message"/>
+
+    <MudPaper Class="pa-6" Elevation="1">
+        <EditForm Model="Input"
+                  FormName="login-with-recovery-code"
+                  OnValidSubmit="OnValidSubmitAsync"
+                  method="post">
             <DataAnnotationsValidator/>
-            <ValidationSummary class="text-danger" role="alert"/>
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.RecoveryCode" class="form-control" autocomplete="off"
-                           placeholder="RecoveryCode"/>
-                <label for="recovery-code" class="form-label">Recovery Code</label>
-                <ValidationMessage For="() => Input.RecoveryCode" class="text-danger"/>
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+
+            <MudStack Spacing="3">
+                <MudStaticTextField For="@(() => Input.RecoveryCode)"
+                                    @bind-Value="Input.RecoveryCode"
+                                    Label="Recovery code"
+                                    Placeholder="Enter a recovery code"
+                                    Variant="Variant.Outlined"
+                                    FullWidth="true"
+                                    Adornment="Adornment.Start"
+                                    AdornmentIcon="@Icons.Material.Outlined.Key"
+                                    UserAttributes="@RecoveryCodeAttributes"/>
+
+                <MudStaticButton Variant="Variant.Filled"
+                                 Color="Color.Primary"
+                                 FullWidth="true"
+                                 FormAction="FormAction.Submit">
+                    Log in
+                </MudStaticButton>
+            </MudStack>
         </EditForm>
-    </div>
-</div>
+    </MudPaper>
+</MudStack>
 
 @code {
     private string? message;
@@ -40,6 +60,13 @@
     [SupplyParameterFromForm] private InputModel Input { get; set; } = default!;
 
     [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private readonly Dictionary<string, object> RecoveryCodeAttributes =
+        new()
+        {
+            ["autocomplete"] = "one-time-code",
+            ["aria-required"] = "true"
+        };
 
     protected override async Task OnInitializedAsync()
     {

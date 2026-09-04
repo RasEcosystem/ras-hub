@@ -1,3 +1,5 @@
+using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -28,6 +30,7 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
     private readonly string _environment;
     private readonly SqliteConnection _identityConnection = new("Data Source=:memory:");
+    private readonly IPAddress? _remoteIpAddress;
     private readonly bool _seedApiUser;
     private readonly IReadOnlyDictionary<string, string?> _settings;
 
@@ -44,9 +47,11 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
     internal RasHubWebApplicationFactory(
         string environment,
         bool seedApiUser = true,
-        IReadOnlyDictionary<string, string?>? settings = null)
+        IReadOnlyDictionary<string, string?>? settings = null,
+        IPAddress? remoteIpAddress = null)
     {
         _environment = environment;
+        _remoteIpAddress = remoteIpAddress;
         _seedApiUser = seedApiUser;
         _settings = settings ?? new Dictionary<string, string?>();
         _connection.Open();
@@ -266,6 +271,10 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
+            if (_remoteIpAddress is not null)
+                services.AddSingleton<IStartupFilter>(
+                    new RemoteIpAddressStartupFilter(_remoteIpAddress));
+
             services.RemoveAll<RasHubDbContext>();
             services.RemoveAll<DbContextOptions<RasHubDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<RasHubDbContext>>();
@@ -345,6 +354,23 @@ public sealed class RasHubWebApplicationFactory : WebApplicationFactory<Program>
         {
             _connection.Dispose();
             _identityConnection.Dispose();
+        }
+    }
+
+    private sealed class RemoteIpAddressStartupFilter(IPAddress remoteIpAddress)
+        : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        {
+            return application =>
+            {
+                application.Use(async (context, nextMiddleware) =>
+                {
+                    context.Connection.RemoteIpAddress = remoteIpAddress;
+                    await nextMiddleware(context);
+                });
+                next(application);
+            };
         }
     }
 }

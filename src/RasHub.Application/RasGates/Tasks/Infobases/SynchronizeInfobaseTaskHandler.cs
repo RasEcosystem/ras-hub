@@ -1,6 +1,7 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Domain;
 
@@ -41,13 +42,36 @@ public sealed class SynchronizeInfobaseTaskHandler(
                 "infobases",
                 "info");
 
-        var snapshot = await infobaseGateway.GetInfobaseAsync(
-            rasGate,
-            task.ClusterId,
-            task.InfobaseId,
-            task.ClusterUser,
-            task.ClusterPassword,
-            cancellationToken);
+        RasInfobaseSnapshot snapshot;
+
+        try
+        {
+            snapshot = await infobaseGateway.GetInfobaseAsync(
+                rasGate,
+                task.ClusterId,
+                task.InfobaseId,
+                task.ClusterUser,
+                task.ClusterPassword,
+                cancellationToken);
+        }
+        catch (RacResourceNotFoundException exception)
+            when (exception.Resource == "infobases" &&
+                  exception.ExternalId == task.InfobaseId)
+        {
+            var removed = await publisher.TryRemoveInfobaseAsync(
+                rasGate.Id,
+                configurationRevision,
+                task.ClusterId,
+                task.InfobaseId,
+                timeProvider.GetUtcNow().UtcDateTime,
+                cancellationToken);
+
+            if (!removed)
+                throw new RasGateConfigurationChangedException(rasGate.Id);
+
+            throw;
+        }
+
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!await publisher.TryPublishInfobaseAsync(

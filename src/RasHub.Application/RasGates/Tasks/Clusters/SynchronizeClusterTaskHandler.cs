@@ -1,6 +1,7 @@
 using RasHub.Application.Interfaces;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
+using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
 using RasHub.Domain;
 
@@ -38,10 +39,32 @@ public sealed class SynchronizeClusterTaskHandler(
                 "clusters",
                 "info");
 
-        var snapshot = await clusterGateway.GetClusterAsync(
-            rasGate,
-            task.ClusterId,
-            cancellationToken);
+        RasClusterSnapshot snapshot;
+
+        try
+        {
+            snapshot = await clusterGateway.GetClusterAsync(
+                rasGate,
+                task.ClusterId,
+                cancellationToken);
+        }
+        catch (RacResourceNotFoundException exception)
+            when (exception.Resource == "clusters" &&
+                  exception.ExternalId == task.ClusterId)
+        {
+            var removed = await publisher.TryRemoveClusterAsync(
+                rasGate.Id,
+                configurationRevision,
+                task.ClusterId,
+                timeProvider.GetUtcNow().UtcDateTime,
+                cancellationToken);
+
+            if (!removed)
+                throw new RasGateConfigurationChangedException(rasGate.Id);
+
+            throw;
+        }
+
         var observedAt = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!await publisher.TryPublishClusterAsync(

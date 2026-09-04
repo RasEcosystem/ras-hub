@@ -7,6 +7,8 @@ VERSION_FILE="$ROOT_DIR/version.json"
 SOURCE_COMPOSE="$ROOT_DIR/deploy/compose.production.yaml"
 SOURCE_ENV="$ROOT_DIR/deploy/environments/.env.production.example"
 SOURCE_README="$ROOT_DIR/deploy/README.release.md"
+SOURCE_SETUP="$ROOT_DIR/deploy/setup.sh"
+SOURCE_SETUP_TEST="$ROOT_DIR/scripts/test-release-setup.sh"
 ARTIFACTS_DIR="$ROOT_DIR/artifacts/release"
 IMAGE_REPOSITORY="ghcr.io/rasecosystem/ras-hub"
 
@@ -81,12 +83,16 @@ for required_file in \
     "$SOURCE_COMPOSE" \
     "$SOURCE_ENV" \
     "$SOURCE_README" \
+    "$SOURCE_SETUP" \
+    "$SOURCE_SETUP_TEST" \
     "$ROOT_DIR/LICENSE"; do
     if [[ ! -f "$required_file" ]]; then
         echo "Error: release input was not found: $required_file" >&2
         exit 1
     fi
 done
+
+"$SOURCE_SETUP_TEST"
 
 PACKAGE_NAME="rashub-$VERSION-deploy"
 STAGE_DIR="$ARTIFACTS_DIR/.stage-$PACKAGE_NAME"
@@ -102,6 +108,7 @@ mkdir -p "$PACKAGE_DIR"
 
 cp "$SOURCE_COMPOSE" "$PACKAGE_DIR/compose.yaml"
 cp "$SOURCE_README" "$PACKAGE_DIR/README.md"
+cp "$SOURCE_SETUP" "$PACKAGE_DIR/setup.sh"
 cp "$ROOT_DIR/LICENSE" "$PACKAGE_DIR/LICENSE"
 
 python3 -c '
@@ -125,6 +132,7 @@ with open(destination, "w", encoding="utf-8", newline="\n") as file:
 ' "$SOURCE_ENV" "$PACKAGE_DIR/.env.example" "$IMAGE"
 
 chmod 0755 "$PACKAGE_DIR"
+chmod 0755 "$PACKAGE_DIR/setup.sh"
 chmod 0644 \
     "$PACKAGE_DIR/compose.yaml" \
     "$PACKAGE_DIR/.env.example" \
@@ -135,6 +143,31 @@ docker compose \
     --env-file "$PACKAGE_DIR/.env.example" \
     --file "$PACKAGE_DIR/compose.yaml" \
     config --quiet
+
+docker compose \
+    --env-file "$PACKAGE_DIR/.env.example" \
+    --file "$PACKAGE_DIR/compose.yaml" \
+    config --format json |
+    python3 -c '
+import json
+import sys
+
+configuration = json.load(sys.stdin)
+rashub = configuration["services"]["rashub"]
+trusted_proxy = rashub["environment"]["ReverseProxy__KnownProxies__0"]
+default_network = configuration["networks"]["default"]
+ipam_configs = default_network.get("ipam", {}).get("config", [])
+
+if len(ipam_configs) != 1:
+    raise SystemExit("production Compose must define exactly one default network IPAM configuration")
+
+gateway = ipam_configs[0].get("gateway")
+
+if not gateway or trusted_proxy != gateway:
+    raise SystemExit(
+        "production Compose gateway must match the trusted reverse proxy address"
+    )
+'
 
 docker compose \
     --env-file "$PACKAGE_DIR/.env.example" \
@@ -158,7 +191,12 @@ tar \
 
 archive_entries="$(tar -tzf "$ARCHIVE_PATH")"
 
-for entry in compose.yaml .env.example README.md LICENSE; do
+for entry in \
+    compose.yaml \
+    .env.example \
+    setup.sh \
+    README.md \
+    LICENSE; do
     grep -Fxq "$PACKAGE_NAME/$entry" <<<"$archive_entries" || {
         echo "Error: release archive is missing $entry." >&2
         exit 1

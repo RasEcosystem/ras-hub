@@ -90,6 +90,20 @@ public sealed class RasInfobaseSnapshotStore(RasHubDbContext db)
         db.RasInfobases.RemoveRange(infobases);
     }
 
+    public async Task RemoveAsync(
+        Guid rasClusterId,
+        Guid infobaseId,
+        CancellationToken cancellationToken)
+    {
+        var infobase = await db.RasInfobases.SingleOrDefaultAsync(
+            item => item.RasClusterId == rasClusterId &&
+                    item.ExternalId == infobaseId,
+            cancellationToken);
+
+        if (infobase is not null)
+            db.RasInfobases.Remove(infobase);
+    }
+
     private static void Apply(
         RasInfobase infobase,
         RasInfobaseSnapshot snapshot,

@@ -177,6 +177,29 @@ public sealed class RasGateEntityConfigurationTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_plaintext_api_key_with_protection_prefix_encrypts_and_round_trips()
+    {
+        await using var db = _database.CreateContext();
+        const string apiKey = "rashub-dp:v1:operator-selected-key";
+        var rasGate = RasGateTestData.Create(apiKey: apiKey);
+        db.RasGates.Add(rasGate);
+
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var storedApiKey = await ReadStoredApiKeyAsync(db, rasGate.Id);
+        Assert.NotEqual(apiKey, storedApiKey);
+        Assert.True(_database.ApiKeyProtector.IsProtected(storedApiKey));
+        Assert.Equal(apiKey, _database.ApiKeyProtector.Unprotect(storedApiKey));
+
+        db.ChangeTracker.Clear();
+        var reloaded = await db.RasGates.SingleAsync(
+            item => item.Id == rasGate.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(apiKey, reloaded.ApiKey);
+    }
+
+    [Fact]
     public async Task Protect_legacy_key_rewrites_plaintext_once()
     {
         await using var db = _database.CreateContext();

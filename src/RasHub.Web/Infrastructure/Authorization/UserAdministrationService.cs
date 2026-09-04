@@ -1,10 +1,15 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Nava.Settings.Abstractions;
 using RasHub.Web.Authentication;
 using RasHub.Web.Data;
+using RasHub.Web.Settings;
 
 namespace RasHub.Web.Infrastructure.Authorization;
 
@@ -16,13 +21,37 @@ public sealed record UserAdministrationItem(
     bool IsBlocked,
     string? ApiKey);
 
+public sealed class UserCreationResult(
+    IdentityResult identityResult,
+    string? initialPassword)
+{
+    public IdentityResult IdentityResult { get; } = identityResult;
+
+    public string? InitialPassword { get; } = initialPassword;
+
+    public bool Succeeded => IdentityResult.Succeeded;
+
+    public override string ToString()
+    {
+        return $"{nameof(UserCreationResult)} {{ Succeeded = {Succeeded}, " +
+               "InitialPassword = [REDACTED] }";
+    }
+}
+
 public sealed class UserAdministrationService(
     ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
     AuthenticationStateProvider authenticationStateProvider,
     IAuthorizationService authorizationService,
+    ISettingsStore settingsStore,
     ILogger<UserAdministrationService> logger)
 {
+    // RasHub currently supports one application replica. Keep administrator
+    // count checks and the corresponding mutations in one process-wide
+    // critical section so concurrent circuits cannot remove the last active
+    // administrator through a write-skew race.
+    private static readonly SemaphoreSlim AdministratorMutationLock = new(1, 1);
+
     public async Task<IReadOnlyList<UserAdministrationItem>> GetUsersAsync()
     {
         var principal = await GetAuthorizedPrincipalAsync();
@@ -47,56 +76,92 @@ public sealed class UserAdministrationService(
             .ToListAsync();
     }
 
+    public async Task<UserCreationResult> CreateUserAsync(string email)
+    {
+        var principal = await GetAuthorizedPrincipalAsync();
+        email = email?.Trim() ?? string.Empty;
+
+        if (email.Length == 0 || !new EmailAddressAttribute().IsValid(email))
+            return new UserCreationResult(
+                Failed("Enter a valid email address."),
+                null);
+
+        var initialPassword = WebEncoders.Base64UrlEncode(
+            RandomNumberGenerator.GetBytes(24));
+        var user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
+        var result = await userManager.CreateAsync(user, initialPassword);
+
+        if (result.Succeeded)
+        {
+            logger.LogInformation(
+                "Administrator {ActorUserId} created user {TargetUserId}",
+                userManager.GetUserId(principal),
+                user.Id);
+            return new UserCreationResult(result, initialPassword);
+        }
+
+        logger.LogWarning(
+            "Administrator {ActorUserId} failed to create a user: {Errors}",
+            userManager.GetUserId(principal),
+            string.Join("; ", result.Errors.Select(error => error.Code)));
+        return new UserCreationResult(result, null);
+    }
+
     public async Task<IdentityResult> SetAdminAsync(
         string userId,
         bool isAdmin)
     {
         var principal = await GetAuthorizedPrincipalAsync();
-        var user = await userManager.FindByIdAsync(userId);
-
-        if (user is null) return Failed("The user no longer exists.");
-
-        var currentlyAdmin = await userManager.IsInRoleAsync(user, AppRoles.Admin);
-
-        if (currentlyAdmin == isAdmin) return IdentityResult.Success;
-
-        if (!isAdmin)
+        return await ExecuteAdministratorMutationAsync(async () =>
         {
-            var currentUserId = userManager.GetUserId(principal);
+            var user = await userManager.FindByIdAsync(userId);
 
-            if (user.Id == currentUserId)
-                return Failed("You cannot remove your own administrator role.");
+            if (user is null) return Failed("The user no longer exists.");
 
-            var administrators = await userManager.GetUsersInRoleAsync(AppRoles.Admin);
+            var currentlyAdmin = await userManager.IsInRoleAsync(user, AppRoles.Admin);
 
-            if (administrators.Count <= 1)
-                return Failed("The last administrator cannot be removed.");
-        }
+            if (currentlyAdmin == isAdmin) return IdentityResult.Success;
 
-        var roleResult = isAdmin
-            ? await userManager.AddToRoleAsync(user, AppRoles.Admin)
-            : await userManager.RemoveFromRoleAsync(user, AppRoles.Admin);
+            if (!isAdmin)
+            {
+                var currentUserId = userManager.GetUserId(principal);
 
-        if (!roleResult.Succeeded)
-        {
-            logger.LogWarning(
-                "Administrator {ActorUserId} failed to set administrator access " +
-                "for user {TargetUserId} to {IsAdmin}: {Errors}",
+                if (user.Id == currentUserId)
+                    return Failed("You cannot remove your own administrator role.");
+
+                if (!user.IsBlocked)
+                {
+                    if (await GetActiveAdministratorCountAsync() <= 1)
+                        return Failed(
+                            "The last active administrator cannot be removed.");
+                }
+            }
+
+            var roleResult = isAdmin
+                ? await userManager.AddToRoleAsync(user, AppRoles.Admin)
+                : await userManager.RemoveFromRoleAsync(user, AppRoles.Admin);
+
+            if (!roleResult.Succeeded)
+            {
+                logger.LogWarning(
+                    "Administrator {ActorUserId} failed to set administrator access " +
+                    "for user {TargetUserId} to {IsAdmin}: {Errors}",
+                    userManager.GetUserId(principal),
+                    user.Id,
+                    isAdmin,
+                    string.Join("; ", roleResult.Errors.Select(error => error.Code)));
+                return roleResult;
+            }
+
+            logger.LogInformation(
+                "Administrator {ActorUserId} set administrator access for " +
+                "user {TargetUserId} to {IsAdmin}",
                 userManager.GetUserId(principal),
                 user.Id,
-                isAdmin,
-                string.Join("; ", roleResult.Errors.Select(error => error.Code)));
-            return roleResult;
-        }
+                isAdmin);
 
-        logger.LogInformation(
-            "Administrator {ActorUserId} set administrator access for " +
-            "user {TargetUserId} to {IsAdmin}",
-            userManager.GetUserId(principal),
-            user.Id,
-            isAdmin);
-
-        return await userManager.UpdateSecurityStampAsync(user);
+            return await userManager.UpdateSecurityStampAsync(user);
+        });
     }
 
     public async Task<IdentityResult> SetBlockedAsync(
@@ -104,45 +169,46 @@ public sealed class UserAdministrationService(
         bool isBlocked)
     {
         var principal = await GetAuthorizedPrincipalAsync();
-        var user = await userManager.FindByIdAsync(userId);
-
-        if (user is null) return Failed("The user no longer exists.");
-
-        if (user.IsBlocked == isBlocked) return IdentityResult.Success;
-
-        var currentUserId = userManager.GetUserId(principal);
-
-        if (isBlocked && user.Id == currentUserId)
-            return Failed("You cannot block your own account.");
-
-        if (isBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
+        return await ExecuteAdministratorMutationAsync(async () =>
         {
-            var administrators = await userManager.GetUsersInRoleAsync(AppRoles.Admin);
+            var user = await userManager.FindByIdAsync(userId);
 
-            if (administrators.Count(administrator => !administrator.IsBlocked) <= 1)
-                return Failed("The last active administrator cannot be blocked.");
-        }
+            if (user is null) return Failed("The user no longer exists.");
 
-        user.IsBlocked = isBlocked;
-        var result = await userManager.UpdateSecurityStampAsync(user);
+            if (user.IsBlocked == isBlocked) return IdentityResult.Success;
 
-        if (result.Succeeded)
-            logger.LogInformation(
-                "Administrator {ActorUserId} set blocked state for " +
-                "user {TargetUserId} to {IsBlocked}",
-                currentUserId,
-                user.Id,
-                isBlocked);
-        else
-            logger.LogWarning(
-                "Administrator {ActorUserId} failed to set blocked state for " +
-                "user {TargetUserId} to {IsBlocked}: {Errors}",
-                currentUserId,
-                user.Id,
-                isBlocked,
-                string.Join("; ", result.Errors.Select(error => error.Code)));
+            var currentUserId = userManager.GetUserId(principal);
 
-        return result;
+            if (isBlocked && user.Id == currentUserId)
+                return Failed("You cannot block your own account.");
+
+            if (isBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
+            {
+                if (await GetActiveAdministratorCountAsync() <= 1)
+                    return Failed("The last active administrator cannot be blocked.");
+            }
+
+            user.IsBlocked = isBlocked;
+            var result = await userManager.UpdateSecurityStampAsync(user);
+
+            if (result.Succeeded)
+                logger.LogInformation(
+                    "Administrator {ActorUserId} set blocked state for " +
+                    "user {TargetUserId} to {IsBlocked}",
+                    currentUserId,
+                    user.Id,
+                    isBlocked);
+            else
+                logger.LogWarning(
+                    "Administrator {ActorUserId} failed to set blocked state for " +
+                    "user {TargetUserId} to {IsBlocked}: {Errors}",
+                    currentUserId,
+                    user.Id,
+                    isBlocked,
+                    string.Join("; ", result.Errors.Select(error => error.Code)));
+
+            return result;
+        });
     }
 
     public async Task<IdentityResult> GenerateApiKeyAsync(string userId)
@@ -171,6 +237,89 @@ public sealed class UserAdministrationService(
 
         LogApiKeyChange(principal, user, result, "revoked");
         return result;
+    }
+
+    public async Task<IdentityResult> DeleteUserAsync(string userId)
+    {
+        var principal = await GetAuthorizedPrincipalAsync();
+        return await ExecuteAdministratorMutationAsync(async () =>
+        {
+            var currentUserId = userManager.GetUserId(principal);
+            var user = await userManager.FindByIdAsync(userId);
+
+            if (user is null) return Failed("The user no longer exists.");
+
+            if (user.Id == currentUserId)
+                return Failed("You cannot delete your own account.");
+
+            if (!user.IsBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
+            {
+                if (await GetActiveAdministratorCountAsync() <= 1)
+                    return Failed("The last active administrator cannot be deleted.");
+            }
+
+            var result = await userManager.DeleteAsync(user);
+
+            if (result.Succeeded)
+            {
+                logger.LogInformation(
+                    "Administrator {ActorUserId} deleted user {TargetUserId}",
+                    currentUserId,
+                    user.Id);
+                try
+                {
+                    await settingsStore.RemoveAsync<UserSettings>(user.Id);
+                }
+                catch (Exception exception)
+                {
+                    logger.LogWarning(
+                        exception,
+                        "Unable to remove settings for deleted user {TargetUserId}",
+                        user.Id);
+                }
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Administrator {ActorUserId} failed to delete user " +
+                    "{TargetUserId}: {Errors}",
+                    currentUserId,
+                    user.Id,
+                    string.Join("; ", result.Errors.Select(error => error.Code)));
+            }
+
+            return result;
+        });
+    }
+
+    private static async Task<IdentityResult> ExecuteAdministratorMutationAsync(
+        Func<Task<IdentityResult>> mutation)
+    {
+        await AdministratorMutationLock.WaitAsync();
+
+        try
+        {
+            return await mutation();
+        }
+        finally
+        {
+            AdministratorMutationLock.Release();
+        }
+    }
+
+    private Task<int> GetActiveAdministratorCountAsync()
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .Where(user => !user.IsBlocked)
+            .CountAsync(user => dbContext.UserRoles
+                .Where(userRole => userRole.UserId == user.Id)
+                .Join(
+                    dbContext.Roles.Where(role => role.Name == AppRoles.Admin),
+                    userRole => userRole.RoleId,
+                    role => role.Id,
+                    (_, _) => 1)
+                .Any());
     }
 
     private async Task<ClaimsPrincipal> GetAuthorizedPrincipalAsync()

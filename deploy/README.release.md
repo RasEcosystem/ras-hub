@@ -1,79 +1,77 @@
 # RasHub container deployment
 
-This bundle deploys the RasHub version pinned in `.env.example`. It does not
-contain credentials, certificates, database data, or Data Protection keys.
+This guide is shipped in the deployment archive. The archive pins a versioned
+RasHub image tag and contains no credentials, certificates, database data, or
+Data Protection keys.
 
 ## Requirements
 
 - Linux x86-64 with Docker Engine and Docker Compose v2;
-- a TLS reverse proxy in front of the locally bound RasHub and Seq ports;
-- persistent storage and a backup destination outside the Docker host.
+- OpenSSL and `sudo` access, or a root shell for secret-file preparation;
+- a TLS reverse proxy in front of the locally bound RasHub port;
+- one or more RasGate endpoints with access to compatible RAC and RAS;
+- persistent storage and an off-host backup destination.
 
-RasHub background coordination is process-local. Run one RasHub replica unless
-distributed coordination and durable task recovery have been implemented.
+Run one RasHub replica. Keep Seq local or protect it independently; do not
+publish its UI or ingestion API anonymously.
+
+The TLS proxy must forward the original host, client address, and protocol and
+support WebSocket upgrade for the Blazor Server connection.
 
 ## First deployment
 
-1. Copy `.env.example` to `.env` and replace every placeholder.
-2. Create a dedicated host group plus the bootstrap administrator password and
-   Data Protection files referenced by `.env`:
+Run the installer from the extracted release directory:
 
-   ```bash
-   sudo groupadd --system rashub-secrets
-   getent group rashub-secrets
-   sudo install -d -m 700 /opt/rashub/secrets
-   sudo openssl rand -base64 \
-     -out /opt/rashub/secrets/bootstrap-admin-password 32
-   sudo openssl rand -base64 \
-     -out /opt/rashub/secrets/data-protection-password 48
-   sudo openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
-     -subj "/CN=RasHub Data Protection" \
-     -keyout /opt/rashub/secrets/data-protection.key \
-     -out /opt/rashub/secrets/data-protection.crt
-   sudo openssl pkcs12 -export \
-     -out /opt/rashub/secrets/data-protection.pfx \
-     -inkey /opt/rashub/secrets/data-protection.key \
-     -in /opt/rashub/secrets/data-protection.crt \
-     -passout file:/opt/rashub/secrets/data-protection-password
-   sudo chown root:rashub-secrets /opt/rashub/secrets/*
-   sudo chmod 640 /opt/rashub/secrets/*
-   ```
+```bash
+./setup.sh
+```
 
-   Set `RASHUB_SECRET_GID` in `.env` to the numeric GID printed by `getent`.
-   Compose adds only that supplemental group to the non-root RasHub process, so
-   the secret files remain unreadable to unrelated host and container users.
+Running `sh setup.sh` is also supported; the script switches to Bash itself.
 
-   Generate the Seq administrator password hash as documented by Seq and put
-   only the resulting hash in `.env`.
-3. Pull and start the pinned image:
+The installer creates `.env`, the `rashub-secrets` group, the bootstrap and
+Data Protection files, and random PostgreSQL and Seq credentials. It validates
+the Compose configuration, downloads the pinned images, runs database
+migrations, starts the complete stack, and waits until RasHub is healthy.
 
-   ```bash
-   docker compose --env-file .env --file compose.yaml pull
-   docker compose --env-file .env --file compose.yaml up --detach
-   ```
+After a successful first installation it prints the local address, the RasHub
+login `rashub@rashub`, and the generated RasHub and Seq passwords. Store them
+in a password manager. The application logger and Seq never receive these
+passwords.
 
-The one-shot `migrate` service must complete successfully before RasHub starts.
-Check readiness through the TLS endpoint exposed by the reverse proxy:
+Existing `.env` files and secrets are never overwritten. Running `setup.sh`
+again validates and starts the existing stack without changing or displaying
+its credentials. Use `--secrets-dir` or `--secret-group` only when the host
+requires different locations or ownership.
+
+RasHub and Seq remain bound to localhost by default. Configure the host TLS
+reverse proxy before exposing either service. After that, verify readiness
+through the public RasHub endpoint:
 
 ```bash
 curl --fail https://rashub.example.com/health/ready
 ```
 
-## Upgrade and rollback
+The bootstrap account is created only when the database contains no
+administrator. Later restarts never reset an existing administrator or its
+password.
 
-Back up PostgreSQL, the Data Protection volume, its certificate, and its
-password before every upgrade. A database backup can be streamed from the
-running stack:
+## Backup, upgrade, and rollback
+
+Before every upgrade, back up PostgreSQL, the Data Protection volume, its
+certificate, and its password to storage outside this host. A database dump can
+be streamed with:
 
 ```bash
 docker compose --env-file .env --file compose.yaml exec -T postgres \
   sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > rashub.sql
 ```
 
-To upgrade, replace `RASHUB_IMAGE` in `.env` with the immutable image tag from
-the new release, then run `pull` and `up --detach` again. To roll back the
-application, restore the previous image tag. If the new release applied a
-non-backward-compatible migration, restore the matching PostgreSQL backup as
-well.
+Losing Data Protection material invalidates sessions and makes stored RasGate
+API keys unreadable.
 
-Never use the mutable `latest` tag for a prerelease deployment.
+Set `RASHUB_IMAGE` to the new versioned tag, then run `pull` and `up --detach`.
+To roll back, restore the previous image tag. If the upgrade applied an
+incompatible migration, restore the matching PostgreSQL backup as well.
+
+Never deploy the mutable `latest` tag when an exact release version is
+available.

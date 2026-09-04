@@ -55,6 +55,29 @@ public sealed partial class RasGateClustersApiTests : IClassFixture<RasHubWebApp
     }
 
     [Fact]
+    public async Task Refresh_shadow_with_complete_empty_snapshot_removes_last_cluster_and_infobases()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        await _factory.SeedRasInfobaseAsync(cluster.Id);
+        _factory.RasGateBoundary.Clusters = [];
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/shadow/refresh",
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(await _factory.FindRasClustersAsync(rasGate.Id));
+        Assert.True(Assert.Single(
+            await _factory.FindRasClustersAsync(rasGate.Id, true)).IsDeleted);
+        Assert.Empty(await _factory.FindRasInfobasesAsync(cluster.Id));
+        Assert.True(Assert.Single(
+            await _factory.FindRasInfobasesAsync(cluster.Id, true)).IsDeleted);
+    }
+
+    [Fact]
     public async Task Get_live_all_refreshes_and_returns_complete_shadow()
     {
         var rasGate = await _factory.SeedRasGateAsync();
@@ -361,16 +384,18 @@ public sealed partial class RasGateClustersApiTests : IClassFixture<RasHubWebApp
     }
 
     [Fact]
-    public async Task Synchronize_by_id_missing_remote_cluster_returns_not_found()
+    public async Task Synchronize_by_id_missing_remote_cluster_removes_stale_shadow_and_returns_not_found()
     {
         var rasGate = await _factory.SeedRasGateAsync();
-        var clusterId = Guid.NewGuid();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        await _factory.SeedRasInfobaseAsync(cluster.Id);
+        var sibling = await _factory.SeedRasClusterAsync(rasGate.Id);
         _factory.RasGateBoundary.ClusterException =
-            new RacResourceNotFoundException("clusters", clusterId);
+            new RacResourceNotFoundException("clusters", cluster.ExternalId);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{clusterId}",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/live/{cluster.ExternalId}",
             null,
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -378,9 +403,16 @@ public sealed partial class RasGateClustersApiTests : IClassFixture<RasHubWebApp
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("cluster_not_found", GetErrorCode(json));
         Assert.Equal(
-            $"Cluster '{clusterId}' was not found.",
+            $"Cluster '{cluster.ExternalId}' was not found.",
             json.GetProperty("error").GetProperty("message").GetString());
         Assert.Equal(1, _factory.RasGateBoundary.ClusterInfoRequestCount);
+        var activeClusters = await _factory.FindRasClustersAsync(rasGate.Id);
+        Assert.Equal(sibling.ExternalId, Assert.Single(activeClusters).ExternalId);
+        var allClusters = await _factory.FindRasClustersAsync(rasGate.Id, true);
+        Assert.True(allClusters.Single(item => item.Id == cluster.Id).IsDeleted);
+        Assert.Empty(await _factory.FindRasInfobasesAsync(cluster.Id));
+        Assert.True(Assert.Single(
+            await _factory.FindRasInfobasesAsync(cluster.Id, true)).IsDeleted);
     }
 
     [Theory]

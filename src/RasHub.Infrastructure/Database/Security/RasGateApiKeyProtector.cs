@@ -25,9 +25,7 @@ public sealed class RasGateApiKeyProtector
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        return IsProtected(value)
-            ? value
-            : Prefix + _protector.Protect(value);
+        return Prefix + _protector.Protect(value);
     }
 
     public string Unprotect(string value)

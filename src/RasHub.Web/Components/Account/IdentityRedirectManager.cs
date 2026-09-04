@@ -20,12 +20,7 @@ internal sealed class IdentityRedirectManager(NavigationManager navigationManage
 
     public void RedirectTo(string? uri)
     {
-        uri ??= "";
-
-        // Prevent open redirects.
-        if (!Uri.IsWellFormedUriString(uri, UriKind.Relative)) uri = navigationManager.ToBaseRelativePath(uri);
-
-        navigationManager.NavigateTo(uri);
+        navigationManager.NavigateTo(GetSafeRedirectUri(uri));
     }
 
     public void RedirectTo(string uri, Dictionary<string, object?> queryParameters)
@@ -56,5 +51,32 @@ internal sealed class IdentityRedirectManager(NavigationManager navigationManage
         RedirectToWithStatus("Account/InvalidUser",
             $"Error: Unable to load user with ID '{userManager.GetUserId(context.User)}'.",
             context);
+    }
+
+    private string GetSafeRedirectUri(string? uri)
+    {
+        if (string.IsNullOrEmpty(uri))
+            return "";
+
+        if (uri.Contains('\\') ||
+            uri.Any(char.IsControl))
+            return "";
+
+        var baseUri = new Uri(navigationManager.BaseUri);
+
+        if (!Uri.TryCreate(baseUri, uri, out var targetUri) ||
+            !IsSameOrigin(baseUri, targetUri) ||
+            !baseUri.IsBaseOf(targetUri) ||
+            !string.IsNullOrEmpty(targetUri.UserInfo))
+            return "";
+
+        return targetUri.AbsoluteUri;
+    }
+
+    private static bool IsSameOrigin(Uri first, Uri second)
+    {
+        return string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(first.IdnHost, second.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+               first.Port == second.Port;
     }
 }

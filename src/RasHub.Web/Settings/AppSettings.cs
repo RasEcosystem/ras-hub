@@ -6,8 +6,4 @@ namespace RasHub.Web.Settings;
 public sealed class ApplicationSettings
 {
     public AppTheme Theme { get; set; }
-    public bool AllowForgotPassword { get; set; } = true;
-    public bool AllowResendEmailConfirmation { get; set; } = true;
-    public bool AllowPasskeyLogin { get; set; } = true;
-    public bool AllowRegistration { get; set; }
 }

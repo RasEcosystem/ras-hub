@@ -60,6 +60,26 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
+    public async Task Refresh_shadow_with_complete_empty_snapshot_removes_last_infobase()
+    {
+        var rasGate = await _factory.SeedRasGateAsync();
+        var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
+        await _factory.SeedRasInfobaseAsync(cluster.Id);
+        _factory.RasGateBoundary.Infobases = [];
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/shadow/refresh",
+            new InfobaseCredentialsRequest(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(await _factory.FindRasInfobasesAsync(cluster.Id));
+        Assert.True(Assert.Single(
+            await _factory.FindRasInfobasesAsync(cluster.Id, true)).IsDeleted);
+    }
+
+    [Fact]
     public async Task Get_live_all_refreshes_and_returns_complete_shadow()
     {
         var rasGate = await _factory.SeedRasGateAsync();
@@ -346,17 +366,18 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
     }
 
     [Fact]
-    public async Task Get_live_one_missing_remote_infobase_returns_not_found()
+    public async Task Get_live_one_missing_remote_infobase_removes_stale_shadow_and_returns_not_found()
     {
         var rasGate = await _factory.SeedRasGateAsync();
         var cluster = await _factory.SeedRasClusterAsync(rasGate.Id);
-        var infobaseId = Guid.NewGuid();
+        var infobase = await _factory.SeedRasInfobaseAsync(cluster.Id);
+        var sibling = await _factory.SeedRasInfobaseAsync(cluster.Id);
         _factory.RasGateBoundary.InfobaseException =
-            new RacResourceNotFoundException("infobases", infobaseId);
+            new RacResourceNotFoundException("infobases", infobase.ExternalId);
         using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
-            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/live/{infobaseId}",
+            $"/api/v1/ras-gates/{rasGate.Id}/clusters/{cluster.ExternalId}/infobases/live/{infobase.ExternalId}",
             new InfobaseCredentialsRequest(),
             TestContext.Current.CancellationToken);
         var json = await ReadJsonAsync(response);
@@ -364,9 +385,13 @@ public sealed class RasGateInfobasesApiTests : IClassFixture<RasHubWebApplicatio
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("infobase_not_found", GetErrorCode(json));
         Assert.Equal(
-            $"Infobase '{infobaseId}' was not found.",
+            $"Infobase '{infobase.ExternalId}' was not found.",
             json.GetProperty("error").GetProperty("message").GetString());
         Assert.Equal(1, _factory.RasGateBoundary.InfobaseInfoRequestCount);
+        var activeInfobases = await _factory.FindRasInfobasesAsync(cluster.Id);
+        Assert.Equal(sibling.ExternalId, Assert.Single(activeInfobases).ExternalId);
+        var allInfobases = await _factory.FindRasInfobasesAsync(cluster.Id, true);
+        Assert.True(allInfobases.Single(item => item.Id == infobase.Id).IsDeleted);
     }
 
     [Fact]
