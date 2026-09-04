@@ -39,6 +39,49 @@ public sealed class RasEndpointQueriesTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_administration_items_projects_endpoint_and_gate_fields()
+    {
+        var gate = RasGateTestData.Create(
+            "Execution gate",
+            "https://execution-gate.example.test",
+            8443);
+        gate.IsActive = false;
+        var endpoint = RasEndpointTestData.Create(
+            gate.Id);
+
+        await using var db = _database.CreateContext();
+        db.AddRange(gate, endpoint);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.ChangeTracker.Clear();
+
+        var result = await new RasEndpointQueries(db)
+            .GetAdministrationItemsAsync(
+                false,
+                TestContext.Current.CancellationToken);
+
+        var item = Assert.Single(result);
+        Assert.Equal(endpoint.Id, item.Id);
+        Assert.Equal(endpoint.Name, item.Name);
+        Assert.Equal(gate.Id, item.RasGateId);
+        Assert.Equal(gate.Name, item.RasGateName);
+        Assert.Equal(gate.Url, item.RasGateUrl);
+        Assert.Equal(gate.Port, item.RasGatePort);
+        Assert.False(item.RasGateIsActive);
+        Assert.False(item.RasGateIsDeleted);
+        Assert.Equal(endpoint.Host, item.Host);
+        Assert.Equal(endpoint.Port, item.Port);
+        Assert.True(item.IsActive);
+        Assert.Equal(
+            endpoint.ConfigurationRevision,
+            item.ConfigurationRevision);
+        Assert.Equal(endpoint.CreatedAt, item.CreatedAt);
+        Assert.Equal(endpoint.UpdatedAt, item.UpdatedAt);
+        Assert.False(item.IsDeleted);
+        Assert.Null(item.DeletedAt);
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
     public async Task Queries_exclude_soft_deleted_endpoints()
     {
         var gate = RasGateTestData.Create();

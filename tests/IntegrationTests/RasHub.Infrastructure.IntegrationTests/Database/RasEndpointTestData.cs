@@ -10,12 +10,6 @@ internal static class RasEndpointTestData
         string host = "ras.example.test",
         int port = 1545)
     {
-        return new RasEndpoint
-        {
-            Name = name,
-            RasGateId = rasGateId,
-            Host = host,
-            Port = port
-        };
+        return new RasEndpoint { Name = name, RasGateId = rasGateId, Host = host, Port = port };
     }
 }

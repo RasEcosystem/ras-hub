@@ -29,8 +29,8 @@ public sealed class RasEndpointEntityConfigurationTests : IDisposable
     public async Task Save_configuration_changes_increment_configuration_revision()
     {
         await using var db = _database.CreateContext();
-        var firstGate = RasGateTestData.Create(name: "First Gate");
-        var secondGate = RasGateTestData.Create(name: "Second Gate");
+        var firstGate = RasGateTestData.Create("First Gate");
+        var secondGate = RasGateTestData.Create("Second Gate");
         var endpoint = RasEndpointTestData.Create(firstGate.Id);
         db.AddRange(firstGate, secondGate, endpoint);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);

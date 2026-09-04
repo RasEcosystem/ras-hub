@@ -107,6 +107,7 @@ internal static class IdentityServiceCollectionExtensions
             };
         });
         services.AddScoped<CurrentUserAccessor>();
+        services.AddScoped<AdministrationAuthorizationGuard>();
         services.AddScoped<UserAdministrationService>();
         services.AddScoped<UserApiKeyService>();
 

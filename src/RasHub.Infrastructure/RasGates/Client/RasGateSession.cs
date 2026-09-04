@@ -17,37 +17,25 @@ internal sealed class RasGateSession
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
-    private readonly string _apiKey;
-    private readonly Uri _baseAddress;
     private readonly RacCapabilityResolver _capabilityResolver;
-    private readonly RacEndpointArgumentAdapter _endpointArgumentAdapter;
-    private readonly long _configurationRevision;
     private readonly HttpClient _httpClient;
     private readonly RacVersionCache _racVersionCache;
-    private readonly Guid _rasGateId;
+    private readonly RasGateSessionState _state;
     private readonly RacVersionParser _versionParser;
     private Version? _racVersion;
 
     public RasGateSession(
         HttpClient httpClient,
-        Uri baseAddress,
-        string apiKey,
-        Guid rasGateId,
-        long configurationRevision,
+        RasGateSessionState state,
         RacVersionCache racVersionCache,
         RacVersionParser versionParser,
-        RacCapabilityResolver capabilityResolver,
-        RacEndpointArgumentAdapter endpointArgumentAdapter)
+        RacCapabilityResolver capabilityResolver)
     {
         _httpClient = httpClient;
-        _baseAddress = baseAddress;
-        _apiKey = apiKey;
-        _rasGateId = rasGateId;
-        _configurationRevision = configurationRevision;
+        _state = state;
         _racVersionCache = racVersionCache;
         _versionParser = versionParser;
         _capabilityResolver = capabilityResolver;
-        _endpointArgumentAdapter = endpointArgumentAdapter;
     }
 
     public async Task<RasGateStatus> GetStatusAsync(
@@ -75,8 +63,7 @@ internal sealed class RasGateSession
 
         return new RasGateCapabilities
         {
-            RacVersion = racVersion.ToString(),
-            Resources = _capabilityResolver.GetCapabilities(racVersion)
+            RacVersion = racVersion.ToString(), Resources = _capabilityResolver.GetCapabilities(racVersion)
         };
     }
 
@@ -87,8 +74,8 @@ internal sealed class RasGateSession
             return _racVersion;
 
         if (_racVersionCache.TryGet(
-                _rasGateId,
-                _configurationRevision,
+                _state.RasGateId,
+                _state.ConfigurationRevision,
                 out var cachedVersion))
         {
             _racVersion = cachedVersion;
@@ -98,7 +85,7 @@ internal sealed class RasGateSession
         var status = await GetRacStatusAsync(cancellationToken);
 
         if (!status.Available)
-            throw new RacUnavailableException(_rasGateId);
+            throw new RacUnavailableException(_state.RasGateId);
 
         return status.Version ?? throw new RasGateClientException(
             "RasGate returned an incomplete RAC status response.");
@@ -137,8 +124,8 @@ internal sealed class RasGateSession
 
         _racVersion = version;
         _racVersionCache.Set(
-            _rasGateId,
-            _configurationRevision,
+            _state.RasGateId,
+            _state.ConfigurationRevision,
             version);
 
         return new RacStatusObservation(true, version);
@@ -212,7 +199,9 @@ internal sealed class RasGateSession
     private void InvalidateRacVersion()
     {
         _racVersion = null;
-        _racVersionCache.Remove(_rasGateId, _configurationRevision);
+        _racVersionCache.Remove(
+            _state.RasGateId,
+            _state.ConfigurationRevision);
     }
 
     private async Task<RacExecutionResult> ExecuteRacAsync(
@@ -228,7 +217,7 @@ internal sealed class RasGateSession
         request.Content = JsonContent.Create(
             new ExecuteRacRequest
             {
-                Arguments = _endpointArgumentAdapter.Apply(
+                Arguments = RacEndpointArgumentAdapter.Apply(
                     arguments,
                     address)
             },
@@ -288,10 +277,10 @@ internal sealed class RasGateSession
     {
         var request = new HttpRequestMessage(
             method,
-            new Uri(_baseAddress, relativeUri));
+            new Uri(_state.BaseAddress, relativeUri));
 
         if (authenticate)
-            request.Headers.Add(ApiKeyHeaderName, _apiKey);
+            request.Headers.Add(ApiKeyHeaderName, _state.ApiKey);
 
         return request;
     }
@@ -456,7 +445,7 @@ internal sealed class RasGateSession
         RacMutation mutation)
     {
         return new RasGateMutationOutcomeUnknownException(
-            _rasGateId,
+            _state.RasGateId,
             mutation.Resource,
             mutation.Operation);
     }

@@ -174,8 +174,7 @@ public sealed class RasEndpointSyncPublisher(
             RasEndpointExecutionGuard guard,
             CancellationToken cancellationToken)
     {
-        var endpoint = db.RasEndpoints.Local.SingleOrDefault(
-                           item => item.Id == guard.RasEndpointId) ??
+        var endpoint = db.RasEndpoints.Local.SingleOrDefault(item => item.Id == guard.RasEndpointId) ??
                        await db.RasEndpoints
                            .IgnoreQueryFilters()
                            .SingleOrDefaultAsync(
@@ -185,8 +184,7 @@ public sealed class RasEndpointSyncPublisher(
         if (endpoint is null)
             return null;
 
-        var gate = db.RasGates.Local.SingleOrDefault(
-                       item => item.Id == guard.RasGateId) ??
+        var gate = db.RasGates.Local.SingleOrDefault(item => item.Id == guard.RasGateId) ??
                    await db.RasGates
                        .IgnoreQueryFilters()
                        .SingleOrDefaultAsync(
@@ -251,7 +249,7 @@ public sealed class RasEndpointSyncPublisher(
         }
         catch (DbUpdateConcurrencyException exception)
             when (exception.Entries.Any(entry =>
-                entry.Entity is RasEndpoint or RasGate))
+                      entry.Entity is RasEndpoint or RasGate))
         {
             db.ChangeTracker.Clear();
             return false;

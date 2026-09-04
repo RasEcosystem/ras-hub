@@ -3,14 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using RasHub.Application.RasEndpoints.Models;
-using RasHub.Application.RasEndpoints.Services;
-using RasHub.Application.RasGates.Abstractions;
-using RasHub.Application.RasGates.Services;
 using RasHub.Infrastructure.Database;
 using RasHub.Infrastructure.Database.Queries;
-using RasHub.Web.Api.RasGates;
 using RasHub.Web.Infrastructure.Authorization;
 using RasHub.Web.Infrastructure.RasEndpoints;
 using RasHub.Web.Infrastructure.RasGates;
@@ -143,27 +137,24 @@ public sealed class RasAdministrationServiceConcurrencyTests
         IServiceProvider services)
     {
         return new RasGateAdministrationService(
-            services.GetRequiredService<RasHubDbContext>(),
             services.GetRequiredService<RasGateQueries>(),
-            services.GetRequiredService<RasGateRegistry>(),
-            services.GetRequiredService<IRasGateEndpointFactory>(),
-            services.GetRequiredService<InteractiveTaskRunner>(),
-            CreateAuthenticationStateProvider(),
-            services.GetRequiredService<IAuthorizationService>(),
-            services.GetRequiredService<ILogger<RasGateAdministrationService>>());
+            services.GetRequiredService<RasGateConfigurationAdministration>(),
+            services.GetRequiredService<RasGateStatusSynchronization>(),
+            new AdministrationAuthorizationGuard(
+                CreateAuthenticationStateProvider(),
+                services.GetRequiredService<IAuthorizationService>()));
     }
 
     private static RasEndpointAdministrationService CreateEndpointService(
         IServiceProvider services)
     {
         return new RasEndpointAdministrationService(
-            services.GetRequiredService<RasHubDbContext>(),
             services.GetRequiredService<RasEndpointQueries>(),
             services.GetRequiredService<RasGateQueries>(),
-            services.GetRequiredService<RasEndpointRegistry>(),
-            CreateAuthenticationStateProvider(),
-            services.GetRequiredService<IAuthorizationService>(),
-            services.GetRequiredService<ILogger<RasEndpointAdministrationService>>());
+            services.GetRequiredService<RasEndpointConfigurationAdministration>(),
+            new AdministrationAuthorizationGuard(
+                CreateAuthenticationStateProvider(),
+                services.GetRequiredService<IAuthorizationService>()));
     }
 
     private static AuthenticationStateProvider

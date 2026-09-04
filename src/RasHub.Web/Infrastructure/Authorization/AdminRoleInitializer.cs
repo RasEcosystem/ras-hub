@@ -62,9 +62,7 @@ public static class AdminRoleInitializer
         {
             user = new ApplicationUser
             {
-                UserName = bootstrapAdminEmail,
-                Email = bootstrapAdminEmail,
-                EmailConfirmed = true
+                UserName = bootstrapAdminEmail, Email = bootstrapAdminEmail, EmailConfirmed = true
             };
 
             var createUserResult = await userManager.CreateAsync(

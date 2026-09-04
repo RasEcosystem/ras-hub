@@ -96,8 +96,7 @@ public sealed class RasClusterEntityTypeConfiguration
             .HasColumnName("observed_at")
             .IsRequired();
 
-        builder.HasIndex(cluster => new
-        { cluster.RasEndpointId, cluster.ExternalId })
+        builder.HasIndex(cluster => new { cluster.RasEndpointId, cluster.ExternalId })
             .IsUnique()
             .HasDatabaseName(
                 "ux_ras_clusters_ras_endpoint_id_external_id");

@@ -521,9 +521,7 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
             new KeyedImmediateRetryTask(),
             new BackgroundTaskOptions
             {
-                ConcurrencyKey = "immediate-retry-key",
-                MaxAttempts = 2,
-                RetryDelay = TimeSpan.Zero
+                ConcurrencyKey = "immediate-retry-key", MaxAttempts = 2, RetryDelay = TimeSpan.Zero
             });
 
         try

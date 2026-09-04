@@ -317,6 +317,17 @@ internal sealed class BackgroundTaskEngine :
         }
     }
 
+    public async Task RunCompletedTaskCleanupAsync(
+        CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(
+            _engineOptions.RegistryCleanupInterval,
+            _timeProvider);
+
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+            CleanupCompletedTasks();
+    }
+
     public async Task DrainCancellationSignalsAsync()
     {
         while (true)

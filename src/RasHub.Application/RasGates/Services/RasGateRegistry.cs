@@ -97,18 +97,24 @@ public sealed class RasGateRegistry(
         return rasGate;
     }
 
-    public async Task RestoreAsync(
-        RasGate rasGate,
+    public async Task<RasGate?> RestoreAsync(
+        Guid rasGateId,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(rasGate);
+        var rasGate = await repository.GetByIdIncludingDeletedAsync(
+            rasGateId,
+            cancellationToken);
+
+        if (rasGate is null)
+            return null;
 
         if (!rasGate.IsDeleted)
-            throw new InvalidOperationException(
-                $"RasGate '{rasGate.Id}' is not deleted.");
+            throw new RasGateNotDeletedException(rasGateId);
 
         rasGate.IsDeleted = false;
         rasGate.DeletedAt = null;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return rasGate;
     }
 }

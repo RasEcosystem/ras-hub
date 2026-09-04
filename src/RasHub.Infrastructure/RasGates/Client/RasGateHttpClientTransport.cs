@@ -10,8 +10,7 @@ internal sealed class RasGateHttpClientTransport : IDisposable
             UseProxy = false,
             ConnectTimeout = TimeSpan.FromSeconds(10),
             PooledConnectionLifetime = TimeSpan.FromMinutes(10)
-        })
-        { Timeout = Timeout.InfiniteTimeSpan };
+        }) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     public HttpClient Client { get; }

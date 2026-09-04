@@ -99,15 +99,19 @@ public sealed class RasEndpointRegistry(
         return rasEndpoint;
     }
 
-    public async Task RestoreAsync(
-        RasEndpoint rasEndpoint,
+    public async Task<RasEndpoint?> RestoreAsync(
+        Guid rasEndpointId,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(rasEndpoint);
+        var rasEndpoint = await repository.GetByIdIncludingDeletedAsync(
+            rasEndpointId,
+            cancellationToken);
+
+        if (rasEndpoint is null)
+            return null;
 
         if (!rasEndpoint.IsDeleted)
-            throw new InvalidOperationException(
-                $"RAS endpoint '{rasEndpoint.Id}' is not deleted.");
+            throw new RasEndpointNotDeletedException(rasEndpointId);
 
         await snapshotStore.InvalidateAsync(
             rasEndpoint.Id,
@@ -115,6 +119,8 @@ public sealed class RasEndpointRegistry(
         rasEndpoint.IsDeleted = false;
         rasEndpoint.DeletedAt = null;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return rasEndpoint;
     }
 
     private async Task EnsureGateExistsAsync(

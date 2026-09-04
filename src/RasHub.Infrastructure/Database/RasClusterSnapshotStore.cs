@@ -31,10 +31,7 @@ public sealed class RasClusterSnapshotStore(RasHubDbContext db)
             {
                 cluster = new RasCluster
                 {
-                    RasEndpointId = rasEndpointId,
-                    ExternalId = item.ExternalId,
-                    Name = item.Name,
-                    Host = item.Host
+                    RasEndpointId = rasEndpointId, ExternalId = item.ExternalId, Name = item.Name, Host = item.Host
                 };
                 db.RasClusters.Add(cluster);
             }

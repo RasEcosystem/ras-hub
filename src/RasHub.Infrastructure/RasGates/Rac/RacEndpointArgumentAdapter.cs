@@ -2,9 +2,9 @@ using RasHub.Application.RasEndpoints.Models;
 
 namespace RasHub.Infrastructure.RasGates.Rac;
 
-internal sealed class RacEndpointArgumentAdapter
+internal static class RacEndpointArgumentAdapter
 {
-    public IReadOnlyList<string> Apply(
+    public static IReadOnlyList<string> Apply(
         IReadOnlyList<string> arguments,
         RasEndpointAddress address)
     {

@@ -110,5 +110,4 @@ public sealed class ContractRequestSerializationTests
                 json,
                 SerializerOptions));
     }
-
 }

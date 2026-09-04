@@ -45,7 +45,7 @@
 
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter][EditorRequired] public UserAdministrationItem User { get; set; } = null!;
+    [Parameter] [EditorRequired] public UserAdministrationItem User { get; set; } = null!;
 
     private string? ValidateConfirmation(string? value)
     {

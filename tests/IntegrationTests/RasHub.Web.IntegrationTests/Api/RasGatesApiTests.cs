@@ -316,11 +316,7 @@ public sealed partial class RasGatesApiTests : IClassFixture<RasHubWebApplicatio
             .GetProperty("data")
             .GetProperty("configurationRevision")
             .GetInt64();
-        var reactivate = updateWhileInactive with
-        {
-            IsActive = true,
-            ExpectedConfigurationRevision = renamedRevision
-        };
+        var reactivate = updateWhileInactive with { IsActive = true, ExpectedConfigurationRevision = renamedRevision };
         using var reactivateResponse = await client.PutAsJsonAsync(
             $"{RasGatesPath}/{rasGate.Id}",
             reactivate,

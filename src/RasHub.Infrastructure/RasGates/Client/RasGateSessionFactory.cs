@@ -11,8 +11,7 @@ internal sealed class RasGateSessionFactory(
     IRasGateEndpointFactory endpointFactory,
     RacVersionCache racVersionCache,
     RacVersionParser versionParser,
-    RacCapabilityResolver capabilityResolver,
-    RacEndpointArgumentAdapter endpointArgumentAdapter)
+    RacCapabilityResolver capabilityResolver)
 {
     public RasGateSession Create(RasGate rasGate)
     {
@@ -21,14 +20,14 @@ internal sealed class RasGateSessionFactory(
 
         return new RasGateSession(
             httpClient,
-            CreateBaseAddress(rasGate),
-            rasGate.ApiKey,
-            rasGate.Id,
-            rasGate.ConfigurationRevision,
+            new RasGateSessionState(
+                CreateBaseAddress(rasGate),
+                rasGate.ApiKey,
+                rasGate.Id,
+                rasGate.ConfigurationRevision),
             racVersionCache,
             versionParser,
-            capabilityResolver,
-            endpointArgumentAdapter);
+            capabilityResolver);
     }
 
     private Uri CreateBaseAddress(RasGate rasGate)

@@ -59,14 +59,17 @@ public sealed class RasGateRegistryTests : IDisposable
         Assert.False((await db.RasInfobases.SingleAsync(
             TestContext.Current.CancellationToken)).IsDeleted);
 
-        await registry.RestoreAsync(
-            removed,
+        db.ChangeTracker.Clear();
+
+        var restored = await registry.RestoreAsync(
+            removed.Id,
             TestContext.Current.CancellationToken);
 
-        Assert.False(removed.IsDeleted);
-        Assert.Null(removed.DeletedAt);
-        Assert.Equal(3, removed.ConfigurationRevision);
-        AssertRemoteStateIsInvalidated(removed);
+        Assert.NotNull(restored);
+        Assert.False(restored.IsDeleted);
+        Assert.Null(restored.DeletedAt);
+        Assert.Equal(3, restored.ConfigurationRevision);
+        AssertRemoteStateIsInvalidated(restored);
         Assert.Single(await db.RasClusters.ToListAsync(
             TestContext.Current.CancellationToken));
         Assert.Single(await db.RasInfobases.ToListAsync(

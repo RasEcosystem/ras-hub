@@ -297,23 +297,25 @@ public sealed class RasGateQueriesTests : IDisposable
             0,
             DateTimeKind.Utc);
 
-        return new RasGateAdministrationItem(
-            Guid.NewGuid(),
-            "Gate",
-            "https://gate.example.test",
-            443,
-            true,
-            1,
-            "Remote Gate",
-            "1.2.3",
-            rasGateObservedAt,
-            racAvailable,
-            racAvailable == true ? "8.3.27.2214" : null,
-            racObservedAt,
-            lastSeenAt,
-            changedAt,
-            changedAt,
-            false,
-            null);
+        return new RasGateAdministrationItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Gate",
+            Url = "https://gate.example.test",
+            Port = 443,
+            IsActive = true,
+            ConfigurationRevision = 1,
+            InstanceName = "Remote Gate",
+            Version = "1.2.3",
+            StatusObservedAt = rasGateObservedAt,
+            RacAvailable = racAvailable,
+            RacVersion = racAvailable == true ? "8.3.27.2214" : null,
+            RacStatusObservedAt = racObservedAt,
+            LastSeenAt = lastSeenAt,
+            CreatedAt = changedAt,
+            UpdatedAt = changedAt,
+            IsDeleted = false,
+            DeletedAt = null
+        };
     }
 }

@@ -566,9 +566,7 @@ public sealed class RasGateSyncPublisherTests : IDisposable
     {
         return new RasInfobaseSnapshot
         {
-            ExternalId = externalId,
-            Name = "Replacement infobase",
-            Description = "Replacement description"
+            ExternalId = externalId, Name = "Replacement infobase", Description = "Replacement description"
         };
     }
 }

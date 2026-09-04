@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -13,13 +11,25 @@ using RasHub.Web.Settings;
 
 namespace RasHub.Web.Infrastructure.Authorization;
 
-public sealed record UserAdministrationItem(
-    string Id,
-    string DisplayName,
-    bool IsAdmin,
-    bool IsCurrentUser,
-    bool IsBlocked,
-    string? ApiKey);
+public sealed class UserAdministrationItem
+{
+    public required string Id { get; init; }
+
+    public required string DisplayName { get; init; }
+
+    public required bool IsAdmin { get; init; }
+
+    public required bool IsCurrentUser { get; init; }
+
+    public required bool IsBlocked { get; init; }
+
+    public string? ApiKey { get; init; }
+
+    public override string ToString()
+    {
+        return nameof(UserAdministrationItem);
+    }
+}
 
 public sealed class UserCreationResult(
     IdentityResult identityResult,
@@ -41,8 +51,7 @@ public sealed class UserCreationResult(
 public sealed class UserAdministrationService(
     ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
-    AuthenticationStateProvider authenticationStateProvider,
-    IAuthorizationService authorizationService,
+    AdministrationAuthorizationGuard authorizationGuard,
     ISettingsStore settingsStore,
     ILogger<UserAdministrationService> logger)
 {
@@ -54,15 +63,17 @@ public sealed class UserAdministrationService(
 
     public async Task<IReadOnlyList<UserAdministrationItem>> GetUsersAsync()
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
         var currentUserId = userManager.GetUserId(principal);
         return await dbContext.Users
             .AsNoTracking()
             .OrderBy(user => user.Email ?? user.UserName)
-            .Select(user => new UserAdministrationItem(
-                user.Id,
-                user.Email ?? user.UserName ?? user.Id,
-                dbContext.UserRoles
+            .Select(user => new UserAdministrationItem
+            {
+                Id = user.Id,
+                DisplayName = user.Email ?? user.UserName ?? user.Id,
+                IsAdmin = dbContext.UserRoles
                     .Where(userRole => userRole.UserId == user.Id)
                     .Join(
                         dbContext.Roles.Where(role => role.Name == AppRoles.Admin),
@@ -70,15 +81,17 @@ public sealed class UserAdministrationService(
                         role => role.Id,
                         (_, _) => 1)
                     .Any(),
-                user.Id == currentUserId,
-                user.IsBlocked,
-                user.ApiKey))
+                IsCurrentUser = user.Id == currentUserId,
+                IsBlocked = user.IsBlocked,
+                ApiKey = user.ApiKey
+            })
             .ToListAsync();
     }
 
     public async Task<UserCreationResult> CreateUserAsync(string email)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
         email = email?.Trim() ?? string.Empty;
 
         if (email.Length == 0 || !new EmailAddressAttribute().IsValid(email))
@@ -111,7 +124,8 @@ public sealed class UserAdministrationService(
         string userId,
         bool isAdmin)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
         return await ExecuteAdministratorMutationAsync(async () =>
         {
             var user = await userManager.FindByIdAsync(userId);
@@ -130,11 +144,9 @@ public sealed class UserAdministrationService(
                     return Failed("You cannot remove your own administrator role.");
 
                 if (!user.IsBlocked)
-                {
                     if (await GetActiveAdministratorCountAsync() <= 1)
                         return Failed(
                             "The last active administrator cannot be removed.");
-                }
             }
 
             var roleResult = isAdmin
@@ -168,7 +180,8 @@ public sealed class UserAdministrationService(
         string userId,
         bool isBlocked)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
         return await ExecuteAdministratorMutationAsync(async () =>
         {
             var user = await userManager.FindByIdAsync(userId);
@@ -183,10 +196,8 @@ public sealed class UserAdministrationService(
                 return Failed("You cannot block your own account.");
 
             if (isBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
-            {
                 if (await GetActiveAdministratorCountAsync() <= 1)
                     return Failed("The last active administrator cannot be blocked.");
-            }
 
             user.IsBlocked = isBlocked;
             var result = await userManager.UpdateSecurityStampAsync(user);
@@ -213,7 +224,8 @@ public sealed class UserAdministrationService(
 
     public async Task<IdentityResult> GenerateApiKeyAsync(string userId)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
 
         var user = await userManager.FindByIdAsync(userId);
         if (user is null) return Failed("The user no longer exists.");
@@ -227,7 +239,8 @@ public sealed class UserAdministrationService(
 
     public async Task<IdentityResult> ClearApiKeyAsync(string userId)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
 
         var user = await userManager.FindByIdAsync(userId);
         if (user is null) return Failed("The user no longer exists.");
@@ -241,7 +254,8 @@ public sealed class UserAdministrationService(
 
     public async Task<IdentityResult> DeleteUserAsync(string userId)
     {
-        var principal = await GetAuthorizedPrincipalAsync();
+        var principal = await authorizationGuard
+            .RequireGlobalSettingsManagementAsync();
         return await ExecuteAdministratorMutationAsync(async () =>
         {
             var currentUserId = userManager.GetUserId(principal);
@@ -253,10 +267,8 @@ public sealed class UserAdministrationService(
                 return Failed("You cannot delete your own account.");
 
             if (!user.IsBlocked && await userManager.IsInRoleAsync(user, AppRoles.Admin))
-            {
                 if (await GetActiveAdministratorCountAsync() <= 1)
                     return Failed("The last active administrator cannot be deleted.");
-            }
 
             var result = await userManager.DeleteAsync(user);
 
@@ -320,19 +332,6 @@ public sealed class UserAdministrationService(
                     role => role.Id,
                     (_, _) => 1)
                 .Any());
-    }
-
-    private async Task<ClaimsPrincipal> GetAuthorizedPrincipalAsync()
-    {
-        var authenticationState = await authenticationStateProvider.GetAuthenticationStateAsync();
-        var authorizationResult = await authorizationService.AuthorizeAsync(
-            authenticationState.User,
-            AppPolicies.ManageGlobalSettings);
-
-        if (!authorizationResult.Succeeded)
-            throw new UnauthorizedAccessException("Administrator access is required.");
-
-        return authenticationState.User;
     }
 
     private static IdentityResult Failed(string description)

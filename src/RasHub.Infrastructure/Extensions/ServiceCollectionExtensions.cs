@@ -75,7 +75,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RasGateHttpClientTransport>();
         services.AddSingleton<RacVersionCache>();
         services.AddSingleton<RacVersionParser>();
-        services.AddSingleton<RacEndpointArgumentAdapter>();
         services.AddSingleton<RacKeyValueOutputDeserializer>();
         services.AddSingleton<RacClusterOutputV1Deserializer>();
         services.AddSingleton<IRacClusterOutputDeserializer>(serviceProvider =>
@@ -139,8 +138,7 @@ public static class ServiceCollectionExtensions
             serviceProvider.GetRequiredService<IRasGateEndpointFactory>(),
             serviceProvider.GetRequiredService<RacVersionCache>(),
             serviceProvider.GetRequiredService<RacVersionParser>(),
-            serviceProvider.GetRequiredService<RacCapabilityResolver>(),
-            serviceProvider.GetRequiredService<RacEndpointArgumentAdapter>()));
+            serviceProvider.GetRequiredService<RacCapabilityResolver>()));
         services.AddSingleton<IRasGateStatusGateway, RasGateStatusGateway>();
         services.AddSingleton<IRasClusterGateway, RasClusterGateway>();
         services.AddSingleton<IRasInfobaseGateway, RasInfobaseGateway>();

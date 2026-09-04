@@ -232,10 +232,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         await factory.SeedIdentityUserAsync(email, AccountPassword);
         var gate = await factory.SeedRasGateAsync("Primary Gate");
         _ = await factory.SeedRasEndpointAsync(
-            gate.Id,
-            "Production RAS",
-            "ras.example.test",
-            1545);
+            gate.Id);
 
         using (var scope = factory.Services.CreateScope())
         {

@@ -149,9 +149,7 @@ public sealed class RasInfobaseSnapshotStoreTests : IDisposable
     {
         return new RasInfobaseSnapshot
         {
-            ExternalId = externalId,
-            Name = name,
-            Description = $"Description for {name}"
+            ExternalId = externalId, Name = name, Description = $"Description for {name}"
         };
     }
 }

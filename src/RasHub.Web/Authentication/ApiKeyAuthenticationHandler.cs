@@ -49,10 +49,7 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<Authenti
                 where candidate.ApiKey == providedApiKey && !candidate.IsBlocked
                 select new
                 {
-                    candidate.Id,
-                    candidate.UserName,
-                    candidate.Email,
-                    RoleName = role == null ? null : role.Name
+                    candidate.Id, candidate.UserName, candidate.Email, RoleName = role == null ? null : role.Name
                 })
             .ToListAsync(Context.RequestAborted);
 

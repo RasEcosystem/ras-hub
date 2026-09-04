@@ -44,23 +44,25 @@ public sealed class RasEndpointQueries(RasHubDbContext db)
             .OrderBy(item => item.Endpoint.IsDeleted)
             .ThenBy(item => item.Endpoint.Name)
             .ThenBy(item => item.Endpoint.Id)
-            .Select(item => new RasEndpointAdministrationItem(
-                item.Endpoint.Id,
-                item.Endpoint.Name,
-                item.Endpoint.RasGateId,
-                item.Gate.Name,
-                item.Gate.Url,
-                item.Gate.Port,
-                item.Gate.IsActive,
-                item.Gate.IsDeleted,
-                item.Endpoint.Host,
-                item.Endpoint.Port,
-                item.Endpoint.IsActive,
-                item.Endpoint.ConfigurationRevision,
-                item.Endpoint.CreatedAt,
-                item.Endpoint.UpdatedAt,
-                item.Endpoint.IsDeleted,
-                item.Endpoint.DeletedAt))
+            .Select(item => new RasEndpointAdministrationItem
+            {
+                Id = item.Endpoint.Id,
+                Name = item.Endpoint.Name,
+                RasGateId = item.Endpoint.RasGateId,
+                RasGateName = item.Gate.Name,
+                RasGateUrl = item.Gate.Url,
+                RasGatePort = item.Gate.Port,
+                RasGateIsActive = item.Gate.IsActive,
+                RasGateIsDeleted = item.Gate.IsDeleted,
+                Host = item.Endpoint.Host,
+                Port = item.Endpoint.Port,
+                IsActive = item.Endpoint.IsActive,
+                ConfigurationRevision = item.Endpoint.ConfigurationRevision,
+                CreatedAt = item.Endpoint.CreatedAt,
+                UpdatedAt = item.Endpoint.UpdatedAt,
+                IsDeleted = item.Endpoint.IsDeleted,
+                DeletedAt = item.Endpoint.DeletedAt
+            })
             .ToListAsync(cancellationToken);
     }
 
@@ -79,10 +81,7 @@ public sealed class RasEndpointQueries(RasHubDbContext db)
 
         return new PageResult<RasEndpointModel>
         {
-            Items = items,
-            TotalCount = totalCount,
-            Page = request.Page,
-            PageSize = request.PageSize
+            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
         };
     }
 
@@ -122,20 +121,37 @@ public sealed class RasEndpointQueries(RasHubDbContext db)
 
 public sealed record RasEndpointActivity(bool IsActive);
 
-public sealed record RasEndpointAdministrationItem(
-    Guid Id,
-    string Name,
-    Guid RasGateId,
-    string RasGateName,
-    string RasGateUrl,
-    int RasGatePort,
-    bool RasGateIsActive,
-    bool RasGateIsDeleted,
-    string Host,
-    int Port,
-    bool IsActive,
-    long ConfigurationRevision,
-    DateTime CreatedAt,
-    DateTime UpdatedAt,
-    bool IsDeleted,
-    DateTime? DeletedAt);
+public sealed record RasEndpointAdministrationItem
+{
+    public required Guid Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required Guid RasGateId { get; init; }
+
+    public required string RasGateName { get; init; }
+
+    public required string RasGateUrl { get; init; }
+
+    public required int RasGatePort { get; init; }
+
+    public required bool RasGateIsActive { get; init; }
+
+    public required bool RasGateIsDeleted { get; init; }
+
+    public required string Host { get; init; }
+
+    public required int Port { get; init; }
+
+    public required bool IsActive { get; init; }
+
+    public required long ConfigurationRevision { get; init; }
+
+    public required DateTime CreatedAt { get; init; }
+
+    public required DateTime UpdatedAt { get; init; }
+
+    public required bool IsDeleted { get; init; }
+
+    public required DateTime? DeletedAt { get; init; }
+}

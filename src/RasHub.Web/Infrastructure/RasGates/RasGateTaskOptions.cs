@@ -38,7 +38,7 @@ internal static class RasGateTaskOptions
             TimeSpan.FromSeconds(30),
             $"ras-endpoint-cluster:{rasEndpointId}:{clusterId}",
             rasEndpointId,
-            endpointScoped: true);
+            true);
     }
 
     public static BackgroundTaskOptions InteractiveClustersSynchronization(
@@ -48,7 +48,7 @@ internal static class RasGateTaskOptions
             TimeSpan.FromSeconds(30),
             $"ras-endpoint-clusters:{rasEndpointId}",
             rasEndpointId,
-            endpointScoped: true);
+            true);
     }
 
     public static BackgroundTaskOptions InteractiveInfobasesSynchronization(
@@ -59,7 +59,7 @@ internal static class RasGateTaskOptions
             TimeSpan.FromSeconds(30),
             $"ras-endpoint-infobases:{rasEndpointId}:{clusterId}",
             rasEndpointId,
-            endpointScoped: true);
+            true);
     }
 
     public static BackgroundTaskOptions InteractiveInfobaseSynchronization(
@@ -71,7 +71,7 @@ internal static class RasGateTaskOptions
             TimeSpan.FromSeconds(30),
             $"ras-endpoint-infobase:{rasEndpointId}:{clusterId}:{infobaseId}",
             rasEndpointId,
-            endpointScoped: true);
+            true);
     }
 
     public static BackgroundTaskOptions InteractiveClusterRemoval(

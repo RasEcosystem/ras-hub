@@ -50,10 +50,7 @@ public sealed partial class RasGateGatewayTests
         using var httpClient = CreateHttpClient(_ => JsonResponse("{}"));
         var rasGate = new RasGate
         {
-            Name = "Invalid Gate",
-            Url = "not-an-endpoint",
-            Port = 443,
-            ApiKey = "gate-secret"
+            Name = "Invalid Gate", Url = "not-an-endpoint", Port = 443, ApiKey = "gate-secret"
         };
         var client = CreateClient(httpClient, rasGate);
 
@@ -334,8 +331,7 @@ public sealed partial class RasGateGatewayTests
             new RasGateEndpointFactory(),
             versionCache ?? new RacVersionCache(TimeProvider.System),
             new RacVersionParser(),
-            new RacCapabilityResolver(descriptors),
-            new RacEndpointArgumentAdapter());
+            new RacCapabilityResolver(descriptors));
         var statusGateway = new RasGateStatusGateway(
             sessionFactory,
             statusLogger ?? NullLogger<RasGateStatusGateway>.Instance);
@@ -368,10 +364,7 @@ public sealed partial class RasGateGatewayTests
     {
         var endpoint = new RasEndpoint
         {
-            Name = "Test RAS endpoint",
-            RasGateId = rasGate.Id,
-            Host = "ras.example.test",
-            Port = 1545
+            Name = "Test RAS endpoint", RasGateId = rasGate.Id, Host = "ras.example.test", Port = 1545
         };
 
         return new RasEndpointExecutionTarget(endpoint, rasGate);
@@ -443,8 +436,7 @@ public sealed partial class RasGateGatewayTests
         return JsonResponse(
             JsonSerializer.Serialize(new
             {
-                success = false,
-                error = new { code = errorCode, message = "remote implementation details" }
+                success = false, error = new { code = errorCode, message = "remote implementation details" }
             }),
             statusCode);
     }

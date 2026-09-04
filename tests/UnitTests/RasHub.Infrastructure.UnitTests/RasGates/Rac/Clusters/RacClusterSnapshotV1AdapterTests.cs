@@ -58,9 +58,7 @@ public sealed class RacClusterSnapshotV1AdapterTests
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
-            Outcome = RacExecutionOutcome.Unknown,
-            ExitCode = -1,
-            TimedOut = true
+            Outcome = RacExecutionOutcome.Unknown, ExitCode = -1, TimedOut = true
         };
 
         Assert.Throws<RasGateClientException>(() => _adapter.Parse(

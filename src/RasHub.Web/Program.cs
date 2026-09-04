@@ -86,7 +86,11 @@ public class Program
         builder.Services.AddScopedSettings<UserSettings>();
         builder.Services.AddSingleton<ThemeProvider>();
         builder.Services.AddScoped<IUserSettingsProvider, UserSettingsProvider>();
+        builder.Services.AddScoped<RasHubAdministrationMutationRunner>();
+        builder.Services.AddScoped<RasGateConfigurationAdministration>();
+        builder.Services.AddScoped<RasGateStatusSynchronization>();
         builder.Services.AddScoped<RasGateAdministrationService>();
+        builder.Services.AddScoped<RasEndpointConfigurationAdministration>();
         builder.Services.AddScoped<RasEndpointAdministrationService>();
         builder.Services.ConfigureReverseProxy(builder.Configuration);
         builder.Services.AddRasHubApi();

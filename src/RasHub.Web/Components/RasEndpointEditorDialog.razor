@@ -99,8 +99,7 @@
 
     [Parameter] public RasEndpointAdministrationItem? Endpoint { get; set; }
 
-    [Parameter, EditorRequired]
-    public IReadOnlyList<RasEndpointGateOption> GateOptions { get; set; } = [];
+    [Parameter][EditorRequired] public IReadOnlyList<RasEndpointGateOption> GateOptions { get; set; } = [];
 
     protected override void OnInitialized()
     {
@@ -163,4 +162,5 @@
             .ToString()
             .TrimEnd('/');
     }
+
 }

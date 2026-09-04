@@ -143,8 +143,8 @@ public sealed class RasEndpointRegistryTests : IDisposable
     [Fact]
     public async Task Update_execution_gate_preserves_endpoint_shadow_and_observation()
     {
-        var originalGate = RasGateTestData.Create(name: "Original Gate");
-        var replacementGate = RasGateTestData.Create(name: "Replacement Gate");
+        var originalGate = RasGateTestData.Create("Original Gate");
+        var replacementGate = RasGateTestData.Create("Replacement Gate");
         var endpoint = RasEndpointTestData.Create(originalGate.Id);
         endpoint.LastSeenAt = DateTime.UtcNow.AddMinutes(-1);
         var observedAt = endpoint.LastSeenAt;
@@ -178,6 +178,47 @@ public sealed class RasEndpointRegistryTests : IDisposable
             TestContext.Current.CancellationToken)).IsDeleted);
         Assert.False((await db.RasInfobases.SingleAsync(
             TestContext.Current.CancellationToken)).IsDeleted);
+    }
+
+    [Fact]
+    public async Task Unregister_and_restore_by_id_keep_endpoint_shadow_invalidated()
+    {
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        endpoint.LastSeenAt = DateTime.UtcNow.AddMinutes(-1);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
+        var infobase = RasInfobaseTestData.Create(cluster.Id);
+        await using var db = _database.CreateContext();
+        db.AddRange(gate, endpoint, cluster, infobase);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var registry = CreateRegistry(db);
+
+        var removed = await registry.UnregisterAsync(
+            endpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(removed);
+        Assert.True(removed.IsDeleted);
+        Assert.Equal(2, removed.ConfigurationRevision);
+        Assert.Null(removed.LastSeenAt);
+
+        db.ChangeTracker.Clear();
+
+        var restored = await registry.RestoreAsync(
+            endpoint.Id,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(restored);
+        Assert.False(restored.IsDeleted);
+        Assert.Null(restored.DeletedAt);
+        Assert.Equal(3, restored.ConfigurationRevision);
+        Assert.Null(restored.LastSeenAt);
+        Assert.True((await db.RasClusters
+            .IgnoreQueryFilters()
+            .SingleAsync(TestContext.Current.CancellationToken)).IsDeleted);
+        Assert.True((await db.RasInfobases
+            .IgnoreQueryFilters()
+            .SingleAsync(TestContext.Current.CancellationToken)).IsDeleted);
     }
 
     private static RasEndpointRegistry CreateRegistry(RasHubDbContext db)

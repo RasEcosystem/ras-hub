@@ -123,9 +123,7 @@ public sealed class RacClusterInfoV1AdapterTests
     {
         var execution = SuccessfulExecution(string.Empty) with
         {
-            Outcome = RacExecutionOutcome.Failed,
-            ExitCode = -1,
-            StandardError = "Cluster was not found."
+            Outcome = RacExecutionOutcome.Failed, ExitCode = -1, StandardError = "Cluster was not found."
         };
 
         var exception = Assert.Throws<RasGateClientException>(() =>
