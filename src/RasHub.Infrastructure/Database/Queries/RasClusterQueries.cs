@@ -61,7 +61,10 @@ public sealed class RasClusterQueries(RasHubDbContext db)
 
         return new PageResult<ClusterModel>
         {
-            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
         };
     }
 
@@ -149,13 +152,13 @@ public sealed class RasClusterQueries(RasHubDbContext db)
             search);
 
         return from cluster in clusters
-            join endpoint in db.RasEndpoints.AsNoTracking()
-                on cluster.RasEndpointId equals endpoint.Id
-            orderby cluster.Name, endpoint.Id, cluster.ExternalId
-            select new ClusterSearchRow(
-                endpoint.Id,
-                endpoint.Name,
-                cluster);
+               join endpoint in db.RasEndpoints.AsNoTracking()
+                   on cluster.RasEndpointId equals endpoint.Id
+               orderby cluster.Name, endpoint.Id, cluster.ExternalId
+               select new ClusterSearchRow(
+                   endpoint.Id,
+                   endpoint.Name,
+                   cluster);
     }
 
     private static ClusterSearchResultModel ToSearchResult(

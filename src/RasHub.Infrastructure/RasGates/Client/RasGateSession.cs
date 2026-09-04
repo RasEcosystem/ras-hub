@@ -63,7 +63,8 @@ internal sealed class RasGateSession
 
         return new RasGateCapabilities
         {
-            RacVersion = racVersion.ToString(), Resources = _capabilityResolver.GetCapabilities(racVersion)
+            RacVersion = racVersion.ToString(),
+            Resources = _capabilityResolver.GetCapabilities(racVersion)
         };
     }
 

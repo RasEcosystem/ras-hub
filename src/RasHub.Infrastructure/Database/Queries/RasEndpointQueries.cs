@@ -81,7 +81,10 @@ public sealed class RasEndpointQueries(RasHubDbContext db)
 
         return new PageResult<RasEndpointModel>
         {
-            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
         };
     }
 

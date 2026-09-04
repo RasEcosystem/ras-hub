@@ -20,7 +20,8 @@ public sealed class InfobaseCredentialsRequestTests
     {
         var request = new InfobaseCredentialsRequest
         {
-            ClusterUser = "cluster-admin", ClusterPassword = "cluster-secret"
+            ClusterUser = "cluster-admin",
+            ClusterPassword = "cluster-secret"
         };
 
         Assert.Equal(nameof(InfobaseCredentialsRequest), request.ToString());
