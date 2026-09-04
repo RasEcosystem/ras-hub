@@ -728,7 +728,8 @@ public sealed class FakeRasGateBoundary
 
             return Task.FromResult(new RasGateCapabilities
             {
-                RacVersion = "8.3.27.2214", Resources = owner.CreateCapabilities()
+                RacVersion = "8.3.27.2214",
+                Resources = owner.CreateCapabilities()
             });
         }
 
@@ -843,7 +844,8 @@ public sealed class FakeRasGateBoundary
 
             return Task.FromResult(new RasGateCapabilities
             {
-                RacVersion = "8.3.27.2214", Resources = owner.CreateCapabilities()
+                RacVersion = "8.3.27.2214",
+                Resources = owner.CreateCapabilities()
             });
         }
 

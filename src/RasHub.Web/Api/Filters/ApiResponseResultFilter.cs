@@ -23,7 +23,8 @@ public sealed class ApiResponseResultFilter : IAsyncResultFilter
 
                 if (statusCodeResult.StatusCode != StatusCodes.Status204NoContent)
                     context.Result = new ObjectResult(
-                        CreateResponse(statusCodeResult.StatusCode, null)) { StatusCode = statusCodeResult.StatusCode };
+                        CreateResponse(statusCodeResult.StatusCode, null))
+                    { StatusCode = statusCodeResult.StatusCode };
 
                 break;
         }

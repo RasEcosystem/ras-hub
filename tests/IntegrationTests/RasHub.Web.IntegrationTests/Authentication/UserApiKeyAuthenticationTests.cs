@@ -23,7 +23,10 @@ public sealed class UserApiKeyAuthenticationTests
                 .GetRequiredService<UserManager<ApplicationUser>>();
             var result = await userManager.CreateAsync(new ApplicationUser
             {
-                Id = userId, UserName = $"{userId}@example.test", Email = $"{userId}@example.test", ApiKey = apiKey
+                Id = userId,
+                UserName = $"{userId}@example.test",
+                Email = $"{userId}@example.test",
+                ApiKey = apiKey
             });
             Assert.True(result.Succeeded);
         }

@@ -28,7 +28,9 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         var engine = GetEngine(host);
         var interactiveOptions = new BackgroundTaskOptions
         {
-            Queue = BackgroundTaskQueue.Interactive, MaxAttempts = 1, Timeout = null
+            Queue = BackgroundTaskQueue.Interactive,
+            MaxAttempts = 1,
+            Timeout = null
         };
 
         for (var index = 0; index < 32; index++)
@@ -654,7 +656,9 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
     {
         private static readonly BackgroundTaskOptions Options = new()
         {
-            Queue = BackgroundTaskQueue.Interactive, MaxAttempts = 1, Timeout = null
+            Queue = BackgroundTaskQueue.Interactive,
+            MaxAttempts = 1,
+            Timeout = null
         };
 
         public Task ExecuteAsync(

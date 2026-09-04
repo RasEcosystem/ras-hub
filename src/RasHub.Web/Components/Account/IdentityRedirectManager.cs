@@ -10,7 +10,10 @@ internal sealed class IdentityRedirectManager(NavigationManager navigationManage
 
     private static readonly CookieBuilder StatusCookieBuilder = new()
     {
-        SameSite = SameSiteMode.Strict, HttpOnly = true, IsEssential = true, MaxAge = TimeSpan.FromSeconds(5)
+        SameSite = SameSiteMode.Strict,
+        HttpOnly = true,
+        IsEssential = true,
+        MaxAge = TimeSpan.FromSeconds(5)
     };
 
     private string CurrentPath => navigationManager.ToAbsoluteUri(navigationManager.Uri).GetLeftPart(UriPartial.Path);

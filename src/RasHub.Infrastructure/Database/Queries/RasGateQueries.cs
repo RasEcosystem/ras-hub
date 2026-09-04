@@ -112,7 +112,10 @@ public sealed class RasGateQueries(RasHubDbContext db)
 
         return new PageResult<RasGateModel>
         {
-            Items = items, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
         };
     }
 
@@ -134,7 +137,10 @@ public sealed class RasGateQueries(RasHubDbContext db)
 
         return new PageResult<RasGateModel>
         {
-            Items = items, TotalCount = totalCount, Page = page.Page, PageSize = page.PageSize
+            Items = items,
+            TotalCount = totalCount,
+            Page = page.Page,
+            PageSize = page.PageSize
         };
     }
 

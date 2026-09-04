@@ -349,7 +349,9 @@ public sealed class RasEndpointsApiTests
                 .GetRequiredService<UserManager<ApplicationUser>>();
             var result = await userManager.CreateAsync(new ApplicationUser
             {
-                UserName = email, Email = email, ApiKey = apiKey
+                UserName = email,
+                Email = email,
+                ApiKey = apiKey
             });
             Assert.True(result.Succeeded);
         }
