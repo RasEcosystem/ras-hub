@@ -19,8 +19,8 @@ public sealed class RasClusterEntityTypeConfiguration
 
         builder.ConfigureCommonFields();
 
-        builder.Property(cluster => cluster.RasGateId)
-            .HasColumnName("ras_gate_id")
+        builder.Property(cluster => cluster.RasEndpointId)
+            .HasColumnName("ras_endpoint_id")
             .IsRequired();
 
         builder.Property(cluster => cluster.ExternalId)
@@ -96,14 +96,16 @@ public sealed class RasClusterEntityTypeConfiguration
             .HasColumnName("observed_at")
             .IsRequired();
 
-        builder.HasIndex(cluster => new { cluster.RasGateId, cluster.ExternalId })
+        builder.HasIndex(cluster => new { cluster.RasEndpointId, cluster.ExternalId })
             .IsUnique()
-            .HasDatabaseName("ux_ras_clusters_ras_gate_id_external_id");
+            .HasDatabaseName(
+                "ux_ras_clusters_ras_endpoint_id_external_id");
 
-        builder.HasOne<RasGate>()
+        builder.HasOne<RasEndpoint>()
             .WithMany()
-            .HasForeignKey(cluster => cluster.RasGateId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .HasConstraintName("fk_ras_clusters_ras_gates_ras_gate_id");
+            .HasForeignKey(cluster => cluster.RasEndpointId)
+            .OnDelete(DeleteBehavior.ClientNoAction)
+            .HasConstraintName(
+                "fk_ras_clusters_ras_endpoints_ras_endpoint_id");
     }
 }

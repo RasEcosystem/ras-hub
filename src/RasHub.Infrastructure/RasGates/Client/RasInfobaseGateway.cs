@@ -1,3 +1,4 @@
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -25,13 +26,13 @@ internal sealed class RasInfobaseGateway(
 
     public async Task<RasResourceSnapshot<RasInfobaseSnapshot>>
         GetInfobasesAsync(
-            RasGate rasGate,
+            RasEndpointExecutionTarget target,
             Guid clusterId,
             string? clusterUser,
             string? clusterPassword,
             CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = adapterResolver.Resolve(
             "infobases",
@@ -43,6 +44,7 @@ internal sealed class RasInfobaseGateway(
             clusterPassword: clusterPassword);
         var execution = await session.ExecuteRacQueryAsync(
             adapter.CreateCommand(command),
+            target.Address,
             cancellationToken);
 
         return session.ParseRacOutput(() =>
@@ -50,14 +52,14 @@ internal sealed class RasInfobaseGateway(
     }
 
     public async Task<RasInfobaseSnapshot> GetInfobaseAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         Guid infobaseId,
         string? clusterUser,
         string? clusterPassword,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = adapterResolver.Resolve(
             "infobases",
@@ -70,6 +72,7 @@ internal sealed class RasInfobaseGateway(
             clusterPassword);
         var execution = await session.ExecuteRacQueryAsync(
             adapter.CreateCommand(command),
+            target.Address,
             cancellationToken);
         var snapshot = session.ParseRacOutput(() =>
             adapter.Parse(racVersion, execution, command));

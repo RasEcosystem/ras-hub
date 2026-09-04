@@ -1,3 +1,4 @@
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
@@ -26,10 +27,10 @@ internal sealed class RasClusterGateway(
     }
 
     public async Task<RasResourceSnapshot<RasClusterSnapshot>> GetClustersAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = readAdapterResolver.Resolve(
             "clusters",
@@ -37,6 +38,7 @@ internal sealed class RasClusterGateway(
             racVersion);
         var execution = await session.ExecuteRacQueryAsync(
             adapter.CreateCommand(),
+            target.Address,
             cancellationToken);
 
         return session.ParseRacOutput(() =>
@@ -44,11 +46,11 @@ internal sealed class RasClusterGateway(
     }
 
     public async Task<RasClusterSnapshot> GetClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = readAdapterResolver.Resolve(
             "clusters",
@@ -56,6 +58,7 @@ internal sealed class RasClusterGateway(
             racVersion);
         var execution = await session.ExecuteRacQueryAsync(
             adapter.CreateCommand(clusterId),
+            target.Address,
             cancellationToken);
         var snapshot = session.ParseRacOutput(() => adapter.Parse(
             racVersion,
@@ -71,11 +74,11 @@ internal sealed class RasClusterGateway(
     }
 
     public async Task<Guid> CreateClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         RasClusterCreationOptions options,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = insertAdapterResolver.Resolve(
             "clusters",
@@ -83,6 +86,7 @@ internal sealed class RasClusterGateway(
             racVersion);
         var execution = await session.ExecuteRacMutationAsync(
             adapter.CreateCommand(options),
+            target.Address,
             "clusters",
             "insert",
             cancellationToken);
@@ -94,12 +98,12 @@ internal sealed class RasClusterGateway(
     }
 
     public async Task UpdateClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         RasClusterUpdateOptions options,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = updateAdapterResolver.Resolve(
             "clusters",
@@ -108,6 +112,7 @@ internal sealed class RasClusterGateway(
         var command = new UpdateRasClusterCommand(clusterId, options);
         var execution = await session.ExecuteRacMutationAsync(
             adapter.CreateCommand(command),
+            target.Address,
             "clusters",
             "update",
             cancellationToken);
@@ -116,13 +121,13 @@ internal sealed class RasClusterGateway(
     }
 
     public async Task RemoveClusterAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         string? clusterUser,
         string? clusterPassword,
         CancellationToken cancellationToken)
     {
-        var session = sessionFactory.Create(rasGate);
+        var session = sessionFactory.Create(target.Gate);
         var racVersion = await session.GetRacVersionAsync(cancellationToken);
         var adapter = removeAdapterResolver.Resolve(
             "clusters",
@@ -134,6 +139,7 @@ internal sealed class RasClusterGateway(
             clusterPassword);
         var execution = await session.ExecuteRacMutationAsync(
             adapter.CreateCommand(command),
+            target.Address,
             "clusters",
             "remove",
             cancellationToken);

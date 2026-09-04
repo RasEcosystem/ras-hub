@@ -14,27 +14,29 @@ public sealed class RasClusterQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task Get_paged_scopes_clusters_to_gate_and_returns_stable_pages()
+    public async Task Get_paged_scopes_clusters_to_endpoint_and_returns_stable_pages()
     {
-        var firstGate = RasGateTestData.Create("First gate");
-        var secondGate = RasGateTestData.Create("Second gate");
-        var first = RasClusterTestData.Create(firstGate.Id, name: "A cluster");
-        var second = RasClusterTestData.Create(firstGate.Id, name: "B cluster");
-        var other = RasClusterTestData.Create(secondGate.Id, name: "Other cluster");
+        var gate = RasGateTestData.Create();
+        var firstEndpoint = RasEndpointTestData.Create(gate.Id, "First RAS");
+        var secondEndpoint = RasEndpointTestData.Create(gate.Id, "Second RAS");
+        var first = RasClusterTestData.Create(firstEndpoint.Id, name: "A cluster");
+        var second = RasClusterTestData.Create(firstEndpoint.Id, name: "B cluster");
+        var other = RasClusterTestData.Create(secondEndpoint.Id, name: "Other cluster");
 
         await using var db = _database.CreateContext();
-        db.RasGates.AddRange(firstGate, secondGate);
+        db.RasGates.Add(gate);
+        db.RasEndpoints.AddRange(firstEndpoint, secondEndpoint);
         db.RasClusters.AddRange(first, second, other);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.ChangeTracker.Clear();
         var queries = new RasClusterQueries(db);
 
         var firstPage = await queries.GetPagedAsync(
-            firstGate.Id,
+            firstEndpoint.Id,
             new PageRequest(1, 1),
             TestContext.Current.CancellationToken);
         var secondPage = await queries.GetPagedAsync(
-            firstGate.Id,
+            firstEndpoint.Id,
             new PageRequest(2, 1),
             TestContext.Current.CancellationToken);
 
@@ -48,29 +50,31 @@ public sealed class RasClusterQueriesTests : IDisposable
     }
 
     [Fact]
-    public async Task Get_by_external_id_returns_cluster_only_from_requested_gate()
+    public async Task Get_by_external_id_returns_cluster_only_from_requested_endpoint()
     {
-        var firstGate = RasGateTestData.Create("First gate");
-        var secondGate = RasGateTestData.Create("Second gate");
+        var gate = RasGateTestData.Create();
+        var firstEndpoint = RasEndpointTestData.Create(gate.Id, "First RAS");
+        var secondEndpoint = RasEndpointTestData.Create(gate.Id, "Second RAS");
         var sharedExternalId = Guid.NewGuid();
         var expected = RasClusterTestData.Create(
-            firstGate.Id,
+            firstEndpoint.Id,
             sharedExternalId,
             name: "Expected cluster");
         var other = RasClusterTestData.Create(
-            secondGate.Id,
+            secondEndpoint.Id,
             sharedExternalId,
             name: "Other cluster");
 
         await using var db = _database.CreateContext();
-        db.RasGates.AddRange(firstGate, secondGate);
+        db.RasGates.Add(gate);
+        db.RasEndpoints.AddRange(firstEndpoint, secondEndpoint);
         db.RasClusters.AddRange(expected, other);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         db.ChangeTracker.Clear();
         var queries = new RasClusterQueries(db);
 
         var result = await queries.GetByExternalIdAsync(
-            firstGate.Id,
+            firstEndpoint.Id,
             sharedExternalId,
             TestContext.Current.CancellationToken);
 

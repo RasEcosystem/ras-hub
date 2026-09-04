@@ -1,8 +1,10 @@
 using System.Net;
+using RasHub.Application.RasEndpoints.Exceptions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.BackgroundTasks.Models;
 using RasHub.Contracts.Common;
 using RasHub.Contracts.RasHub.Models;
+using RasHub.Web.Api.RasEndpoints;
 
 namespace RasHub.Web.Api.RasGates;
 
@@ -43,11 +45,10 @@ internal static partial class RasGateApiResponses
         if (result.Exception is RasGateInactiveException inactiveException)
             return GateInactive<T>(inactiveException.RasGateId);
 
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<T>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during the live cluster refresh.");
+        if (result.Exception is
+            RasEndpointConfigurationChangedException endpointChanged)
+            return RasEndpointApiResponses.ConfigurationChanged<T>(
+                endpointChanged.RasEndpointId);
 
         if (result.Exception is RacResourceNotFoundException
             {
@@ -93,11 +94,10 @@ internal static partial class RasGateApiResponses
         if (result.Exception is RasGateInactiveException inactiveException)
             return GateInactive<T>(inactiveException.RasGateId);
 
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<T>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                "RasGate configuration changed during the cluster shadow refresh.");
+        if (result.Exception is
+            RasEndpointConfigurationChangedException endpointChanged)
+            return RasEndpointApiResponses.ConfigurationChanged<T>(
+                endpointChanged.RasEndpointId);
 
         if (TryMapRacFailure<T>(result) is { } racFailure)
             return racFailure;
@@ -202,8 +202,9 @@ internal static partial class RasGateApiResponses
                 HttpStatusCode.BadGateway,
                 $"cluster_{operationCode}_outcome_unknown",
                 $"RasGate could not confirm the cluster {operationNoun} " +
-                "outcome. Refresh the cluster shadow and verify the target " +
-                "RasGate. Do not retry the mutation automatically.");
+                "outcome. Refresh the cluster shadow and verify the RAS " +
+                "endpoint and its assigned RasGate. Do not retry the " +
+                "mutation automatically.");
 
         if (result.Exception is
             RasGateMutationReadBackNotConfirmedException
@@ -216,11 +217,10 @@ internal static partial class RasGateApiResponses
             })
             return ClusterMutationNotConfirmed(operationCode, operationNoun);
 
-        if (result.Exception is RasGateConfigurationChangedException)
-            return ApiResponse<ClusterModel>.Fail(
-                HttpStatusCode.Conflict,
-                "ras_gate_configuration_changed",
-                $"RasGate configuration changed during cluster {operationNoun}.");
+        if (result.Exception is
+            RasEndpointConfigurationChangedException endpointChanged)
+            return RasEndpointApiResponses.ConfigurationChanged<ClusterModel>(
+                endpointChanged.RasEndpointId);
 
         if (TryMapRacFailure<ClusterModel>(result) is { } racFailure)
             return racFailure;
@@ -245,7 +245,8 @@ internal static partial class RasGateApiResponses
             HttpStatusCode.BadGateway,
             $"cluster_{operationCode}_not_confirmed",
             $"Cluster {operationNoun} could not be confirmed. " +
-            "Refresh the cluster shadow and verify the target RasGate. " +
+            "Refresh the cluster shadow and verify the RAS endpoint and " +
+            "its assigned RasGate. " +
             "Do not retry the mutation automatically.");
     }
 }

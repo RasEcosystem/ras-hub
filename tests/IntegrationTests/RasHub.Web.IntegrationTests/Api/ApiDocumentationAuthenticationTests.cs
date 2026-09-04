@@ -276,6 +276,65 @@ public sealed class ApiDocumentationAuthenticationTests
             "404",
             "409");
         AssertOperation(root,
+            "/api/v1/ras-endpoints",
+            "get",
+            "GetPagedRasEndpoints",
+            "RasEndpoints",
+            "200",
+            "400",
+            "401");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/all",
+            "get",
+            "GetAllRasEndpoints",
+            "RasEndpoints",
+            "200",
+            "401");
+        AssertResponseDataIsArray(
+            root,
+            "/api/v1/ras-endpoints/all",
+            "get",
+            "200");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints",
+            "post",
+            "RegisterRasEndpoint",
+            "RasEndpoints",
+            "201",
+            "400",
+            "401",
+            "403",
+            "404");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "get",
+            "GetRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "401",
+            "404");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "put",
+            "UpdateRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "400",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
+            "/api/v1/ras-endpoints/{rasEndpointId}",
+            "delete",
+            "UnregisterRasEndpoint",
+            "RasEndpoints",
+            "200",
+            "401",
+            "403",
+            "404",
+            "409");
+        AssertOperation(root,
             "/api/v1/ras-gates/{rasGateId}/status/shadow",
             "get",
             "GetShadowRasGateStatus",
@@ -297,7 +356,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/shadow",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/shadow",
             "get",
             "GetShadowPagedClusters",
             "Clusters",
@@ -307,7 +366,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "404",
             "409");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/shadow/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/shadow/all",
             "get",
             "GetShadowAllClusters",
             "Clusters",
@@ -317,11 +376,11 @@ public sealed class ApiDocumentationAuthenticationTests
             "409");
         AssertResponseDataIsArray(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/shadow/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/shadow/all",
             "get",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/shadow/{clusterId}",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/shadow/{clusterId}",
             "get",
             "GetShadowCluster",
             "Clusters",
@@ -351,7 +410,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "get",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters",
             "post",
             "CreateCluster",
             "Clusters",
@@ -365,7 +424,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/live",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/live",
             "post",
             "GetLivePagedClusters",
             "Clusters",
@@ -378,7 +437,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/live/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/live/all",
             "post",
             "GetLiveAllClusters",
             "Clusters",
@@ -391,11 +450,11 @@ public sealed class ApiDocumentationAuthenticationTests
             "504");
         AssertResponseDataIsArray(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/live/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/live/all",
             "post",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/live/{clusterId}",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/live/{clusterId}",
             "post",
             "GetLiveCluster",
             "Clusters",
@@ -407,7 +466,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/shadow/refresh",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/shadow/refresh",
             "post",
             "RefreshClusterShadow",
             "Clusters",
@@ -419,7 +478,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}",
             "patch",
             "UpdateCluster",
             "Clusters",
@@ -433,7 +492,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/remove",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/remove",
             "post",
             "RemoveCluster",
             "Clusters",
@@ -447,7 +506,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/shadow",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/shadow",
             "get",
             "GetShadowPagedInfobases",
             "Infobases",
@@ -457,7 +516,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "404",
             "409");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/shadow/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/shadow/all",
             "get",
             "GetShadowAllInfobases",
             "Infobases",
@@ -467,11 +526,11 @@ public sealed class ApiDocumentationAuthenticationTests
             "409");
         AssertResponseDataIsArray(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/shadow/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/shadow/all",
             "get",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/shadow/{infobaseId}",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/shadow/{infobaseId}",
             "get",
             "GetShadowInfobase",
             "Infobases",
@@ -501,7 +560,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "get",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/live",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/live",
             "post",
             "GetLivePagedInfobases",
             "Infobases",
@@ -514,7 +573,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/live/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/live/all",
             "post",
             "GetLiveAllInfobases",
             "Infobases",
@@ -528,11 +587,11 @@ public sealed class ApiDocumentationAuthenticationTests
             "504");
         AssertResponseDataIsArray(
             root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/live/all",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/live/all",
             "post",
             "200");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/live/{infobaseId}",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/live/{infobaseId}",
             "post",
             "GetLiveInfobase",
             "Infobases",
@@ -545,7 +604,7 @@ public sealed class ApiDocumentationAuthenticationTests
             "503",
             "504");
         AssertOperation(root,
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/shadow/refresh",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/shadow/refresh",
             "post",
             "RefreshInfobaseShadow",
             "Infobases",
@@ -567,10 +626,10 @@ public sealed class ApiDocumentationAuthenticationTests
             out _));
         Assert.False(paths.TryGetProperty("/api/v1/ras-gates/get-paged", out _));
         Assert.False(paths.TryGetProperty(
-            "/api/v1/ras-gates/{rasGateId}/clusters/get-paged",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/get-paged",
             out _));
         Assert.False(paths.TryGetProperty(
-            "/api/v1/ras-gates/{rasGateId}/clusters/{clusterId}/infobases/get-paged",
+            "/api/v1/ras-endpoints/{rasEndpointId}/clusters/{clusterId}/infobases/get-paged",
             out _));
 
         var documentedTags = root.GetProperty("tags")
@@ -578,7 +637,7 @@ public sealed class ApiDocumentationAuthenticationTests
             .Select(tag => tag.GetProperty("name").GetString())
             .ToHashSet(StringComparer.Ordinal);
         Assert.True(documentedTags.SetEquals(
-            ["RasHub", "RasGates", "Clusters", "Infobases"]));
+            ["RasHub", "RasGates", "RasEndpoints", "Clusters", "Infobases"]));
 
         var schemas = root
             .GetProperty("components")
@@ -586,11 +645,14 @@ public sealed class ApiDocumentationAuthenticationTests
 
         Assert.True(schemas.TryGetProperty(nameof(ClusterModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseModel), out _));
+        Assert.True(schemas.TryGetProperty(nameof(RasEndpointModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(ClusterSearchResultModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseSearchResultModel), out _));
         Assert.True(schemas.TryGetProperty(nameof(CreateClusterRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(UpdateClusterRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(RemoveClusterRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(CreateRasEndpointRequest), out _));
+        Assert.True(schemas.TryGetProperty(nameof(UpdateRasEndpointRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(InfobaseCredentialsRequest), out _));
         Assert.True(schemas.TryGetProperty(nameof(RasHubInfoResponse), out _));
         Assert.True(schemas.TryGetProperty(nameof(ShadowRefreshResponse), out _));

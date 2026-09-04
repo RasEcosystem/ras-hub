@@ -1,3 +1,4 @@
+using RasHub.Application.RasEndpoints.Models;
 using RasHub.Application.RasGates.Models;
 using RasHub.Domain;
 
@@ -10,14 +11,14 @@ public interface IRasInfobaseGateway
         CancellationToken cancellationToken);
 
     Task<RasResourceSnapshot<RasInfobaseSnapshot>> GetInfobasesAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         string? clusterUser,
         string? clusterPassword,
         CancellationToken cancellationToken);
 
     Task<RasInfobaseSnapshot> GetInfobaseAsync(
-        RasGate rasGate,
+        RasEndpointExecutionTarget target,
         Guid clusterId,
         Guid infobaseId,
         string? clusterUser,

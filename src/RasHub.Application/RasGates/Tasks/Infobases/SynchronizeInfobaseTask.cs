@@ -3,14 +3,14 @@ using RasHub.BackgroundTasks.Abstractions;
 namespace RasHub.Application.RasGates.Tasks.Infobases;
 
 public sealed class SynchronizeInfobaseTask(
-    Guid rasGateId,
+    Guid rasEndpointId,
     Guid clusterId,
     Guid infobaseId,
     string? clusterUser = null,
     string? clusterPassword = null)
     : IBackgroundTask
 {
-    public Guid RasGateId { get; } = rasGateId;
+    public Guid RasEndpointId { get; } = rasEndpointId;
 
     public Guid ClusterId { get; } = clusterId;
 

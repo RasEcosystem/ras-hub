@@ -11,6 +11,8 @@ public sealed class RasHubDbContext(DbContextOptions<RasHubDbContext> options)
 
     public DbSet<RasGate> RasGates => Set<RasGate>();
 
+    public DbSet<RasEndpoint> RasEndpoints => Set<RasEndpoint>();
+
     public DbSet<RasCluster> RasClusters => Set<RasCluster>();
     public DbSet<RasInfobase> RasInfobases => Set<RasInfobase>();
 

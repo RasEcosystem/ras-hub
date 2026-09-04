@@ -29,10 +29,15 @@ public sealed class ApiErrorResponseTransformer : IOpenApiOperationTransformer
         {
             statusCodes.Add(StatusCodes.Status401Unauthorized);
 
-            if (authorizeData.Any(data => string.Equals(
-                    data.Policy,
-                    AppPolicies.ManageRasGates,
-                    StringComparison.Ordinal)))
+            if (authorizeData.Any(data =>
+                    string.Equals(
+                        data.Policy,
+                        AppPolicies.ManageRasGates,
+                        StringComparison.Ordinal) ||
+                    string.Equals(
+                        data.Policy,
+                        AppPolicies.ManageRasEndpoints,
+                        StringComparison.Ordinal)))
                 statusCodes.Add(StatusCodes.Status403Forbidden);
         }
 

@@ -2,7 +2,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using RasHub.BackgroundTasks.Configuration;
 using RasHub.BackgroundTasks.Internal.Diagnostics;
-using RasHub.BackgroundTasks.Internal.Engine;
 using RasHub.BackgroundTasks.Internal.Queues;
 using RasHub.BackgroundTasks.Internal.Scheduling;
 using RasHub.BackgroundTasks.Models;
@@ -14,7 +13,6 @@ namespace RasHub.BackgroundTasks.Internal.Processing;
 /// </summary>
 internal sealed class BackgroundTaskHostedService : BackgroundService
 {
-    private readonly BackgroundTaskEngine _engine;
     private readonly IHostApplicationLifetime _hostApplicationLifetime;
     private readonly IBackgroundTaskEngineLifecycle _lifecycle;
     private readonly BackgroundTaskEngineOptions _options;
@@ -25,7 +23,6 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
 
     private readonly BackgroundTaskRuntimeState _runtimeState;
     private readonly PeriodicBackgroundTaskScheduler _scheduler;
-    private readonly TimeProvider _timeProvider;
     private readonly BackgroundTaskWorker _worker;
     private int _runtimeStarted;
     private int _shutdownStarted;
@@ -34,21 +31,17 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
     public BackgroundTaskHostedService(
         BackgroundTaskWorker worker,
         BackgroundTaskRescheduler rescheduler,
-        BackgroundTaskEngine engine,
         IBackgroundTaskEngineLifecycle lifecycle,
         PeriodicBackgroundTaskScheduler scheduler,
         IOptions<BackgroundTaskEngineOptions> options,
-        TimeProvider timeProvider,
         BackgroundTaskRuntimeState runtimeState,
         IHostApplicationLifetime hostApplicationLifetime)
     {
         _worker = worker;
         _rescheduler = rescheduler;
-        _engine = engine;
         _lifecycle = lifecycle;
         _scheduler = scheduler;
         _options = options.Value;
-        _timeProvider = timeProvider;
         _runtimeState = runtimeState;
         _hostApplicationLifetime = hostApplicationLifetime;
     }
@@ -136,7 +129,7 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
                 processCancellation.Token),
             StartProcess(
                 "registry-cleanup",
-                RunRegistryCleanupAsync,
+                _lifecycle.RunCompletedTaskCleanupAsync,
                 processCancellation.Token)
         };
 
@@ -383,16 +376,5 @@ internal sealed class BackgroundTaskHostedService : BackgroundService
             _runtimeState.MarkFaulted("cancellation-drain");
             throw;
         }
-    }
-
-    private async Task RunRegistryCleanupAsync(
-        CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(
-            _options.RegistryCleanupInterval,
-            _timeProvider);
-
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-            _engine.CleanupCompletedTasks();
     }
 }

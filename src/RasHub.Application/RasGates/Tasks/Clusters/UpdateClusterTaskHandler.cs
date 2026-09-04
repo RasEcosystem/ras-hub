@@ -1,15 +1,14 @@
-using RasHub.Application.Interfaces;
+using RasHub.Application.RasEndpoints.Services;
 using RasHub.Application.RasGates.Abstractions;
 using RasHub.Application.RasGates.Exceptions;
 using RasHub.Application.RasGates.Models;
 using RasHub.BackgroundTasks.Abstractions;
-using RasHub.Domain;
 
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed class UpdateClusterTaskHandler(
-    IRepository<RasGate> rasGateRepository,
-    IRasGateSyncPublisher publisher,
+    RasEndpointExecutionTargetResolver targetResolver,
+    IRasEndpointSyncPublisher publisher,
     IRasClusterGateway clusterGateway,
     TimeProvider timeProvider)
     : IBackgroundTaskHandler<UpdateClusterTask>
@@ -18,35 +17,28 @@ public sealed class UpdateClusterTaskHandler(
         UpdateClusterTask task,
         CancellationToken cancellationToken)
     {
-        var rasGate = await rasGateRepository.GetByIdAsync(
-            task.RasGateId,
+        var target = await targetResolver.ResolveAsync(
+            task.RasEndpointId,
             cancellationToken);
-
-        if (rasGate is null)
-            throw new RasGateNotFoundException(task.RasGateId);
-
-        if (!rasGate.IsActive)
-            throw new RasGateInactiveException(rasGate.Id);
-
-        var configurationRevision = rasGate.ConfigurationRevision;
+        var guard = target.CaptureGuard();
         var capabilities = await clusterGateway.GetCapabilitiesAsync(
-            rasGate,
+            target.Gate,
             cancellationToken);
 
         if (!capabilities.Supports("clusters", "update"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "update");
 
         if (!capabilities.Supports("clusters", "info"))
             throw new RasGateCapabilityNotSupportedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "info");
 
         await clusterGateway.UpdateClusterAsync(
-            rasGate,
+            target,
             task.ClusterId,
             task.Options,
             cancellationToken);
@@ -55,14 +47,14 @@ public sealed class UpdateClusterTaskHandler(
         try
         {
             snapshot = await clusterGateway.GetClusterAsync(
-                rasGate,
+                target,
                 task.ClusterId,
                 cancellationToken);
         }
         catch (Exception exception)
         {
             throw new RasGateMutationReadBackNotConfirmedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "update",
                 task.ClusterId,
@@ -75,8 +67,7 @@ public sealed class UpdateClusterTaskHandler(
         try
         {
             published = await publisher.TryPublishClusterAsync(
-                rasGate.Id,
-                configurationRevision,
+                guard,
                 snapshot,
                 observedAt,
                 cancellationToken);
@@ -84,7 +75,7 @@ public sealed class UpdateClusterTaskHandler(
         catch (Exception exception)
         {
             throw new RasGateMutationPublicationNotConfirmedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "update",
                 task.ClusterId,
@@ -93,7 +84,7 @@ public sealed class UpdateClusterTaskHandler(
 
         if (!published)
             throw new RasGateMutationPublicationNotConfirmedException(
-                rasGate.Id,
+                target.Gate.Id,
                 "clusters",
                 "update",
                 task.ClusterId);

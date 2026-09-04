@@ -8,6 +8,7 @@ using RasHub.Contracts.RasHub.Models;
 using RasHub.Contracts.RasHub.Requests;
 using RasHub.Infrastructure.Database.Queries;
 using RasHub.Web.Api.OpenApi;
+using RasHub.Web.Api.RasEndpoints;
 using RasHub.Web.Api.RasGates;
 using RasHub.Web.Authentication;
 using RasHub.Web.Infrastructure.Authorization;
@@ -19,15 +20,15 @@ namespace RasHub.Web.Controllers.RasClusters;
 
 [ApiController]
 [ProducesErrorResponseType(typeof(OpenApiErrorResponse))]
-[Route("api/v1/ras-gates/{rasGateId:guid}/clusters")]
+[Route("api/v1/ras-endpoints/{rasEndpointId:guid}/clusters")]
 [Authorize(
     AuthenticationSchemes = ApiKeyAuthenticationDefaults.Scheme,
-    Policy = AppPolicies.ManageRasGates)]
+    Policy = AppPolicies.ManageRasEndpoints)]
 [Tags("Clusters")]
 [ControllerDescription("Clusters",
-    "Manage 1C:Enterprise clusters, inspect their persisted shadow, and refresh it from live RasGate data.")]
+    "Manage 1C:Enterprise clusters owned by a RAS endpoint, inspect their persisted shadow, and refresh it through the assigned RasGate.")]
 public sealed class RasGateClusterAdministrationController(
-    ActiveRasGateLookup rasGateLookup,
+    ActiveRasEndpointLookup rasEndpointLookup,
     RasClusterQueries clusterQueries,
     InteractiveTaskRunner taskRunner) : ControllerBase
 {
@@ -44,22 +45,24 @@ public sealed class RasGateClusterAdministrationController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ClusterModel>> CreateCluster(
-        Guid rasGateId,
+        Guid rasEndpointId,
         [FromBody] CreateClusterRequest request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(rasGateId, cancellationToken);
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
+            cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<ClusterModel>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses.ForUnavailableEndpoint<ClusterModel>(
                 state,
-                rasGateId);
+                rasEndpointId);
 
         var execution = await taskRunner.RunWithResultAsync<
             CreateClusterTask,
             Guid>(
-            new CreateClusterTask(rasGateId, Map(request)),
-            RasGateTaskOptions.InteractiveClusterCreation(rasGateId),
+            new CreateClusterTask(rasEndpointId, Map(request)),
+            RasGateTaskOptions.InteractiveClusterCreation(rasEndpointId),
             cancellationToken);
 
         if (execution.WasRejected)
@@ -72,7 +75,7 @@ public sealed class RasGateClusterAdministrationController(
 
         var clusterId = execution.Value;
         var cluster = await clusterQueries.GetByExternalIdAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             cancellationToken);
 
@@ -81,7 +84,7 @@ public sealed class RasGateClusterAdministrationController(
 
         var location = Url.Link(
             "GetShadowCluster",
-            new { rasGateId, clusterId });
+            new { rasEndpointId, clusterId });
 
         if (location is not null)
             Response.Headers.Location = location;
@@ -102,27 +105,29 @@ public sealed class RasGateClusterAdministrationController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ClusterModel>> UpdateCluster(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         [FromBody] UpdateClusterRequest request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(rasGateId, cancellationToken);
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
+            cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<ClusterModel>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses.ForUnavailableEndpoint<ClusterModel>(
                 state,
-                rasGateId);
+                rasEndpointId);
 
         if (await clusterQueries.GetByExternalIdAsync(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 cancellationToken) is null)
             return RasGateApiResponses.ClusterNotFound(clusterId);
 
         var execution = await taskRunner.RunAsync(
-            new UpdateClusterTask(rasGateId, clusterId, Map(request)),
-            RasGateTaskOptions.InteractiveClusterUpdate(rasGateId),
+            new UpdateClusterTask(rasEndpointId, clusterId, Map(request)),
+            RasGateTaskOptions.InteractiveClusterUpdate(rasEndpointId),
             cancellationToken);
 
         if (execution.WasRejected)
@@ -134,7 +139,7 @@ public sealed class RasGateClusterAdministrationController(
             return RasGateApiResponses.ClusterUpdateFailed(taskResult);
 
         var cluster = await clusterQueries.GetByExternalIdAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             cancellationToken);
 
@@ -156,23 +161,23 @@ public sealed class RasGateClusterAdministrationController(
         StatusCodes.Status503ServiceUnavailable,
         StatusCodes.Status504GatewayTimeout)]
     public async Task<ApiResponse<ClusterModel>> RemoveCluster(
-        Guid rasGateId,
+        Guid rasEndpointId,
         Guid clusterId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
         RemoveClusterRequest? request,
         CancellationToken cancellationToken)
     {
-        var state = await rasGateLookup.GetStateAsync(
-            rasGateId,
+        var state = await rasEndpointLookup.GetStateAsync(
+            rasEndpointId,
             cancellationToken);
 
-        if (state != ActiveRasGateState.Active)
-            return RasGateApiResponses.ForUnavailableGate<ClusterModel>(
+        if (state != ActiveRasEndpointState.Active)
+            return RasEndpointApiResponses.ForUnavailableEndpoint<ClusterModel>(
                 state,
-                rasGateId);
+                rasEndpointId);
 
         var cluster = await clusterQueries.GetByExternalIdAsync(
-            rasGateId,
+            rasEndpointId,
             clusterId,
             cancellationToken);
 
@@ -181,12 +186,12 @@ public sealed class RasGateClusterAdministrationController(
 
         var execution = await taskRunner.RunAsync(
             new RemoveClusterTask(
-                rasGateId,
+                rasEndpointId,
                 clusterId,
                 request?.ClusterUser,
                 request?.ClusterPassword),
             RasGateTaskOptions.InteractiveClusterRemoval(
-                rasGateId,
+                rasEndpointId,
                 clusterId),
             cancellationToken);
 

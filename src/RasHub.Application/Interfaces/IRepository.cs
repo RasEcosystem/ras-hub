@@ -7,6 +7,10 @@ public interface IRepository<T> where T : class, IEntity
 {
     Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<T?> GetByIdIncludingDeletedAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
     Task<List<T>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken);
 
     Task<List<T>> ListAsync(

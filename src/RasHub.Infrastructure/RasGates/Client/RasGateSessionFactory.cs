@@ -20,10 +20,11 @@ internal sealed class RasGateSessionFactory(
 
         return new RasGateSession(
             httpClient,
-            CreateBaseAddress(rasGate),
-            rasGate.ApiKey,
-            rasGate.Id,
-            rasGate.ConfigurationRevision,
+            new RasGateSessionState(
+                CreateBaseAddress(rasGate),
+                rasGate.ApiKey,
+                rasGate.Id,
+                rasGate.ConfigurationRevision),
             racVersionCache,
             versionParser,
             capabilityResolver);

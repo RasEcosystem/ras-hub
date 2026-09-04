@@ -19,6 +19,7 @@ public sealed class RasGateQueries(RasHubDbContext db)
             Url = rasGate.Url,
             Port = rasGate.Port,
             IsActive = rasGate.IsActive,
+            ConfigurationRevision = rasGate.ConfigurationRevision,
             CreatedAt = rasGate.CreatedAt,
             UpdatedAt = rasGate.UpdatedAt
         };
@@ -46,23 +47,26 @@ public sealed class RasGateQueries(RasHubDbContext db)
             .OrderBy(rasGate => rasGate.IsDeleted)
             .ThenBy(rasGate => rasGate.Name)
             .ThenBy(rasGate => rasGate.Id)
-            .Select(rasGate => new RasGateAdministrationItem(
-                rasGate.Id,
-                rasGate.Name,
-                rasGate.Url,
-                rasGate.Port,
-                rasGate.IsActive,
-                rasGate.InstanceName,
-                rasGate.Version,
-                rasGate.StatusObservedAt,
-                rasGate.RacAvailable,
-                rasGate.RacVersion,
-                rasGate.RacStatusObservedAt,
-                rasGate.LastSeenAt,
-                rasGate.CreatedAt,
-                rasGate.UpdatedAt,
-                rasGate.IsDeleted,
-                rasGate.DeletedAt))
+            .Select(rasGate => new RasGateAdministrationItem
+            {
+                Id = rasGate.Id,
+                Name = rasGate.Name,
+                Url = rasGate.Url,
+                Port = rasGate.Port,
+                IsActive = rasGate.IsActive,
+                ConfigurationRevision = rasGate.ConfigurationRevision,
+                InstanceName = rasGate.InstanceName,
+                Version = rasGate.Version,
+                StatusObservedAt = rasGate.StatusObservedAt,
+                RacAvailable = rasGate.RacAvailable,
+                RacVersion = rasGate.RacVersion,
+                RacStatusObservedAt = rasGate.RacStatusObservedAt,
+                LastSeenAt = rasGate.LastSeenAt,
+                CreatedAt = rasGate.CreatedAt,
+                UpdatedAt = rasGate.UpdatedAt,
+                IsDeleted = rasGate.IsDeleted,
+                DeletedAt = rasGate.DeletedAt
+            })
             .ToListAsync(cancellationToken);
     }
 
@@ -252,24 +256,42 @@ public sealed record RasGateStatusQueryResult(
     bool IsActive,
     RasGateStatusResponse Status);
 
-public sealed record RasGateAdministrationItem(
-    Guid Id,
-    string Name,
-    string Url,
-    int Port,
-    bool IsActive,
-    string? InstanceName,
-    string? Version,
-    DateTime? StatusObservedAt,
-    bool? RacAvailable,
-    string? RacVersion,
-    DateTime? RacStatusObservedAt,
-    DateTime? LastSeenAt,
-    DateTime CreatedAt,
-    DateTime UpdatedAt,
-    bool IsDeleted,
-    DateTime? DeletedAt)
+public sealed record RasGateAdministrationItem
 {
+    public required Guid Id { get; init; }
+
+    public required string Name { get; init; }
+
+    public required string Url { get; init; }
+
+    public required int Port { get; init; }
+
+    public required bool IsActive { get; init; }
+
+    public required long ConfigurationRevision { get; init; }
+
+    public required string? InstanceName { get; init; }
+
+    public required string? Version { get; init; }
+
+    public required DateTime? StatusObservedAt { get; init; }
+
+    public required bool? RacAvailable { get; init; }
+
+    public required string? RacVersion { get; init; }
+
+    public required DateTime? RacStatusObservedAt { get; init; }
+
+    public required DateTime? LastSeenAt { get; init; }
+
+    public required DateTime CreatedAt { get; init; }
+
+    public required DateTime UpdatedAt { get; init; }
+
+    public required bool IsDeleted { get; init; }
+
+    public required DateTime? DeletedAt { get; init; }
+
     public RasGateHealthState GetHealthState(DateTime onlineSince)
     {
         return RasGateHealthStateClassifier.Classify(

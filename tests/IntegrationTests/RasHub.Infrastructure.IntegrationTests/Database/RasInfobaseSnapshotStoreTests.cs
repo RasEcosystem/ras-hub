@@ -16,15 +16,16 @@ public sealed class RasInfobaseSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Apply_adds_updates_soft_deletes_and_restores_infobases()
     {
-        var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
         var thirdId = Guid.NewGuid();
 
         await using (var db = _database.CreateContext())
         {
-            db.AddRange(rasGate, cluster);
+            db.AddRange(gate, endpoint, cluster);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
             var store = new RasInfobaseSnapshotStore(db);
             await store.ApplyAsync(
@@ -101,14 +102,15 @@ public sealed class RasInfobaseSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Upsert_updates_one_infobase_without_deleting_siblings()
     {
-        var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var first = RasInfobaseTestData.Create(cluster.Id, name: "First");
         var second = RasInfobaseTestData.Create(cluster.Id, name: "Second");
 
         await using (var db = _database.CreateContext())
         {
-            db.AddRange(rasGate, cluster, first, second);
+            db.AddRange(gate, endpoint, cluster, first, second);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

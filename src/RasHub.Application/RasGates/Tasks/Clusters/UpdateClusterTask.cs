@@ -4,7 +4,7 @@ using RasHub.BackgroundTasks.Abstractions;
 namespace RasHub.Application.RasGates.Tasks.Clusters;
 
 public sealed record UpdateClusterTask(
-    Guid RasGateId,
+    Guid RasEndpointId,
     Guid ClusterId,
     RasClusterUpdateOptions Options)
     : IBackgroundTask;

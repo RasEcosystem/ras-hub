@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,40 @@ namespace RasHub.BackgroundTasks.IntegrationTests;
 
 public sealed partial class BackgroundTaskEngineBehaviorTests
 {
+    [Fact]
+    public async Task Attempt_execution_uses_worker_log_category()
+    {
+        using var logProvider = new CapturingLoggerProvider();
+        using var host = CreateHost(services =>
+            services.AddSingleton<ILoggerProvider>(logProvider));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken);
+
+        try
+        {
+            var result = await Await(
+                GetEngine(host).Enqueue(new RecordedTask(42)),
+                cancellationToken);
+
+            Assert.True(result.IsSucceeded);
+            Assert.Contains(
+                logProvider.Entries,
+                entry =>
+                    entry.Category ==
+                    "RasHub.BackgroundTasks.Internal.Processing.BackgroundTaskWorker" &&
+                    entry.Message.StartsWith(
+                        "Worker ",
+                        StringComparison.Ordinal) &&
+                    entry.Message.Contains(
+                        " started background task ",
+                        StringComparison.Ordinal));
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken);
+        }
+    }
+
     [Fact]
     public async Task Failed_task_returns_failure_without_stopping_workers()
     {
@@ -389,5 +424,51 @@ public sealed partial class BackgroundTaskEngineBehaviorTests
         return handle
             .WaitAsync(cancellationToken)
             .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<(
+            string Category,
+            string Message)> _entries = new();
+
+        public IReadOnlyCollection<(string Category, string Message)> Entries =>
+            _entries.ToArray();
+
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new CapturingLogger(categoryName, _entries);
+        }
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(
+            string category,
+            ConcurrentQueue<(string Category, string Message)> entries)
+            : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull
+            {
+                return null;
+            }
+
+            public bool IsEnabled(LogLevel logLevel)
+            {
+                return true;
+            }
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                entries.Enqueue((category, formatter(state, exception)));
+            }
+        }
     }
 }

@@ -17,18 +17,19 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Apply_adds_updates_soft_deletes_and_restores_clusters()
     {
-        var rasGate = RasGateTestData.Create();
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
         var thirdId = Guid.NewGuid();
 
         await using (var db = _database.CreateContext())
         {
-            db.RasGates.Add(rasGate);
+            db.AddRange(gate, endpoint);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
             var store = new RasClusterSnapshotStore(db);
             await store.ApplyAsync(
-                rasGate.Id,
+                endpoint.Id,
                 [CreateSnapshot(firstId, "First"), CreateSnapshot(secondId, "Second")],
                 DateTime.UtcNow.AddMinutes(-2),
                 TestContext.Current.CancellationToken);
@@ -39,7 +40,7 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
         {
             var store = new RasClusterSnapshotStore(db);
             await store.ApplyAsync(
-                rasGate.Id,
+                endpoint.Id,
                 [CreateSnapshot(firstId, "First updated"), CreateSnapshot(thirdId, "Third")],
                 DateTime.UtcNow.AddMinutes(-1),
                 TestContext.Current.CancellationToken);
@@ -66,7 +67,7 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
         {
             var store = new RasClusterSnapshotStore(db);
             await store.ApplyAsync(
-                rasGate.Id,
+                endpoint.Id,
                 [CreateSnapshot(secondId, "Second restored")],
                 DateTime.UtcNow,
                 TestContext.Current.CancellationToken);
@@ -93,17 +94,18 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Upsert_updates_one_cluster_without_deleting_other_clusters()
     {
-        var rasGate = RasGateTestData.Create();
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
 
         await using (var db = _database.CreateContext())
         {
-            db.RasGates.Add(rasGate);
+            db.AddRange(gate, endpoint);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
             var store = new RasClusterSnapshotStore(db);
             await store.ApplyAsync(
-                rasGate.Id,
+                endpoint.Id,
                 [CreateSnapshot(firstId, "First"), CreateSnapshot(secondId, "Second")],
                 DateTime.UtcNow.AddMinutes(-1),
                 TestContext.Current.CancellationToken);
@@ -114,7 +116,7 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
         {
             var store = new RasClusterSnapshotStore(db);
             await store.UpsertAsync(
-                rasGate.Id,
+                endpoint.Id,
                 CreateSnapshot(firstId, "First updated"),
                 DateTime.UtcNow,
                 TestContext.Current.CancellationToken);
@@ -142,18 +144,19 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Remove_soft_deletes_requested_cluster_only()
     {
-        var rasGate = RasGateTestData.Create();
-        var first = RasClusterTestData.Create(rasGate.Id, name: "First");
-        var second = RasClusterTestData.Create(rasGate.Id, name: "Second");
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var first = RasClusterTestData.Create(endpoint.Id, name: "First");
+        var second = RasClusterTestData.Create(endpoint.Id, name: "Second");
 
         await using (var db = _database.CreateContext())
         {
-            db.AddRange(rasGate, first, second);
+            db.AddRange(gate, endpoint, first, second);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
             var store = new RasClusterSnapshotStore(db);
             await store.RemoveAsync(
-                rasGate.Id,
+                endpoint.Id,
                 first.ExternalId,
                 TestContext.Current.CancellationToken);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -178,18 +181,19 @@ public sealed class RasClusterSnapshotStoreTests : IDisposable
     [Fact]
     public async Task Remove_cluster_soft_deletes_its_infobases()
     {
-        var rasGate = RasGateTestData.Create();
-        var cluster = RasClusterTestData.Create(rasGate.Id);
+        var gate = RasGateTestData.Create();
+        var endpoint = RasEndpointTestData.Create(gate.Id);
+        var cluster = RasClusterTestData.Create(endpoint.Id);
         var infobase = RasInfobaseTestData.Create(cluster.Id);
 
         await using (var db = _database.CreateContext())
         {
-            db.AddRange(rasGate, cluster, infobase);
+            db.AddRange(gate, endpoint, cluster, infobase);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
             var store = new RasClusterSnapshotStore(db);
             await store.RemoveAsync(
-                rasGate.Id,
+                endpoint.Id,
                 cluster.ExternalId,
                 TestContext.Current.CancellationToken);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);

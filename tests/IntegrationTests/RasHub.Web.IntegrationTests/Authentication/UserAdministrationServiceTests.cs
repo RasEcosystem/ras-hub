@@ -18,6 +18,23 @@ namespace RasHub.Web.IntegrationTests.Authentication;
 public sealed class UserAdministrationServiceTests
 {
     [Fact]
+    public void ToString_item_contains_api_key_does_not_disclose_secret()
+    {
+        const string apiKey = "user-api-key-secret";
+        var item = new UserAdministrationItem
+        {
+            Id = "user-id",
+            DisplayName = "user@example.test",
+            IsAdmin = true,
+            IsCurrentUser = false,
+            IsBlocked = false,
+            ApiKey = apiKey
+        };
+
+        Assert.DoesNotContain(apiKey, item.ToString());
+    }
+
+    [Fact]
     public async Task CreateUser_valid_email_creates_password_user_and_returns_password_once()
     {
         using var factory = new RasHubWebApplicationFactory();
@@ -332,8 +349,9 @@ public sealed class UserAdministrationServiceTests
         return new UserAdministrationService(
             services.GetRequiredService<ApplicationDbContext>(),
             userManager,
-            authenticationStateProvider,
-            services.GetRequiredService<IAuthorizationService>(),
+            new AdministrationAuthorizationGuard(
+                authenticationStateProvider,
+                services.GetRequiredService<IAuthorizationService>()),
             services.GetRequiredService<ISettingsStore>(),
             services.GetRequiredService<ILogger<UserAdministrationService>>());
     }

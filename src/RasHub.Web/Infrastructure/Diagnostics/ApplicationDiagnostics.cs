@@ -181,20 +181,30 @@ public sealed class ApplicationDiagnostics(TimeProvider timeProvider) : ILogEven
 
     private StoredEventChange StoreEvent(LogEvent logEvent)
     {
-        var diagnosticEvent = new ApplicationDiagnosticEvent(
-            0,
-            logEvent.Timestamp,
-            logEvent.Level,
-            Truncate(logEvent.RenderMessage(CultureInfo.InvariantCulture), MaximumMessageLength),
-            GetPropertyValue(logEvent, "SourceContext"),
-            GetFirstPropertyValue(logEvent, "TraceId", "RequestId", "CorrelationId"),
-            logEvent.Exception?.GetType().FullName,
-            logEvent.Exception is null
+        var diagnosticEvent = new ApplicationDiagnosticEvent
+        {
+            Id = 0,
+            Timestamp = logEvent.Timestamp,
+            Level = logEvent.Level,
+            Message = Truncate(
+                logEvent.RenderMessage(CultureInfo.InvariantCulture),
+                MaximumMessageLength),
+            SourceContext = GetPropertyValue(logEvent, "SourceContext"),
+            TraceId = GetFirstPropertyValue(
+                logEvent,
+                "TraceId",
+                "RequestId",
+                "CorrelationId"),
+            ExceptionType = logEvent.Exception?.GetType().FullName,
+            ExceptionMessage = logEvent.Exception is null
                 ? null
                 : Truncate(logEvent.Exception.Message, MaximumMessageLength),
-            logEvent.Exception is null
+            ExceptionDetails = logEvent.Exception is null
                 ? null
-                : Truncate(logEvent.Exception.ToString(), MaximumExceptionDetailsLength));
+                : Truncate(
+                    logEvent.Exception.ToString(),
+                    MaximumExceptionDetailsLength)
+        };
         var correlationKey = GetCorrelationKey(logEvent);
 
         lock (_eventsLock)
@@ -334,13 +344,23 @@ public sealed record ApplicationHealthHour(
     long ErrorCount,
     bool HasData);
 
-public sealed record ApplicationDiagnosticEvent(
-    long Id,
-    DateTimeOffset Timestamp,
-    LogEventLevel Level,
-    string Message,
-    string? SourceContext,
-    string? TraceId,
-    string? ExceptionType,
-    string? ExceptionMessage,
-    string? ExceptionDetails);
+public sealed record ApplicationDiagnosticEvent
+{
+    public required long Id { get; init; }
+
+    public required DateTimeOffset Timestamp { get; init; }
+
+    public required LogEventLevel Level { get; init; }
+
+    public required string Message { get; init; }
+
+    public required string? SourceContext { get; init; }
+
+    public required string? TraceId { get; init; }
+
+    public required string? ExceptionType { get; init; }
+
+    public required string? ExceptionMessage { get; init; }
+
+    public required string? ExceptionDetails { get; init; }
+}
