@@ -301,7 +301,7 @@
         try
         {
             await JsRuntime.InvokeVoidAsync(
-                "navigator.clipboard.writeText",
+                "rasHubClipboard.writeText",
                 user.ApiKey);
             Snackbar.Add(
                 $"API key for {user.DisplayName} was copied.",

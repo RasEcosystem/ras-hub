@@ -163,7 +163,7 @@
         try
         {
             await JsRuntime.InvokeVoidAsync(
-                "navigator.clipboard.writeText",
+                "rasHubClipboard.writeText",
                 _initialPassword);
             Snackbar.Add("Initial password copied.", Severity.Success);
         }
