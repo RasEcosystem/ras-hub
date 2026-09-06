@@ -70,19 +70,22 @@
 
         <MudDivider Style="width: 100%; margin-bottom: 4px;"/>
 
-        <MudTooltip Text="Tasks"
-                    Placement="Placement.Right"
-                    Arrow="true">
+        @if (_debugMode)
+        {
+            <MudTooltip Text="Tasks"
+                        Placement="Placement.Right"
+                        Arrow="true">
 
-            <MudIconButton
-                Icon="@Icons.Material.Filled.DoubleArrow"
-                Href="/background-tasks"
-                Color="@GetRouteColor("background-tasks")"
-                Size="Size.Medium"
-                Variant="Variant.Text"
-                aria-label="Tasks"/>
+                <MudIconButton
+                    Icon="@Icons.Material.Filled.DoubleArrow"
+                    Href="/background-tasks"
+                    Color="@GetRouteColor("background-tasks")"
+                    Size="Size.Medium"
+                    Variant="Variant.Text"
+                    aria-label="Tasks"/>
 
-        </MudTooltip>
+            </MudTooltip>
+        }
 
         <AuthorizeView Policy="@AppPolicies.ManageGlobalSettings">
             <Authorized>
@@ -206,6 +209,7 @@
 
 @code {
     private string _currentUrl = string.Empty;
+    private bool _debugMode;
 
     private string SwaggerUiUrl => SwaggerUiUrlResolver.Resolve(
         new Uri(NavigationManager.BaseUri));
@@ -218,8 +222,10 @@
     protected override void OnInitialized()
     {
         UpdateCurrentUrl(NavigationManager.Uri);
+        _debugMode = SettingsProvider.Settings.DebugMode;
 
         NavigationManager.LocationChanged += OnLocationChanged;
+        SettingsProvider.SettingsChanged += OnApplicationSettingsChanged;
     }
 
     private Color GetRouteColor(string route)
@@ -261,9 +267,17 @@
             .Trim('/');
     }
 
+    private Task OnApplicationSettingsChanged(ApplicationSettings settings)
+    {
+        _debugMode = settings.DebugMode;
+
+        return InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
+        SettingsProvider.SettingsChanged -= OnApplicationSettingsChanged;
     }
 
 }

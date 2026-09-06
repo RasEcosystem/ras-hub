@@ -15,31 +15,50 @@
                 </MudText>
             </MudStack>
 
-            <MudGrid Class="align-end" Spacing="2">
+            <MudGrid Spacing="2">
                 <MudItem xs="12" sm="8" md="6">
                     <MudSelect T="AppTheme"
                                Label="Theme"
                                Variant="Variant.Outlined"
                                FullWidth
                                @bind-Value="_settings.Theme">
+                        <MudSelectItem Value="AppTheme.Hub">Ras Ecosystem : Hub (Carbon)</MudSelectItem>
                         <MudSelectItem Value="AppTheme.Carbon">Carbon</MudSelectItem>
                         <MudSelectItem Value="AppTheme.Slate">Slate</MudSelectItem>
                         <MudSelectItem Value="AppTheme.Light">Light</MudSelectItem>
                         <MudSelectItem Value="AppTheme.System">System</MudSelectItem>
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" sm="4" md="6">
-                    <MudStack Row Justify="Justify.FlexEnd">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Outlined.Save"
-                                   Disabled="_saving"
-                                   OnClick="@SaveAsync">
-                            @(_saving ? "Saving…" : "Save changes")
-                        </MudButton>
-                    </MudStack>
-                </MudItem>
             </MudGrid>
+
+            <MudDivider/>
+
+            <MudStack Spacing="1">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Outlined.BugReport"
+                             Size="Size.Small"
+                             Color="Color.Primary"/>
+                    <MudText Typo="Typo.h5">Debug mode</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Show diagnostic tools intended for development and troubleshooting.
+                </MudText>
+            </MudStack>
+
+            <MudSwitch T="bool"
+                       @bind-Value="_settings.DebugMode"
+                       Color="Color.Primary"
+                       Label="Enable debug mode"/>
+
+            <MudStack Row Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Outlined.Save"
+                           Disabled="_saving"
+                           OnClick="@SaveAsync">
+                    @(_saving ? "Saving…" : "Save changes")
+                </MudButton>
+            </MudStack>
         </MudStack>
     </MudForm>
 </MudPaper>
@@ -52,7 +71,8 @@
     {
         _settings = new ApplicationSettings
         {
-            Theme = SettingsProvider.Settings.Theme
+            Theme = SettingsProvider.Settings.Theme,
+            DebugMode = SettingsProvider.Settings.DebugMode
         };
     }
 

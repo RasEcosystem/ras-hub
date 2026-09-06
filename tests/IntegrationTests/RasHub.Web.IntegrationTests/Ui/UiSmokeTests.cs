@@ -23,6 +23,12 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
     }
 
     [Fact]
+    public void Application_theme_defaults_to_hub()
+    {
+        Assert.Equal(AppTheme.Hub, new ApplicationSettings().Theme);
+    }
+
+    [Fact]
     public async Task Login_page_is_available_and_uses_rashub_branding()
     {
         using var client = _factory.CreateClient();
@@ -38,6 +44,9 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         Assert.Contains("brand-home-link", html);
         Assert.Contains(
             "--mud-palette-primary: rgba(93,143,207,1)",
+            html);
+        Assert.Contains(
+            "--mud-palette-secondary: rgba(75,93,115,1)",
             html);
 
         var themePosition = html.IndexOf(
@@ -68,6 +77,7 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
 
     [Theory]
     [InlineData(AppTheme.Light, "--mud-palette-background: rgba(245,246,248,1)")]
+    [InlineData(AppTheme.Hub, "--mud-palette-primary: rgba(93,143,207,1)")]
     [InlineData(AppTheme.System, "@media (prefers-color-scheme: dark)")]
     public async Task Login_page_configured_theme_is_rendered(
         AppTheme theme,
@@ -220,8 +230,34 @@ public sealed class UiSmokeTests : IClassFixture<RasHubWebApplicationFactory>
         var usersPosition = html.IndexOf("Users", StringComparison.Ordinal);
         Assert.True(appearancePosition >= 0);
         Assert.True(usersPosition > appearancePosition);
+        Assert.Contains("Ras Ecosystem : Hub (Carbon)", html);
+        Assert.Contains("Debug mode", html);
+        Assert.Contains("Enable debug mode", html);
         Assert.Contains("Add user", html);
+        Assert.DoesNotContain("href=\"/background-tasks\"", html);
         Assert.DoesNotContain("mud-tabs", html);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var settingsProvider = scope.ServiceProvider
+                .GetRequiredService<ISettingsProvider<ApplicationSettings>>();
+
+            await settingsProvider.UpdateAsync(
+                new ApplicationSettings
+                {
+                    Theme = settingsProvider.Settings.Theme,
+                    DebugMode = true
+                });
+        }
+
+        using var debugResponse = await client.GetAsync(
+            "/Settings",
+            TestContext.Current.CancellationToken);
+        var debugHtml = await debugResponse.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, debugResponse.StatusCode);
+        Assert.Contains("href=\"/background-tasks\"", debugHtml);
     }
 
     [Fact]

@@ -22,34 +22,38 @@
             <MudItem xs="12" sm="6" lg="3">
                 <MetricCard Title="Uptime"
                             Value="@FormatDuration(Uptime)"
-                            Detail="Since application start"
-                            Icon="@Icons.Material.Outlined.Schedule"
-                            Color="Color.Info"/>
-            </MudItem>
-            <MudItem xs="12" sm="6" lg="3">
-                <MetricCard Title="Warnings"
-                            Value="@Diagnostics.WarningCount.ToString("N0")"
-                            Detail="Since application start"
-                            Icon="@Icons.Material.Outlined.Warning"
-                            Color="Color.Warning"
-                            ValueHref="/health-events?level=warnings"
-                            ValueAriaLabel="View all application warnings"/>
-            </MudItem>
-            <MudItem xs="12" sm="6" lg="3">
-                <MetricCard Title="Errors"
-                            Value="@Diagnostics.ErrorCount.ToString("N0")"
-                            Detail="Since application start"
-                            Icon="@Icons.Material.Outlined.ErrorOutline"
-                            Color="Color.Error"
-                            ValueHref="/health-events?level=errors"
-                            ValueAriaLabel="View all application errors"/>
+                            Icon="@Icons.Material.Filled.Schedule"
+                            Color="Color.Info"
+                            TopAccent/>
             </MudItem>
             <MudItem xs="12" sm="6" lg="3">
                 <MetricCard Title="Online RasGates"
                             Value="@_onlineRasGateCount.ToString("N0")"
-                            Detail="@RasGateHealthDetail"
                             Icon="@Icons.Material.Filled.SettingsEthernet"
-                            Color="@RasGateHealthColor"/>
+                            Color="Color.Info"
+                            ValueHref="/ras-gates"
+                            ValueAriaLabel="View RasGates"
+                            TopAccent/>
+            </MudItem>
+            <MudItem xs="12" sm="6" lg="3">
+                <MetricCard Title="Warnings"
+                            Value="@Diagnostics.WarningCount.ToString("N0")"
+                            Icon="@Icons.Material.Filled.Warning"
+                            Color="Color.Warning"
+                            ValueHref="/health-events?level=warnings"
+                            ValueAriaLabel="View all application warnings"
+                            TopAccent
+                            TopAccentColor="Color.Warning"/>
+            </MudItem>
+            <MudItem xs="12" sm="6" lg="3">
+                <MetricCard Title="Errors"
+                            Value="@Diagnostics.ErrorCount.ToString("N0")"
+                            Icon="@Icons.Material.Filled.Error"
+                            Color="Color.Error"
+                            ValueHref="/health-events?level=errors"
+                            ValueAriaLabel="View all application errors"
+                            TopAccent
+                            TopAccentColor="Color.Error"/>
             </MudItem>
         </MudGrid>
 
@@ -124,21 +128,9 @@
     private DateTimeOffset _nextRasGateCountRefreshAt;
     private DateTimeOffset _now;
     private int _onlineRasGateCount;
-    private int _totalRasGateCount;
 
     private TimeSpan Uptime => _now - Diagnostics.StartedAt;
     private RasGateMonitoringOptions MonitoringOptions => RasGateMonitoringOptions.Value;
-
-    private string RasGateHealthDetail =>
-        $"of {_totalRasGateCount:N0} active · seen within {FormatDuration(MonitoringOptions.OnlineThreshold)}";
-
-    private Color RasGateHealthColor => _totalRasGateCount == 0
-        ? Color.Default
-        : _onlineRasGateCount == _totalRasGateCount
-            ? Color.Success
-            : _onlineRasGateCount == 0
-                ? Color.Error
-                : Color.Warning;
 
     protected override async Task OnInitializedAsync()
     {
@@ -212,7 +204,6 @@
             _disposeToken.Token);
 
         _onlineRasGateCount = summary.OnlineCount;
-        _totalRasGateCount = summary.TotalCount;
         _nextRasGateCountRefreshAt = _now + RasGateCountRefreshInterval;
     }
 

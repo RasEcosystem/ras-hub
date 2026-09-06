@@ -1,4 +1,4 @@
-<MudPaper Class="pa-5" Style="height: 100%;" Elevation="1">
+<MudPaper Class="pa-5" Style="@CardStyle" Elevation="1">
     <MudStack Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
         <div>
             <MudText Typo="Typo.overline" Color="Color.Secondary">@Title</MudText>
@@ -14,7 +14,10 @@
                     <MudText Typo="Typo.h4" Class="mt-1">@Value</MudText>
                 </a>
             }
-            <MudText Typo="Typo.caption" Color="Color.Secondary">@Detail</MudText>
+            @if (!string.IsNullOrWhiteSpace(Detail))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@Detail</MudText>
+            }
         </div>
         <MudAvatar Color="@Color" Variant="Variant.Outlined">
             <MudIcon Icon="@Icon"/>
@@ -32,7 +35,28 @@
     [Parameter] public string Detail { get; set; } = string.Empty;
     [Parameter] [EditorRequired] public string Icon { get; set; } = string.Empty;
     [Parameter] public Color Color { get; set; }
+    [Parameter] public bool TopAccent { get; set; }
+    [Parameter] public Color TopAccentColor { get; set; } = Color.Primary;
     [Parameter] public double? Progress { get; set; }
     [Parameter] public string? ValueHref { get; set; }
     [Parameter] public string? ValueAriaLabel { get; set; }
+
+    private string CardStyle => TopAccent
+        ? $"height: 100%; border-top: 3px solid {GetCssColor(TopAccentColor)};"
+        : "height: 100%;";
+
+    private static string GetCssColor(Color color)
+    {
+        return color switch
+        {
+            Color.Primary => "var(--mud-palette-primary)",
+            Color.Secondary => "var(--mud-palette-secondary)",
+            Color.Tertiary => "var(--mud-palette-tertiary)",
+            Color.Info => "var(--mud-palette-info)",
+            Color.Success => "var(--mud-palette-success)",
+            Color.Warning => "var(--mud-palette-warning)",
+            Color.Error => "var(--mud-palette-error)",
+            _ => "var(--mud-palette-lines-default)"
+        };
+    }
 }

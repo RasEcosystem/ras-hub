@@ -25,7 +25,12 @@ public sealed class PostgreSqlSettingsStoreTests
         var store = scope.ServiceProvider.GetRequiredService<ISettingsStore>();
         var dbContext = scope.ServiceProvider.GetRequiredService<RasHubDbContext>();
 
-        await store.SaveAsync(new ApplicationSettings { Theme = AppTheme.Slate });
+        await store.SaveAsync(
+            new ApplicationSettings
+            {
+                Theme = AppTheme.Slate,
+                DebugMode = true
+            });
 
         var entry = await dbContext.Settings
             .AsNoTracking()
@@ -35,7 +40,9 @@ public sealed class PostgreSqlSettingsStoreTests
         var restored = await store.GetAsync<ApplicationSettings>();
 
         Assert.Contains("\"theme\":1", entry.Value);
+        Assert.Contains("\"debugMode\":true", entry.Value);
         Assert.Equal(AppTheme.Slate, restored?.Theme);
+        Assert.True(restored?.DebugMode);
 
         await store.RemoveAsync<ApplicationSettings>();
         Assert.Null(await store.GetAsync<ApplicationSettings>());

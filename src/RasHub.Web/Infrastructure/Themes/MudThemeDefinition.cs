@@ -5,6 +5,7 @@ namespace RasHub.Web.Infrastructure.Themes;
 public class MudThemeDefinition
 {
     public required Palette Palette { get; set; }
+    public LayoutProperties LayoutProperties { get; set; } = new();
     public Shadow Shadows { get; set; } = CreateShadows();
     public Typography Typography { get; set; } = CreateTypography();
     public bool IsDarkMode { get; set; }

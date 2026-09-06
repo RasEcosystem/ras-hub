@@ -85,9 +85,11 @@
     private void ApplyTheme(AppTheme theme)
     {
         var definition = ThemeProvider.GetTheme(theme);
-        var lightDefinition = ThemeProvider.GetTheme(AppTheme.Light);
+        var lightDefinition = theme != AppTheme.System && !definition.MudTheme.IsDarkMode
+            ? definition
+            : ThemeProvider.GetTheme(AppTheme.Light);
 
-        var darkDefinition = theme == AppTheme.Slate
+        var darkDefinition = theme != AppTheme.System && definition.MudTheme.IsDarkMode
             ? definition
             : ThemeProvider.GetTheme(AppTheme.Carbon);
 
@@ -103,7 +105,8 @@
             Shadows = _followSystemTheme
                 ? lightDefinition.MudTheme.Shadows
                 : definition.MudTheme.Shadows,
-            Typography = definition.MudTheme.Typography
+            Typography = definition.MudTheme.Typography,
+            LayoutProperties = definition.MudTheme.LayoutProperties
         };
     }
 
